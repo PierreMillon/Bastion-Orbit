@@ -100,24 +100,6 @@
   #bottombar button:disabled { opacity: 0.4; }
   #repairBtn.active { background: #7a8f5c; }
 
-  #moatHint {
-    position: fixed;
-    left: 50%;
-    bottom: 76px;
-    transform: translateX(-50%);
-    padding: 7px 14px;
-    border-radius: 20px;
-    background: rgba(59,50,34,0.85);
-    color: #f2ead9;
-    font-size: 12px;
-    font-family: inherit;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 10;
-  }
-
-  #moatHint[hidden] { display: none; }
-
   #menu, #overlay {
     position: fixed;
     inset: 0;
@@ -161,16 +143,14 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.7</button>
+  <button id="versionBtn">v0.8</button>
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v0.7</b> — vagues enchaînées sans bouton ni pause, réparation à l'appui maintenu (relâche = retour au combat), douves activées en tapant directement dessus (plus de bouton), paliers repoussés au-delà des buissons</div>
-  <div><b>v0.6</b> — correctif : perso/tours ne disparaissent plus en tournant, fenêtres qui ne traversent plus le mur, trou entre mur et plateforme comblé, tourelles teintées en bleu</div>
-  <div><b>v0.5</b> — croix retirée, plateforme large sur le donjon, tourelles en vrais cubes, ennemis avec un peu de vie</div>
+  <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or (bande d'eau + prix apparaissent d'un coup, plus de bouton ni de message permanent), réparation auto de secours quand rien à défendre, son débridé même si le premier tap est sur un bouton</div>
+  <div><b>v0.7</b> — vagues enchaînées sans bouton ni pause, réparation à l'appui maintenu</div>
+  <div><b>v0.6</b> — correctif : perso/tours ne disparaissent plus en tournant, fenêtres, trou dans le mur, tourelles bleues</div>
 </div>
-
-<div id="moatHint" hidden></div>
 
 <div id="bottombar">
   <button id="towerBtn">Tourelle (🪙5)</button>
@@ -233,6 +213,12 @@
       actx.resume();
     }
   }
+  // iOS/mobile browsers only allow creating/unlocking audio from within a
+  // real user gesture — the canvas drag alone missed it whenever the very
+  // first tap was on a button (Tourelle, Réparer, menu…) instead, leaving
+  // sound silently dead for the rest of the game. Listening on the whole
+  // page, capture phase, catches the first tap no matter what it lands on.
+  addEventListener('pointerdown', ensureAudio, { capture: true });
   function beep({ freq, freqEnd = freq, dur = 0.12, type = 'triangle', vol = 0.3 }) {
     if (!actx) return;
     const t0 = actx.currentTime;
@@ -273,16 +259,18 @@
   const TURRET_INFLUENCE_R = 20; // turrets within this distance darken each other's blue
 
   // moat upgrade tiers: each purchase extends how far out the slowing water
-  // reaches (enemies inside move at half speed), escalating in cost. Kept
-  // clearly beyond the bushes (max radius ~118) so the tap target for the
-  // next tier never overlaps the garden.
+  // reaches (enemies inside move at half speed), escalating in cost. `r` is
+  // the outer edge of that tier's water; the band drawn/tapped for the next
+  // tier runs from MOAT_BAND_W before it to it, kept clearly beyond the
+  // bushes (max radius ~118) so it never overlaps the garden.
   const MOAT_TIERS = [
-    { cost: 20, r: 130 },
-    { cost: 50, r: 165 },
-    { cost: 200, r: 205 },
-    { cost: 500, r: 260 }
+    { cost: 20, r: 150 },
+    { cost: 50, r: 190 },
+    { cost: 200, r: 235 },
+    { cost: 500, r: 285 }
   ];
-  const MOAT_TAP_TOLERANCE = 20; // world units of slack when tapping a moat ring
+  const MOAT_BAND_W = 30; // roughly the same width as the bush garden
+  const MOAT_TAP_SLACK = 10; // extra world units of touch forgiveness around the band
 
   const circlePts = [];
   for (let i = 0; i <= N_SEG; i++) {
@@ -459,14 +447,13 @@
   function tryBuyMoat(sx, sy) {
     if (state.moatLevel >= MOAT_TIERS.length) return;
     const tier = MOAT_TIERS[state.moatLevel];
-    if (state.gold < tier.cost) return;
+    if (state.gold < tier.cost) return; // nothing is shown or tappable until affordable
     const r = unprojectGround(sx, sy);
-    if (Math.abs(r - tier.r) > MOAT_TAP_TOLERANCE) return;
+    if (r < tier.r - MOAT_BAND_W - MOAT_TAP_SLACK || r > tier.r + MOAT_TAP_SLACK) return;
     state.gold -= tier.cost;
     document.getElementById('goldNum').textContent = state.gold;
     state.moatLevel++;
     playHammer();
-    updateMoatHint();
   }
 
   let downX = 0, downY = 0;
@@ -504,15 +491,6 @@
   const overlay = document.getElementById('overlay');
   const menu = document.getElementById('menu');
   const changelog = document.getElementById('changelog');
-  const moatHint = document.getElementById('moatHint');
-
-  function updateMoatHint() {
-    if (state.moatLevel >= MOAT_TIERS.length) { moatHint.hidden = true; return; }
-    moatHint.hidden = false;
-    const verb = state.moatLevel === 0 ? 'activer' : 'agrandir';
-    moatHint.textContent = '🪙' + MOAT_TIERS[state.moatLevel].cost + ' — appuie sur les douves pour les ' + verb;
-  }
-  updateMoatHint();
 
   towerBtn.addEventListener('click', () => {
     if (state.gold < 5 || state.player.behavior !== 'combat') return;
@@ -605,8 +583,12 @@
 
     // decide behavior: holding Réparer always sends the lord to the centre
     // (a deliberate choice, overrides everything else — he only comes back
-    // to fight the instant you let go); otherwise fight if a threat is near
-    // the camera-guarded spot, else auto-repair the nearest damaged turret
+    // to fight the instant you let go). Otherwise: fight if a threat is
+    // near the camera-guarded spot; else auto-repair the nearest damaged
+    // turret; else, if there's truly nothing to defend against right now
+    // (enemies still far off), he repairs the donjon on his own too —
+    // the moment a threat gets within ATTACK_RANGE he breaks off and comes
+    // back to fight, same as the turret case.
     const guardPos = worldPos(PLAYER_R, state.theta, platformTopY());
     const threat = nearestEnemyTo(guardPos, ATTACK_RANGE);
     const damagedTurret = threat ? null : nearestDamagedTurret(p.angle);
@@ -620,6 +602,9 @@
     } else if (damagedTurret) {
       p.behavior = 'repairTurret';
       targetAngle = damagedTurret.angle;
+    } else if (state.castleH < CASTLE_MAX_H) {
+      p.behavior = 'repairCastle';
+      targetR = 0;
     } else {
       p.behavior = 'combat';
     }
@@ -768,6 +753,23 @@
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
     ctx.fill();
+  }
+
+  // a flat ring of water: two concentric polygons filled with the
+  // even-odd rule, which punches the inner one out as a hole regardless
+  // of winding — used for both the active moat and the next-tier preview
+  function drawRingBand(innerR, outerR, rot, color) {
+    const outerPts = circlePts.map(c => project(outerR * c.cx, 0, outerR * c.cz, rot));
+    const innerPts = circlePts.map(c => project(innerR * c.cx, 0, innerR * c.cz, rot));
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(outerPts[0].x, outerPts[0].y);
+    for (let i = 1; i < outerPts.length; i++) ctx.lineTo(outerPts[i].x, outerPts[i].y);
+    ctx.closePath();
+    ctx.moveTo(innerPts[0].x, innerPts[0].y);
+    for (let i = 1; i < innerPts.length; i++) ctx.lineTo(innerPts[i].x, innerPts[i].y);
+    ctx.closePath();
+    ctx.fill('evenodd');
   }
 
   function drawCastle(rot) {
@@ -996,32 +998,34 @@
     // the ellipse (the iso basis itself is rotated 45° from rx/rz)
     const rot = state.theta - Math.PI / 4;
 
-    // moat ring around the base — a purchased level makes it real water
-    // that slows enemies (see MOAT_TIERS), not just decoration
-    const moatActive = state.moatLevel > 0;
-    const moatR = moatActive ? MOAT_TIERS[state.moatLevel - 1].r : BASE_R + 50;
-    const moatPts = circlePts.map(c => project(moatR * c.cx, 0, moatR * c.cz, rot));
-    ctx.fillStyle = moatActive ? 'rgba(70,130,190,0.5)' : 'rgba(94,128,150,0.35)';
-    ctx.beginPath();
-    ctx.moveTo(moatPts[0].x, moatPts[0].y);
-    for (let i = 1; i < moatPts.length; i++) ctx.lineTo(moatPts[i].x, moatPts[i].y);
-    ctx.closePath();
-    ctx.fill();
+    // active moat: real water filling the whole slowed zone, once at
+    // least one tier is bought — nothing is drawn before that
+    if (state.moatLevel > 0) {
+      drawRingBand(BASE_R + 4, MOAT_TIERS[state.moatLevel - 1].r, rot, 'rgba(70,130,190,0.5)');
+    }
 
-    // a dashed preview ring, beyond the bushes, marking where to tap for
-    // the next tier — this is the actual tap target, see tryBuyMoat()
+    // the next tier is entirely invisible until you can actually afford
+    // it — then a band appears beyond the garden, about as wide as it,
+    // with its price written just below it (fixed screen spot: the point
+    // where "world angle == theta" projects to doesn't move with theta,
+    // see unprojectGround())
     if (state.moatLevel < MOAT_TIERS.length) {
-      const nextR = MOAT_TIERS[state.moatLevel].r;
-      const ringPts = circlePts.map(c => project(nextR * c.cx, 0, nextR * c.cz, rot));
-      ctx.strokeStyle = 'rgba(130,180,220,0.85)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 5]);
-      ctx.beginPath();
-      ctx.moveTo(ringPts[0].x, ringPts[0].y);
-      for (let i = 1; i < ringPts.length; i++) ctx.lineTo(ringPts[i].x, ringPts[i].y);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.setLineDash([]);
+      const tier = MOAT_TIERS[state.moatLevel];
+      if (state.gold >= tier.cost) {
+        drawRingBand(tier.r - MOAT_BAND_W, tier.r, rot, 'rgba(140,195,230,0.6)');
+
+        const anchorX = cx + tier.r * cosIso * scale;
+        const anchorY = cy + tier.r * sinIso * scale;
+        const label = '🪙' + tier.cost + ' pour construire les douves';
+        ctx.font = '13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(59,50,34,0.85)';
+        ctx.fillRect(anchorX - tw / 2 - 9, anchorY + 6, tw + 18, 22);
+        ctx.fillStyle = '#f2ead9';
+        ctx.fillText(label, anchorX, anchorY + 12);
+      }
     }
 
     // ground-level things (bushes, approaching/attacking enemies) can
