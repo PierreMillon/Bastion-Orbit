@@ -193,10 +193,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.18</button>
+  <button id="versionBtn">v0.19</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.19</b> — écart entre ennemis en grille (plus O(n²))</div>
   <div><b>v0.18</b> — dégradés mis en cache (sprites)</div>
   <div><b>v0.17</b> — Jardin/Princesse visibles (bug caché), ennemis vivants (écart, hop rare, zigzag, boude/fuit), FPS dans le menu, changelog scrollable</div>
   <div><b>v0.16</b> — donjon redessiné : facettes, contraste, texture pierre</div>
@@ -662,34 +663,57 @@
 
   // approaching enemies gently push each other apart instead of stacking on
   // the same spot or walking through one another — same circle-vs-circle
-  // idea as avoidBushes, but split between both and eased in over a few
-  // frames (spring-like) rather than resolved instantly (rigid), so a crowd
-  // jostles into a loose cluster instead of snapping into a rigid grid.
+  // idea as avoidBushes, eased in over a few frames (spring-like) rather
+  // than resolved instantly (rigid), so a crowd jostles into a loose
+  // cluster instead of snapping into a rigid grid.
   // Only "approach" enemies: attackBase ones need to be able to bunch up
   // tight at the wall for the siege-engine clustering (SIEGE_GROUP_RADIUS)
   // to ever trigger — pushing them apart here would fight that directly.
+  //
+  // Bucketed into a grid instead of a plain all-pairs check: a naive
+  // version compares every enemy to every other one (cost grows with the
+  // square of the count — fine at dozens, a real bottleneck by the
+  // thousands), which is exactly the wrong shape for "as many enemies as
+  // possible" as a long-term goal. Cell size is 2x the personal radius, so
+  // checking an enemy's own cell plus its 8 neighbours is guaranteed to
+  // catch every enemy actually within ENEMY_PERSONAL_R — cost now scales
+  // with how crowded any one neighbourhood gets, not with the total count.
+  const SEPARATE_CELL = ENEMY_PERSONAL_R * 2;
   function separateEnemies(dt) {
-    const approaching = state.enemies.filter(e => e.state === 'approach');
     const ease = 1 - Math.exp(-ENEMY_SEPARATE_RATE * dt);
-    for (let i = 0; i < approaching.length; i++) {
-      const a = approaching[i];
-      let ax = a.r * Math.cos(a.angle), az = a.r * Math.sin(a.angle);
-      for (let j = i + 1; j < approaching.length; j++) {
-        const b = approaching[j];
-        const bx = b.r * Math.cos(b.angle), bz = b.r * Math.sin(b.angle);
-        const dx = ax - bx, dz = az - bz;
-        const d = Math.hypot(dx, dz);
-        if (d < ENEMY_PERSONAL_R && d > 0.001) {
-          const push = (ENEMY_PERSONAL_R - d) * 0.5 * ease;
-          const pushX = (dx / d) * push, pushZ = (dz / d) * push;
-          ax += pushX; az += pushZ;
-          const bx2 = bx - pushX, bz2 = bz - pushZ;
-          b.r = Math.hypot(bx2, bz2);
-          b.angle = Math.atan2(bz2, bx2);
+    const pts = [];
+    const grid = new Map();
+    for (const e of state.enemies) {
+      if (e.state !== 'approach') continue;
+      const x = e.r * Math.cos(e.angle), z = e.r * Math.sin(e.angle);
+      const cx = Math.floor(x / SEPARATE_CELL), cz = Math.floor(z / SEPARATE_CELL);
+      const p = { e, x, z, cx, cz };
+      pts.push(p);
+      const key = cx + ',' + cz;
+      let bucket = grid.get(key);
+      if (!bucket) { bucket = []; grid.set(key, bucket); }
+      bucket.push(p);
+    }
+    for (const p of pts) {
+      let ax = p.x, az = p.z;
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const bucket = grid.get((p.cx + dx) + ',' + (p.cz + dz));
+          if (!bucket) continue;
+          for (const o of bucket) {
+            if (o === p) continue;
+            const ddx = ax - o.x, ddz = az - o.z;
+            const d = Math.hypot(ddx, ddz);
+            if (d < ENEMY_PERSONAL_R && d > 0.001) {
+              const push = (ENEMY_PERSONAL_R - d) * 0.5 * ease;
+              ax += (ddx / d) * push;
+              az += (ddz / d) * push;
+            }
+          }
         }
       }
-      a.r = Math.hypot(ax, az);
-      a.angle = Math.atan2(az, ax);
+      p.e.r = Math.hypot(ax, az);
+      p.e.angle = Math.atan2(az, ax);
     }
   }
 
