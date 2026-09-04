@@ -100,6 +100,21 @@
   #bottombar button:disabled { opacity: 0.4; }
   #repairBtn.active { background: #7a8f5c; }
 
+  #gardenBtn {
+    position: fixed;
+    left: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    padding: 10px 16px;
+    border: none;
+    border-radius: 10px;
+    background: #4f6b2e;
+    color: #f2ead9;
+    font-size: 12px;
+    font-family: inherit;
+    z-index: 10;
+  }
+  #gardenBtn:disabled { opacity: 0.4; }
+
   #menu, #overlay {
     position: fixed;
     inset: 0;
@@ -143,18 +158,22 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.10</button>
+  <button id="versionBtn">v0.11</button>
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v0.10</b> — aller-retour vers le centre du donjon adouci (rapide puis ralentit en approchant, dans les deux sens), un "clang" distinct signale un donjon déjà à pleine force pendant qu'on tient Réparer (plus de marteau qui répète pour rien)</div>
+  <div><b>v0.11</b> — douves : retour à un bouton (fini le tap dans le monde), elles inondent le jardin (bonus d'or perdu à mesure) et deviennent plus sombres/dangereuses par palier (ralentissement renforcé + dégâts au-delà du niveau 3) ; jardin achetable par paliers, plus il est niveau haut plus il rapporte de l'or automatiquement et plus il est fourni visuellement</div>
+  <div><b>v0.10</b> — aller-retour vers le centre du donjon adouci, "clang" distinct si déjà réparé</div>
   <div><b>v0.9</b> — donjon fermé à la base (il n'avait jamais eu de fond)</div>
   <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or, réparation auto de secours, son débridé</div>
 </div>
 
+<button id="gardenBtn">Jardin (🪙15)</button>
+
 <div id="bottombar">
   <button id="towerBtn">Tourelle (🪙5)</button>
   <button id="repairBtn">Réparer</button>
+  <button id="moatBtn">Douves (🪙20)</button>
 </div>
 
 <div id="menu" hidden>
@@ -262,18 +281,30 @@
   const TURRET_INFLUENCE_R = 20; // turrets within this distance darken each other's blue
 
   // moat upgrade tiers: each purchase extends how far out the slowing water
-  // reaches (enemies inside move at half speed), escalating in cost. `r` is
-  // the outer edge of that tier's water; the band drawn/tapped for the next
-  // tier runs from MOAT_BAND_W before it to it, kept clearly beyond the
-  // bushes (max radius ~118) so it never overlaps the garden.
+  // reaches (enemies inside move at half speed, more so at deeper tiers)
+  // and, from tier 3, chips a little HP off anything lingering in it.
+  // Building/extending the moat floods the garden — `r` deliberately grows
+  // into the bush band (max radius ~118), not around it: each tier
+  // submerges another couple of bush clumps (see FLOODED_PER_TIER).
   const MOAT_TIERS = [
-    { cost: 20, r: 150 },
-    { cost: 50, r: 190 },
-    { cost: 200, r: 235 },
-    { cost: 500, r: 285 }
+    { cost: 20, r: 100 },
+    { cost: 50, r: 122 },
+    { cost: 200, r: 148 },
+    { cost: 500, r: 178 }
   ];
-  const MOAT_BAND_W = 30; // roughly the same width as the bush garden
-  const MOAT_TAP_SLACK = 10; // extra world units of touch forgiveness around the band
+  const FLOODED_PER_TIER = 2; // bush clumps submerged per moat level (of 8)
+
+  // garden upgrade tiers: each level makes it lusher (more plants per
+  // clump, drawn denser) and raises the passive gold it produces —
+  // proportional to "how nice the garden is", i.e. its level, minus
+  // whatever the moat has flooded (see effectiveGardenLevel())
+  const GARDEN_TIERS = [
+    { cost: 15, rate: 1 },
+    { cost: 40, rate: 2 },
+    { cost: 100, rate: 3 },
+    { cost: 250, rate: 5 }
+  ];
+  const GARDEN_TICK = 5; // seconds between passive income payouts
 
   const circlePts = [];
   for (let i = 0; i <= N_SEG; i++) {
@@ -287,16 +318,17 @@
     return { a, cx: Math.cos(a), cz: Math.sin(a) };
   });
 
-  // moat: sparse, irregularly placed bushes enemies steer around
+  // garden: sparse, irregularly placed bush clumps enemies steer around.
+  // Each clump precomputes up to 5 sphere offsets; only the first
+  // 1+gardenLevel are ever drawn, so it visibly fills in as it levels up.
   const BUSHES = [
     { a: 0.2, r: 90 }, { a: 0.9, r: 105 }, { a: 1.7, r: 92 }, { a: 2.6, r: 114 },
     { a: 3.3, r: 88 }, { a: 4.1, r: 108 }, { a: 5.0, r: 95 }, { a: 5.7, r: 118 }
   ].map(b => {
     const x = b.r * Math.cos(b.a), z = b.r * Math.sin(b.a);
-    const n = 1 + (b.a * 7 % 1 > 0.5 ? 1 : 0); // 1 or 2 clumped spheres, deterministic
     const offs = [];
-    for (let i = 0; i < n; i++) {
-      offs.push({ dx: (Math.sin(b.a * 13 + i) ) * 5, dz: (Math.cos(b.a * 9 + i)) * 5 });
+    for (let i = 0; i < 5; i++) {
+      offs.push({ dx: Math.sin(b.a * 13 + i * 2.1) * 6, dz: Math.cos(b.a * 9 + i * 1.7) * 6 });
     }
     return { x, z, angle: b.a, offs };
   });
@@ -309,6 +341,8 @@
     castleH: 128,
     gold: 0,
     moatLevel: 0,
+    gardenLevel: 0,
+    gardenTimer: GARDEN_TICK,
     repairHeld: false, // true while the Réparer button is pressed and held
     wave: 1,
     waveState: 'prep', // prep | active | gameover
@@ -434,39 +468,11 @@
 
   // ---- input: drag to orbit, with inertia after a fast flick ----
   let dragging = false, lastX = 0, lastT = 0;
-  // inverse of project(): given a screen point, find the world (x,z) that
-  // projects there assuming it lies on the ground (y=0) — used only to
-  // tell whether a tap landed on a moat ring, nothing else needs it
-  function unprojectGround(sx, sy) {
-    const rot = state.theta - Math.PI / 4;
-    const A = (sx - cx) / (cosIso * scale);
-    const B = (sy - cy) / (sinIso * scale);
-    const rx = (A + B) / 2;
-    const rz = (B - A) / 2;
-    const x = rx * Math.cos(rot) - rz * Math.sin(rot);
-    const z = rx * Math.sin(rot) + rz * Math.cos(rot);
-    return Math.hypot(x, z);
-  }
-
-  function tryBuyMoat(sx, sy) {
-    if (state.moatLevel >= MOAT_TIERS.length) return;
-    const tier = MOAT_TIERS[state.moatLevel];
-    if (state.gold < tier.cost) return; // nothing is shown or tappable until affordable
-    const r = unprojectGround(sx, sy);
-    if (r < tier.r - MOAT_BAND_W - MOAT_TAP_SLACK || r > tier.r + MOAT_TAP_SLACK) return;
-    state.gold -= tier.cost;
-    document.getElementById('goldNum').textContent = state.gold;
-    state.moatLevel++;
-    playHammer();
-  }
-
-  let downX = 0, downY = 0;
   canvas.addEventListener('pointerdown', e => {
     ensureAudio();
     dragging = true;
     state.omega = 0;
-    lastX = downX = e.clientX;
-    downY = e.clientY;
+    lastX = e.clientX;
     lastT = performance.now();
   });
   canvas.addEventListener('pointermove', e => {
@@ -481,27 +487,56 @@
     lastX = e.clientX;
     lastT = now;
   });
-  canvas.addEventListener('pointerup', e => {
-    dragging = false;
-    // a tap (barely moved) on a moat ring buys/extends it — dragging to
-    // orbit the camera never triggers a purchase
-    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 10) tryBuyMoat(e.clientX, e.clientY);
-  });
+  canvas.addEventListener('pointerup', () => dragging = false);
   canvas.addEventListener('pointercancel', () => dragging = false);
 
   // ---- UI ----
   const towerBtn = document.getElementById('towerBtn');
   const repairBtn = document.getElementById('repairBtn');
+  const moatBtn = document.getElementById('moatBtn');
+  const gardenBtn = document.getElementById('gardenBtn');
   const overlay = document.getElementById('overlay');
   const menu = document.getElementById('menu');
   const changelog = document.getElementById('changelog');
+  const goldNum = document.getElementById('goldNum');
 
   towerBtn.addEventListener('click', () => {
     if (state.gold < 5 || state.player.behavior !== 'combat') return;
     state.gold -= 5;
-    document.getElementById('goldNum').textContent = state.gold;
+    goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
   });
+
+  function updateMoatBtn() {
+    if (state.moatLevel >= MOAT_TIERS.length) { moatBtn.textContent = 'Douves max'; moatBtn.disabled = true; }
+    else moatBtn.textContent = 'Douves (🪙' + MOAT_TIERS[state.moatLevel].cost + ')';
+  }
+  moatBtn.addEventListener('click', () => {
+    if (state.moatLevel >= MOAT_TIERS.length) return;
+    const tier = MOAT_TIERS[state.moatLevel];
+    if (state.gold < tier.cost) return;
+    state.gold -= tier.cost;
+    goldNum.textContent = state.gold;
+    state.moatLevel++;
+    playHammer();
+    updateMoatBtn();
+  });
+  updateMoatBtn();
+
+  function updateGardenBtn() {
+    if (state.gardenLevel >= GARDEN_TIERS.length) { gardenBtn.textContent = 'Jardin max'; gardenBtn.disabled = true; }
+    else gardenBtn.textContent = 'Jardin (🪙' + GARDEN_TIERS[state.gardenLevel].cost + ')';
+  }
+  gardenBtn.addEventListener('click', () => {
+    if (state.gardenLevel >= GARDEN_TIERS.length) return;
+    const tier = GARDEN_TIERS[state.gardenLevel];
+    if (state.gold < tier.cost) return;
+    state.gold -= tier.cost;
+    goldNum.textContent = state.gold;
+    state.gardenLevel++;
+    updateGardenBtn();
+  });
+  updateGardenBtn();
 
   // press and hold to repair the donjon: the lord walks to the centre while
   // held, and returns to his post the instant you let go
@@ -648,6 +683,21 @@
       p.repairMaxedPlayed = false;
     }
 
+    // garden income: automatic once at least one level is bought, paid out
+    // every GARDEN_TICK seconds — the moat floods part of the garden as it
+    // grows, so only the level *not* submerged still pays (see below)
+    const effGarden = Math.max(0, state.gardenLevel - state.moatLevel);
+    if (effGarden > 0) {
+      state.gardenTimer -= dt;
+      if (state.gardenTimer <= 0) {
+        state.gold += GARDEN_TIERS[effGarden - 1].rate;
+        goldNum.textContent = state.gold;
+        state.gardenTimer = GARDEN_TICK;
+      }
+    } else {
+      state.gardenTimer = GARDEN_TICK;
+    }
+
     // spawning
     if (state.waveState === 'active' && state.toSpawn > 0) {
       state.spawnTimer -= dt;
@@ -686,7 +736,16 @@
           if (Math.hypot(ex0 - ox, ez0 - oz) < GROUP_RADIUS) nearby++;
         }
         let speedMul = e.mood === 'pause' ? 0 : e.mood === 'retreat' ? -0.5 : 1 + Math.min(nearby, 4) * 0.12;
-        if (state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r) speedMul *= 0.5;
+        if (state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r) {
+          // deeper water (higher level) slows more, and from level 3 the
+          // water itself is deep/dark enough to chip away a little health
+          // on anything that lingers in it
+          speedMul *= Math.max(0.15, 0.55 - 0.1 * (state.moatLevel - 1));
+          if (state.moatLevel >= 3) {
+            e.hp -= 0.15 * dt;
+            if (e.hp <= 0) killEnemy(e);
+          }
+        }
         e.r = Math.min(SPAWN_R, e.r - e.speed * speedMul * dt);
         avoidBushes(e);
         if (e.r <= BASE_R) { e.r = BASE_R; e.state = 'attackBase'; e.timer = 1.2; }
@@ -953,7 +1012,10 @@
   }
 
   function drawBush(b, rot) {
-    for (const o of b.offs) {
+    // fills in with the garden's level — a bare clump at level 0, up to
+    // all 5 precomputed spheres once fully grown
+    const shown = Math.min(b.offs.length, 1 + state.gardenLevel);
+    for (const o of b.offs.slice(0, shown)) {
       const pos = project(b.x + o.dx, 0, b.z + o.dz, rot);
       const rad = 7 * scale;
       const g = ctx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
@@ -1030,35 +1092,25 @@
     // the ellipse (the iso basis itself is rotated 45° from rx/rz)
     const rot = state.theta - Math.PI / 4;
 
-    // active moat: real water filling the whole slowed zone, once at
-    // least one tier is bought — nothing is drawn before that
+    // active moat: real water filling the whole slowed zone, once at least
+    // one tier is bought — darkens/deepens with level (also stronger slow
+    // and, from level 3, a slow chip of damage — see update())
     if (state.moatLevel > 0) {
-      drawRingBand(BASE_R + 4, MOAT_TIERS[state.moatLevel - 1].r, rot, 'rgba(70,130,190,0.5)');
+      const lvl = state.moatLevel;
+      const shade = [
+        'rgba(90,150,195,0.5)',
+        'rgba(60,120,175,0.58)',
+        'rgba(35,90,150,0.68)',
+        'rgba(18,60,110,0.8)'
+      ][lvl - 1];
+      drawRingBand(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, shade);
     }
 
-    // the next tier is entirely invisible until you can actually afford
-    // it — then a band appears beyond the garden, about as wide as it,
-    // with its price written just below it (fixed screen spot: the point
-    // where "world angle == theta" projects to doesn't move with theta,
-    // see unprojectGround())
-    if (state.moatLevel < MOAT_TIERS.length) {
-      const tier = MOAT_TIERS[state.moatLevel];
-      if (state.gold >= tier.cost) {
-        drawRingBand(tier.r - MOAT_BAND_W, tier.r, rot, 'rgba(140,195,230,0.6)');
-
-        const anchorX = cx + tier.r * cosIso * scale;
-        const anchorY = cy + tier.r * sinIso * scale;
-        const label = '🪙' + tier.cost + ' pour construire les douves';
-        ctx.font = '13px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        const tw = ctx.measureText(label).width;
-        ctx.fillStyle = 'rgba(59,50,34,0.85)';
-        ctx.fillRect(anchorX - tw / 2 - 9, anchorY + 6, tw + 18, 22);
-        ctx.fillStyle = '#f2ead9';
-        ctx.fillText(label, anchorX, anchorY + 12);
-      }
-    }
+    // building/extending the moat floods the garden: it submerges the
+    // first FLOODED_PER_TIER*moatLevel clumps outright (they're just not
+    // drawn — underwater), on top of the passive-income penalty
+    const flooded = Math.min(BUSHES.length, state.moatLevel * FLOODED_PER_TIER);
+    const liveBushes = BUSHES.slice(flooded);
 
     // ground-level things (bushes, approaching/attacking enemies) can
     // legitimately be hidden behind the donjon, so split them far/near and
@@ -1066,7 +1118,7 @@
     const groundEnemies = state.enemies.filter(e => e.state !== 'onTop');
     const far = groundEnemies.filter(e => Math.cos(e.angle - rot) < 0);
     const near = groundEnemies.filter(e => Math.cos(e.angle - rot) >= 0);
-    const farBushes = BUSHES.filter(b => Math.cos(b.angle - rot) < 0);
+    const farBushes = liveBushes.filter(b => Math.cos(b.angle - rot) < 0);
     const nearBushes = BUSHES.filter(b => Math.cos(b.angle - rot) >= 0);
 
     for (const b of farBushes) drawBush(b, rot);
