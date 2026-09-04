@@ -55,3 +55,44 @@ possible par la plateforme.
 - "Tour" = les tourelles construites par le joueur (créneaux/cubes) ;
   "château"/"donjon" = la structure principale qui grandit/rétrécit.
   Vocabulaire à garder cohérent dans le code et les futures discussions.
+
+## Progression par formule plutôt que par niveaux codés à la main
+
+Idée venue d'une discussion sur Forge Line (le jeu-frère du portfolio),
+à appliquer ici aussi — résumé pour ne pas avoir à refaire la discussion
+depuis zéro.
+
+**Le principe** : au lieu de coder chaque palier d'amélioration à la main
+(niveau 1, niveau 2, niveau 3… avec un plafond en dur), donner à chaque
+type d'élément achetable (tourelles, améliorations du joueur, etc.) une
+formule qui calcule sa force au palier n, sans plafond codé — en théorie
+illimité. Si quelqu'un accumule énormément d'or, la formule calcule
+directement le palier 300 sans qu'on ait eu à l'écrire une par une.
+
+**Modèle retenu côté Forge Line** (à valider/adapter ici, pas imposé) :
+- Coût du palier n = coût de base × 1,027^(n-1) — chaque palier coûte
+  2,7% de plus que le précédent (croissance géométrique). Avec ce taux,
+  environ 1 million d'or dépensé au total amène vers le palier 300 — un
+  repère donné par l'utilisateur, pas une contrainte stricte.
+- Puissance au palier n : trois formes possibles selon l'effet voulu —
+  linéaire (chaque palier ajoute pareil, mais devient dérisoire face au
+  coût qui explose à très haut palier), géométrique (la puissance grimpe
+  aussi de plus en plus vite, garde un rapport puissance/coût stable —
+  recommandé côté Forge Line), ou en racine/logarithme (ralentit
+  volontairement en haut de l'échelle, pour que beaucoup investir reste
+  fort sans devenir totalement disproportionné). Pas encore tranché côté
+  Forge Line non plus au moment de cette note — à décider indépendamment
+  ici si le principe est repris.
+
+Pas encore codé ni côté Forge Line ni ici — encore au stade discussion
+au moment de cette note (étape 1 : se comprendre ; étape 2 : concevoir ;
+étape 3 : coder — demandé explicitement dans cet ordre côté Forge Line).
+
+## Décor procédural (jardin/eau, buissons)
+
+Idée en passant : une fois qu'on aura une vraie logique de progression
+(ci-dessus), il pourrait rester une place pour un peu de génération
+procédurale côté décor — PAS le level design/gameplay lui-même, juste
+des touches visuelles. Exemples évoqués : le jardin ou l'eau autour du
+donjon qui fonce progressivement, ou l'ajout de buissons au fil du jeu.
+Idée brute, à retravailler plus tard.
