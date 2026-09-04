@@ -14,6 +14,7 @@
     font-family: system-ui, sans-serif;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-touch-callout: none;
   }
 
   #game {
@@ -81,20 +82,25 @@
 
   #bottombar {
     bottom: 0;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 6px;
   }
 
   #bottombar button {
-    padding: 12px 20px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 11px 6px;
     border: none;
     border-radius: 10px;
     background: #b5482e;
     color: #f2ead9;
-    font-size: 13px;
+    font-size: 11.5px;
     font-family: inherit;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   #bottombar button:disabled { opacity: 0.4; }
@@ -174,10 +180,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.14</button>
+  <button id="versionBtn">v0.15</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.15</b> — corrections : le donjon commence à pleine hauteur (plus de réparation inutile en début de partie) ; bandeau "FIGHT!" avant l'arrivée des ennemis à chaque vague ; porte/fenêtres ne disparaissent plus trop tôt en tournant ; boutons du bas qui ne débordent plus de l'écran ; double-tap iOS (loupe de zoom) désactivé ; son plus robuste après une relance de l'app</div>
   <div><b>v0.14</b> — donjon plus sombre/brique (référence visuelle donnée en conversation) : fenêtres et porte en arc au lieu de rectangles, teinte brun-roux au lieu de beige</div>
   <div><b>v0.13</b> — sièges : des ennemis regroupés au pied du mur (2+) fusionnent en engin de siège — bouclier (2, invincible aux tirs), arbalète (3), trébuchet (4), tour de siège (5, grandit et finit par frapper la plateforme directement) ; nouveau bouton "Sortie" (maintien) : le seigneur sort par la porte pour taper au corps à corps, seul moyen de percer le bouclier ; une vague ne se termine plus tant qu'il reste un engin de siège debout</div>
   <div><b>v0.12</b> — arc de vision : viser un ennemi de face fait 2x dégâts, en périphérie large 1,5x, ailleurs 1x — encourage à tourner ; ajoute une porte et une princesse (bouton dédié) qui remonte le moral en haut (+1,5% attaque) ou se détend en bas (+50% or du jardin), mais un ennemi qui l'atteint en bas la tue : malus permanent -90% attaque du seigneur, +10% tourelles ; le jardin n'existe plus du tout avant le tout premier achat</div>
@@ -258,6 +265,19 @@
   // sound silently dead for the rest of the game. Listening on the whole
   // page, capture phase, catches the first tap no matter what it lands on.
   addEventListener('pointerdown', ensureAudio, { capture: true });
+  addEventListener('touchstart', ensureAudio, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureAudio(); });
+
+  // iOS still shows its double-tap-to-zoom magnifier here and there even
+  // with touch-action:none + user-scalable=no on the viewport — this is the
+  // standard extra kill switch: swallow the second tap of any fast double
+  // tap so it never reaches Safari's own zoom/loupe gesture handling
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 350) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false, capture: true });
   function beep({ freq, freqEnd = freq, dur = 0.12, type = 'triangle', vol = 0.3 }) {
     if (!actx) return;
     const t0 = actx.currentTime;
@@ -335,6 +355,9 @@
   const SORTIE_TICK = 0.4;
   const GROUND_EASE_RATE = 4;     // how fast the lord transitions platform <-> ground
 
+  const FIGHT_BANNER_DUR = 1.1;   // "FIGHT!" banner total lifetime, in seconds
+  const FIGHT_BANNER_SPAWN_DELAY = 0.75; // enemies start arriving just before it's fully gone
+
   // moat upgrade tiers: each purchase extends how far out the slowing water
   // reaches (enemies inside move at half speed, more so at deeper tiers)
   // and, from tier 3, chips a little HP off anything lingering in it.
@@ -393,7 +416,8 @@
   const state = {
     theta: 0,
     omega: 0, // angular velocity for drag inertia
-    castleH: 128,
+    castleH: CASTLE_MAX_H, // starts fully built — the lord has no reason to be rebuilding on wave 1
+    fightBanner: 0,
     gold: 0,
     moatLevel: 0,
     gardenLevel: 0,
@@ -491,7 +515,10 @@
   function startWave() {
     state.waveState = 'active';
     state.toSpawn = 3 + state.wave * 2;
-    state.spawnTimer = 0;
+    // a quick "FIGHT!" banner up top, then the first enemy arrives just as
+    // it's fading — instead of enemies spawning the instant the wave starts
+    state.fightBanner = FIGHT_BANNER_DUR;
+    state.spawnTimer = FIGHT_BANNER_SPAWN_DELAY;
     state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
   }
 
@@ -768,6 +795,8 @@
   let last = performance.now();
   function update(dt) {
     const p = state.player;
+
+    if (state.fightBanner > 0) state.fightBanner = Math.max(0, state.fightBanner - dt);
 
     // camera: follow finger while dragging, otherwise coast on inertia and
     // decay (fast flick keeps spinning briefly, a controlled stop is exact)
@@ -1177,8 +1206,11 @@
       for (const wa of WINDOW_ANGLES) {
         // only ever draw a window on a wall segment that's actually facing
         // the camera — relying on paint order alone let a window "poke"
-        // past the silhouette edge and stay visible from the back too
-        if (Math.cos(q.mid - rot) > 0.15 && Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
+        // past the silhouette edge and stay visible from the back too.
+        // Margin kept tiny (not 0): right at the true tangent (cos=0) it'd
+        // otherwise disappear noticeably before the silhouette edge actually
+        // gets there, which read as popping off too soon.
+        if (Math.cos(q.mid - rot) > 0.02 && Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
           const wp = project(R * 0.99 * Math.cos(wa), wallTopY * 0.55, R * 0.99 * Math.sin(wa), rot);
           const ww = 6 * scale, wh = 11 * scale;
           ctx.fillStyle = '#1c1109';
@@ -1191,7 +1223,7 @@
 
       // the door, ground level, same facing rule as the windows — an arch
       // like the windows, just wider/taller
-      if (Math.cos(q.mid - rot) > 0.15 && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
+      if (Math.cos(q.mid - rot) > 0.02 && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
         const dp = project(R * 0.99 * Math.cos(DOOR_ANGLE), 12, R * 0.99 * Math.sin(DOOR_ANGLE), rot);
         const dw = 12 * scale, dh = 22 * scale;
         ctx.fillStyle = '#160e08';
@@ -1538,6 +1570,33 @@
     for (const o of onPlatform) o.draw();
 
     for (const pr of state.projectiles) drawProjectile(pr, rot);
+
+    drawFightBanner();
+  }
+
+  // screen-space HUD banner (not world-space — no rot involved), in the
+  // free sky area above the donjon, just before enemies rush in
+  function drawFightBanner() {
+    if (state.fightBanner <= 0) return;
+    const t = 1 - state.fightBanner / FIGHT_BANNER_DUR; // 0 -> 1 over its life
+    let alpha = 1;
+    if (t < 0.12) alpha = t / 0.12;
+    else if (t > 0.62) alpha = Math.max(0, 1 - (t - 0.62) / 0.38);
+    const s = t < 0.12 ? 1.35 - 0.35 * (t / 0.12) : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(cx, H * 0.2);
+    ctx.scale(s, s);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.round(58 * scale)}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.lineWidth = 6 * scale;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#241d15';
+    ctx.strokeText('FIGHT!', 0, 0);
+    ctx.fillStyle = '#c9503f';
+    ctx.fillText('FIGHT!', 0, 0);
+    ctx.restore();
   }
 
   function loop(now) {
