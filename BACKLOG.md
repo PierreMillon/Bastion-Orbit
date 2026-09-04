@@ -5,7 +5,7 @@ nouvelle idée est mentionnée en conversation (même en une phrase, même pas
 prête à être codée), elle est ajoutée ici avant d'être oubliée. Rien n'est
 retiré quand une idée est implémentée — noter "→ fait en vX.Y" à la place.
 
-## Engins de siège (ennemis qui se regroupent)
+## Engins de siège (ennemis qui se regroupent) → fait en v0.13
 
 Si plusieurs ennemis se rassemblent au même endroit au lieu d'attaquer
 séparément, ils construisent un engin de siège. Palier selon le nombre
@@ -22,7 +22,7 @@ But : si on laisse les ennemis se regrouper trop longtemps sans intervenir,
 la menace grandit — ça doit pousser à agir avant que le regroupement soit
 complet, pas juste défendre passivement le mur.
 
-## Sortie du joueur ("chevalier Bayard")
+## Sortie du joueur ("chevalier Bayard") → fait en v0.13
 
 Pour contrer un engin de siège en construction, le joueur doit pouvoir
 descendre du château avec des hommes et sortir attaquer spécifiquement cet
