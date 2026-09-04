@@ -50,6 +50,26 @@ place pour percer des trous dans le rebord et y verser de l'huile
 bouillante sur les ennemis en bas. Pas encore de mécanique, juste rendu
 possible par la plateforme.
 
+## Échelle portée par un ennemi
+
+Un type d'ennemi qui porte une échelle, la pose contre le donjon, et
+permet aux autres de monter directement sur la plateforme sans avoir à
+démolir le mur — un chemin d'attaque alternatif à ajouter au système de
+saut existant (qui, lui, reste tel quel : rare, lié à la hauteur du
+donjon). Idée brute, pas conçue.
+
+## Chemin vers un autre château (progression multi-niveaux)
+
+Un chemin visible qui serpente depuis le lointain jusqu'au donjon (zigzag,
+pas une ligne droite), qui tourne avec la carte. Idée à deux niveaux :
+- Décor immédiat : juste un chemin qui se promène dans le sol visible,
+  purement visuel pour commencer.
+- Idée plus large de progression : une fois un niveau défendu avec succès
+  (exemple donné : niveau 100), on emprunte ce chemin vers un autre
+  château à défendre — de quoi construire une vraie suite de niveaux
+  plutôt qu'un seul château joué indéfiniment. Pas conçu, juste noté pour
+  ne pas perdre le fil.
+
 ## Notes de contexte (pour ne rien perdre)
 
 - "Tour" = les tourelles construites par le joueur (créneaux/cubes) ;

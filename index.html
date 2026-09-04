@@ -23,22 +23,53 @@
     display: block;
   }
 
-  #topbar, #bottombar {
+  #topbar {
     position: fixed;
     left: 0;
     right: 0;
+    top: 0;
     z-index: 10;
     background: #3b3222;
     color: #f2ead9;
-  }
-
-  #topbar {
-    top: 0;
     padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
     display: flex;
     align-items: center;
     gap: 12px;
     font-size: 13px;
+  }
+
+  /* both rows of bottom buttons live in one fixed stack now — Jardin/
+     Princesse used to be their own position:fixed buttons at the same
+     bottom offset as #bottombar, and #bottombar's opaque full-width
+     background (later in the DOM, same z-index) painted right over them,
+     hiding them completely. Stacking them as flex rows inside one fixed
+     container lets the browser lay out the second row's height for real
+     instead of guessing a magic-number offset. */
+  #bottomStack {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #secondRow {
+    background: #3b3222;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 8px 4px;
+  }
+
+  #bottombar {
+    background: #3b3222;
+    color: #f2ead9;
+    padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: center;
+    gap: 6px;
   }
 
   #menuBtn {
@@ -73,20 +104,15 @@
     padding: 12px 14px;
     font-size: 12px;
     max-width: 240px;
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     box-shadow: 0 6px 18px rgba(0,0,0,0.3);
   }
 
   #changelog[hidden] { display: none; }
   #changelog div { margin-bottom: 6px; }
   #changelog b { color: #d9b98a; }
-
-  #bottombar {
-    bottom: 0;
-    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-  }
 
   #bottombar button {
     flex: 1 1 0;
@@ -107,35 +133,17 @@
   #repairBtn.active { background: #7a8f5c; }
   #sortieBtn.active { background: #9c4a3f; }
 
-  #gardenBtn {
-    position: fixed;
-    left: 14px;
-    bottom: calc(14px + env(safe-area-inset-bottom));
-    padding: 10px 16px;
+  #gardenBtn, #princessBtn {
+    padding: 9px 16px;
     border: none;
     border-radius: 10px;
-    background: #4f6b2e;
     color: #f2ead9;
     font-size: 12px;
     font-family: inherit;
-    z-index: 10;
   }
-  #gardenBtn:disabled { opacity: 0.4; }
-
-  #princessBtn {
-    position: fixed;
-    right: 14px;
-    bottom: calc(14px + env(safe-area-inset-bottom));
-    padding: 10px 16px;
-    border: none;
-    border-radius: 10px;
-    background: #8a4a7a;
-    color: #f2ead9;
-    font-size: 12px;
-    font-family: inherit;
-    z-index: 10;
-  }
-  #princessBtn:disabled { opacity: 0.4; }
+  #gardenBtn { background: #4f6b2e; }
+  #princessBtn { background: #8a4a7a; }
+  #gardenBtn:disabled, #princessBtn:disabled { opacity: 0.4; }
 
   #menu, #overlay {
     position: fixed;
@@ -169,6 +177,11 @@
     background: none;
     border: 1px solid rgba(242,234,217,0.4);
   }
+
+  #fpsLine {
+    font-size: 12px;
+    opacity: 0.65;
+  }
 </style>
 </head>
 <body>
@@ -180,33 +193,38 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.16</button>
+  <button id="versionBtn">v0.17</button>
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v0.16</b> — donjon repris en profondeur (silhouette + lumière + texture, pas juste la couleur cette fois) : une bande de pierre en saillie à mi-hauteur casse le tube lisse en deux volumes, l'éclairage est quantifié par facettes (donjon octogonal plutôt que rond) avec un contraste bien plus marqué ombre/lumière, et des lignes d'assise donnent une texture de pierre appareillée sur chaque face</div>
-  <div><b>v0.15</b> — corrections : le donjon commence à pleine hauteur (plus de réparation inutile en début de partie) ; bandeau "FIGHT!" avant l'arrivée des ennemis à chaque vague ; porte/fenêtres ne disparaissent plus trop tôt en tournant ; boutons du bas qui ne débordent plus de l'écran ; double-tap iOS (loupe de zoom) désactivé ; son plus robuste après une relance de l'app</div>
-  <div><b>v0.14</b> — donjon plus sombre/brique (référence visuelle donnée en conversation) : fenêtres et porte en arc au lieu de rectangles, teinte brun-roux au lieu de beige</div>
-  <div><b>v0.13</b> — sièges : des ennemis regroupés au pied du mur (2+) fusionnent en engin de siège — bouclier (2, invincible aux tirs), arbalète (3), trébuchet (4), tour de siège (5, grandit et finit par frapper la plateforme directement) ; nouveau bouton "Sortie" (maintien) : le seigneur sort par la porte pour taper au corps à corps, seul moyen de percer le bouclier ; une vague ne se termine plus tant qu'il reste un engin de siège debout</div>
-  <div><b>v0.12</b> — arc de vision : viser un ennemi de face fait 2x dégâts, en périphérie large 1,5x, ailleurs 1x — encourage à tourner ; ajoute une porte et une princesse (bouton dédié) qui remonte le moral en haut (+1,5% attaque) ou se détend en bas (+50% or du jardin), mais un ennemi qui l'atteint en bas la tue : malus permanent -90% attaque du seigneur, +10% tourelles ; le jardin n'existe plus du tout avant le tout premier achat</div>
-  <div><b>v0.11</b> — douves : retour à un bouton, elles inondent le jardin, plus sombres/dangereuses par palier ; jardin achetable par paliers, rapporte de l'or automatiquement</div>
-  <div><b>v0.9</b> — donjon fermé à la base (il n'avait jamais eu de fond)</div>
-  <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or, réparation auto de secours, son débridé</div>
+  <div><b>v0.17</b> — Jardin/Princesse visibles (bug caché), ennemis vivants (écart, hop rare, zigzag, boude/fuit), FPS dans le menu, changelog scrollable</div>
+  <div><b>v0.16</b> — donjon redessiné : facettes, contraste, texture pierre</div>
+  <div><b>v0.15</b> — corrections : hauteur initiale, bandeau FIGHT!, culling porte/fenêtres, boutons, double-tap iOS, son</div>
+  <div><b>v0.14</b> — donjon plus sombre, fenêtres/porte en arc</div>
+  <div><b>v0.13</b> — engins de siège + bouton Sortie</div>
+  <div><b>v0.12</b> — arc de vision, porte, princesse</div>
+  <div><b>v0.11</b> — jardin + douves qui l'inondent</div>
+  <div><b>v0.9</b> — donjon fermé à la base</div>
+  <div><b>v0.8</b> — douves cachées, réparation de secours, son</div>
 </div>
 
-<button id="gardenBtn">Jardin (🪙15)</button>
-<button id="princessBtn">👑 Descendre</button>
-
-<div id="bottombar">
-  <button id="towerBtn">Tourelle (🪙5)</button>
-  <button id="repairBtn">Réparer</button>
-  <button id="sortieBtn">⚔️ Sortie</button>
-  <button id="moatBtn">Douves (🪙20)</button>
+<div id="bottomStack">
+  <div id="secondRow">
+    <button id="gardenBtn">Jardin (🪙15)</button>
+    <button id="princessBtn">👑 Descendre</button>
+  </div>
+  <div id="bottombar">
+    <button id="towerBtn">Tourelle (🪙5)</button>
+    <button id="repairBtn">Réparer</button>
+    <button id="sortieBtn">⚔️ Sortie</button>
+    <button id="moatBtn">Douves (🪙20)</button>
+  </div>
 </div>
 
 <div id="menu" hidden>
   <a href="https://pierremillon.github.io/Forge-Line/">→ Forge Line</a>
   <a href="https://pierremillon.github.io/knight-wars/">→ Knight Wars</a>
+  <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
 
@@ -327,6 +345,8 @@
   const LEDGE_H = 9;
   const WINDOW_ANGLES = [0.6, 3.4];
   const GROUP_RADIUS = 55;      // enemies within this distance motivate each other to move faster
+  const ENEMY_PERSONAL_R = 15;  // approaching enemies gently push apart under this distance
+  const ENEMY_SEPARATE_RATE = 7; // spring-like ease, not an instant rigid shove
   const TURRET_INFLUENCE_R = 20; // turrets within this distance darken each other's blue
 
   // the lord only rewards facing what he's shooting: dead-on gets a real
@@ -511,12 +531,16 @@
       speed: 24 + state.wave * 1.5,
       hp: 2,
       maxHp: 2,
-      hop: Math.random() * 10,
+      wt: Math.random() * 10,      // phase accumulator, drives the lateral wander
+      wanderSeed: Math.random() * 10,
+      hopping: false,              // rare short jump-for-joy, not a constant bob
+      hopT: 0,
+      fleeing: false,              // spooked, walking off the map for good — no gold on exit
       state: 'approach', // approach | attackBase | jumping | onTop
       timer: 0,
       jumpFrom: 0,
       jumpT: 0,
-      mood: 'walk',      // walk | pause | retreat — a little internal life, not a straight march in
+      mood: 'walk',      // walk | pause | retreat | sulk — a little internal life, not a straight march in
       moodTimer: 1 + Math.random() * 2
     });
   }
@@ -633,6 +657,39 @@
     }
     e.r = Math.hypot(x, z);
     e.angle = Math.atan2(z, x);
+  }
+
+  // approaching enemies gently push each other apart instead of stacking on
+  // the same spot or walking through one another — same circle-vs-circle
+  // idea as avoidBushes, but split between both and eased in over a few
+  // frames (spring-like) rather than resolved instantly (rigid), so a crowd
+  // jostles into a loose cluster instead of snapping into a rigid grid.
+  // Only "approach" enemies: attackBase ones need to be able to bunch up
+  // tight at the wall for the siege-engine clustering (SIEGE_GROUP_RADIUS)
+  // to ever trigger — pushing them apart here would fight that directly.
+  function separateEnemies(dt) {
+    const approaching = state.enemies.filter(e => e.state === 'approach');
+    const ease = 1 - Math.exp(-ENEMY_SEPARATE_RATE * dt);
+    for (let i = 0; i < approaching.length; i++) {
+      const a = approaching[i];
+      let ax = a.r * Math.cos(a.angle), az = a.r * Math.sin(a.angle);
+      for (let j = i + 1; j < approaching.length; j++) {
+        const b = approaching[j];
+        const bx = b.r * Math.cos(b.angle), bz = b.r * Math.sin(b.angle);
+        const dx = ax - bx, dz = az - bz;
+        const d = Math.hypot(dx, dz);
+        if (d < ENEMY_PERSONAL_R && d > 0.001) {
+          const push = (ENEMY_PERSONAL_R - d) * 0.5 * ease;
+          const pushX = (dx / d) * push, pushZ = (dz / d) * push;
+          ax += pushX; az += pushZ;
+          const bx2 = bx - pushX, bz2 = bz - pushZ;
+          b.r = Math.hypot(bx2, bz2);
+          b.angle = Math.atan2(bz2, bx2);
+        }
+      }
+      a.r = Math.hypot(ax, az);
+      a.angle = Math.atan2(az, ax);
+    }
   }
 
   // ---- input: drag to orbit, with inertia after a fast flick ----
@@ -986,18 +1043,32 @@
     }
 
     // enemies
+    separateEnemies(dt);
     for (const e of state.enemies) {
-      e.hop += dt * 4;
+      e.wt += dt;
+      if (e.hopping) {
+        e.hopT += dt / 0.35;
+        if (e.hopT >= 1) { e.hopping = false; e.hopT = 0; }
+      }
       if (e.state === 'approach') {
         // a little internal life: mostly walking in, but sometimes pausing,
-        // briefly turning back, or picking up speed when several are close
-        // together (they motivate each other) — never a dead-straight march
+        // sulking (a long stubborn stop, rarer than a pause), briefly turning
+        // back, or picking up speed when several are close together (they
+        // motivate each other) — never a dead-straight march. Fleeing is
+        // separate and permanent: once spooked an enemy commits to walking
+        // back out and vanishing (see below), it doesn't cycle back to a mood.
         e.moodTimer -= dt;
         if (e.moodTimer <= 0) {
           const roll = Math.random();
-          if (roll < 0.15) { e.mood = 'pause'; e.moodTimer = 0.5 + Math.random() * 1.2; }
-          else if (roll < 0.22) { e.mood = 'retreat'; e.moodTimer = 0.4 + Math.random() * 0.6; }
+          if (roll < 0.02) { e.mood = 'sulk'; e.moodTimer = 3 + Math.random() * 3; }
+          else if (roll < 0.17) { e.mood = 'pause'; e.moodTimer = 0.5 + Math.random() * 1.2; }
+          else if (roll < 0.24) { e.mood = 'retreat'; e.moodTimer = 0.4 + Math.random() * 0.6; }
           else { e.mood = 'walk'; e.moodTimer = 1.5 + Math.random() * 2.5; }
+          // rare, occasional excitement hop (once or twice over a whole
+          // approach) instead of a constant bob every step
+          if (!e.hopping && Math.random() < 0.15) e.hopping = true;
+          // rarer still: spooked, turns tail and walks off the map for good
+          if (!e.fleeing && Math.random() < 0.012) e.fleeing = true;
         }
         let nearby = 0;
         const ex0 = e.r * Math.cos(e.angle), ez0 = e.r * Math.sin(e.angle);
@@ -1006,7 +1077,16 @@
           const ox = o.r * Math.cos(o.angle), oz = o.r * Math.sin(o.angle);
           if (Math.hypot(ex0 - ox, ez0 - oz) < GROUP_RADIUS) nearby++;
         }
-        let speedMul = e.mood === 'pause' ? 0 : e.mood === 'retreat' ? -0.5 : 1 + Math.min(nearby, 4) * 0.12;
+        let speedMul;
+        if (e.fleeing) speedMul = -1;
+        else if (e.mood === 'pause' || e.mood === 'sulk') speedMul = 0;
+        else if (e.mood === 'retreat') speedMul = -0.5;
+        else speedMul = 1 + Math.min(nearby, 4) * 0.12;
+
+        // a gentle side-to-side sway so the approach doesn't read as a laser-
+        // straight line — skipped while fleeing (that one walks straight out)
+        if (!e.fleeing) e.angle += Math.sin(e.wt * 0.4 + e.wanderSeed) * 0.35 * dt;
+
         if (state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r) {
           // deeper water (higher level) slows more, and from level 3 the
           // water itself is deep/dark enough to chip away a little health
@@ -1019,6 +1099,9 @@
         }
         e.r = Math.min(SPAWN_R, e.r - e.speed * speedMul * dt);
         avoidBushes(e);
+        // spooked and walked all the way back out — vanishes, no gold (the
+        // player didn't kill it, it just lost its nerve)
+        if (e.fleeing && e.r >= SPAWN_R - 1) { e.dead = true; continue; }
         if (e.r <= BASE_R) { e.r = BASE_R; e.state = 'attackBase'; e.timer = 1.2; }
       } else if (e.state === 'attackBase') {
         e.timer -= dt;
@@ -1454,7 +1537,7 @@
 
   function drawEnemy(e, rot) {
     let y = 0;
-    if (e.state === 'approach') y = Math.abs(Math.sin(e.hop)) * 6;
+    if (e.state === 'approach' && e.hopping) y = Math.sin(Math.min(1, e.hopT) * Math.PI) * 9;
     else if (e.state === 'jumping') y = platformTopY() * e.jumpT;
     else if (e.state === 'onTop') y = platformTopY();
     const pos = project(e.r * Math.cos(e.angle), y, e.r * Math.sin(e.angle), rot);
@@ -1688,9 +1771,20 @@
     ctx.restore();
   }
 
+  // rolling FPS estimate, shown in the menu on demand — a real number to
+  // check against instead of guessing whether the game is starting to lag
+  let fpsEMA = 60, fpsShowTimer = 0;
   function loop(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const rawDt = (now - last) / 1000;
+    const dt = Math.min(0.05, rawDt);
     last = now;
+    if (rawDt > 0) fpsEMA += (1 / rawDt - fpsEMA) * 0.1;
+    fpsShowTimer -= dt;
+    if (fpsShowTimer <= 0 && !menu.hidden) {
+      fpsShowTimer = 0.4;
+      const fpsNum = document.getElementById('fpsNum');
+      if (fpsNum) fpsNum.textContent = Math.round(fpsEMA);
+    }
     if (state.waveState !== 'gameover') update(dt);
     render();
     requestAnimationFrame(loop);
