@@ -180,10 +180,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.15</button>
+  <button id="versionBtn">v0.16</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.16</b> — donjon repris en profondeur (silhouette + lumière + texture, pas juste la couleur cette fois) : une bande de pierre en saillie à mi-hauteur casse le tube lisse en deux volumes, l'éclairage est quantifié par facettes (donjon octogonal plutôt que rond) avec un contraste bien plus marqué ombre/lumière, et des lignes d'assise donnent une texture de pierre appareillée sur chaque face</div>
   <div><b>v0.15</b> — corrections : le donjon commence à pleine hauteur (plus de réparation inutile en début de partie) ; bandeau "FIGHT!" avant l'arrivée des ennemis à chaque vague ; porte/fenêtres ne disparaissent plus trop tôt en tournant ; boutons du bas qui ne débordent plus de l'écran ; double-tap iOS (loupe de zoom) désactivé ; son plus robuste après une relance de l'app</div>
   <div><b>v0.14</b> — donjon plus sombre/brique (référence visuelle donnée en conversation) : fenêtres et porte en arc au lieu de rectangles, teinte brun-roux au lieu de beige</div>
   <div><b>v0.13</b> — sièges : des ennemis regroupés au pied du mur (2+) fusionnent en engin de siège — bouclier (2, invincible aux tirs), arbalète (3), trébuchet (4), tour de siège (5, grandit et finit par frapper la plateforme directement) ; nouveau bouton "Sortie" (maintien) : le seigneur sort par la porte pour taper au corps à corps, seul moyen de percer le bouclier ; une vague ne se termine plus tant qu'il reste un engin de siège debout</div>
@@ -316,6 +317,14 @@
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
   const N_SEG = 24;
+  const WALL_SEG = 8;    // the wall is still a smooth N_SEG-gon (nothing about
+                          // vertex positions/eave/platform connections changes),
+                          // but its shading is quantized to this many flat
+                          // facets so it *reads* as a chunky faceted tower
+                          // instead of a round tube — reference: an octagonal
+                          // donjon, not a cylindrical one
+  const LEDGE_OUT = R * 0.16; // how far the mid-height stone course projects
+  const LEDGE_H = 9;
   const WINDOW_ANGLES = [0.6, 3.4];
   const GROUP_RADIUS = 55;      // enemies within this distance motivate each other to move faster
   const TURRET_INFLUENCE_R = 20; // turrets within this distance darken each other's blue
@@ -1148,6 +1157,40 @@
     ctx.fill();
   }
 
+  // snaps a wall segment's mid-angle to the nearest of WALL_SEG fixed
+  // facets (in world space, so it turns with the tower, not the camera)
+  // before computing light — the geometry underneath stays a smooth N_SEG
+  // circle (nothing to reconnect to the eave/platform), only the *shading*
+  // becomes a handful of flat faces, which is what actually reads as a
+  // chunky faceted donjon instead of a round tube
+  function wallLight(mid) {
+    const step = (Math.PI * 2) / WALL_SEG;
+    const faceMid = Math.round(mid / step) * step;
+    const light = 0.5 + 0.45 * Math.cos(faceMid - Math.PI * 0.75);
+    return Math.max(0.05, Math.min(0.95, light));
+  }
+  function wallColor(mid) {
+    // dark, saturated brick/stone with a strong lit-face/shadow-face split
+    // (reference: near-black shadow side, warm-lit side, not a soft blend)
+    return `hsl(22, 42%, ${Math.round(8 + wallLight(mid) * 34)}%)`;
+  }
+
+  // a few faint horizontal seams per face read as coursed stone blocks —
+  // cheap stand-in for real per-brick texture at this render scale
+  function strokeCoursing(pts) {
+    const [tl, tr, br, bl] = pts;
+    ctx.strokeStyle = 'rgba(15,9,4,0.35)';
+    ctx.lineWidth = 1;
+    for (const f of [0.3, 0.62, 0.88]) {
+      const l = { x: bl.x + (tl.x - bl.x) * f, y: bl.y + (tl.y - bl.y) * f };
+      const r = { x: br.x + (tr.x - br.x) * f, y: br.y + (tr.y - br.y) * f };
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y);
+      ctx.lineTo(r.x, r.y);
+      ctx.stroke();
+    }
+  }
+
   // a flat ring of water: two concentric polygons filled with the
   // even-odd rule, which punches the inner one out as a hole regardless
   // of winding — used for both the active moat and the next-tier preview
@@ -1165,24 +1208,12 @@
     ctx.fill('evenodd');
   }
 
-  function drawCastle(rot) {
-    const wallTopY = state.castleH;
-    const tops = circlePts.map(c => project(R * c.cx, wallTopY, R * c.cz, rot));
-    const bots = circlePts.map(c => project(R * c.cx, 0, R * c.cz, rot));
-
-    // the donjon had no floor: the top is capped (the flat disc drawn
-    // below), but the base was a bare opening, so at some angles you could
-    // see straight through the tube to the far inside wall and beyond —
-    // read as "the bottom circle showing through in the back". A dark cap
-    // closes it; any hairline seam between wall quads now shows this
-    // instead of the bright background, which is what actually made the
-    // gap visible in the first place.
-    ctx.fillStyle = '#241d15';
-    ctx.beginPath();
-    ctx.moveTo(bots[0].x, bots[0].y);
-    for (let i = 1; i <= N_SEG; i++) ctx.lineTo(bots[i].x, bots[i].y);
-    ctx.closePath();
-    ctx.fill();
+  // one vertical band of wall, radius fixed across its height — called two
+  // or three times per donjon (below/above the projecting stone course) so
+  // it doubles as the ledge's own outward-facing band too
+  function drawWallBand(yBot, yTop, radius, rot, withDetail) {
+    const tops = circlePts.map(c => project(radius * c.cx, yTop, radius * c.cz, rot));
+    const bots = circlePts.map(c => project(radius * c.cx, yBot, radius * c.cz, rot));
 
     // depth-sort the wall quads so the near side is always painted last —
     // fixes back-side quads (and windows) sometimes drawing over the front
@@ -1194,37 +1225,37 @@
     }
     quads.sort((a, b) => a.depth - b.depth);
 
-    for (const q of quads) {
-      // dark warm brick/stone (reference: a weathered brown donjon, not a
-      // pale tan one) — kept clearly darker/more saturated than the beige
-      // background at every angle, so the wall doesn't wash out into it
-      const light = 0.45 + 0.3 * Math.cos(q.mid - Math.PI * 0.75);
-      const g = Math.round(70 * light + 30);
-      ctx.fillStyle = `rgb(${g + 55},${g + 24},${g + 4})`;
-      buildQuad(q.pts);
+    const windowY = state.castleH * 0.55;
+    const windowHere = withDetail && windowY >= yBot && windowY <= yTop;
+    const doorHere = withDetail && 12 >= yBot && 12 <= yTop;
 
-      for (const wa of WINDOW_ANGLES) {
-        // only ever draw a window on a wall segment that's actually facing
-        // the camera — relying on paint order alone let a window "poke"
-        // past the silhouette edge and stay visible from the back too.
-        // Margin kept tiny (not 0): right at the true tangent (cos=0) it'd
-        // otherwise disappear noticeably before the silhouette edge actually
-        // gets there, which read as popping off too soon.
-        if (Math.cos(q.mid - rot) > 0.02 && Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
-          const wp = project(R * 0.99 * Math.cos(wa), wallTopY * 0.55, R * 0.99 * Math.sin(wa), rot);
-          const ww = 6 * scale, wh = 11 * scale;
-          ctx.fillStyle = '#1c1109';
-          archPath(wp.x, wp.y, ww, wh);
-          ctx.fill();
-          ctx.fillStyle = 'rgba(217,185,138,0.55)';
-          ctx.fillRect(wp.x - ww / 2, wp.y - wh / 2 + wh * 0.7, ww, wh * 0.3);
+    for (const q of quads) {
+      ctx.fillStyle = wallColor(q.mid);
+      buildQuad(q.pts);
+      if (withDetail) strokeCoursing(q.pts);
+
+      // only ever draw a window/door on a wall segment that's actually
+      // facing the camera — relying on paint order alone let them "poke"
+      // past the silhouette edge and stay visible from the back too.
+      // Margin kept tiny (not 0): right at the true tangent (cos=0) it'd
+      // otherwise disappear noticeably before the silhouette edge actually
+      // gets there, which read as popping off too soon.
+      const facing = Math.cos(q.mid - rot) > 0.02;
+      if (windowHere && facing) {
+        for (const wa of WINDOW_ANGLES) {
+          if (Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
+            const wp = project(radius * 0.99 * Math.cos(wa), windowY, radius * 0.99 * Math.sin(wa), rot);
+            const ww = 6 * scale, wh = 14 * scale;
+            ctx.fillStyle = '#1c1109';
+            archPath(wp.x, wp.y, ww, wh);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(217,185,138,0.55)';
+            ctx.fillRect(wp.x - ww / 2, wp.y - wh / 2 + wh * 0.7, ww, wh * 0.3);
+          }
         }
       }
-
-      // the door, ground level, same facing rule as the windows — an arch
-      // like the windows, just wider/taller
-      if (Math.cos(q.mid - rot) > 0.02 && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
-        const dp = project(R * 0.99 * Math.cos(DOOR_ANGLE), 12, R * 0.99 * Math.sin(DOOR_ANGLE), rot);
+      if (doorHere && facing && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
+        const dp = project(radius * 0.99 * Math.cos(DOOR_ANGLE), 12, radius * 0.99 * Math.sin(DOOR_ANGLE), rot);
         const dw = 12 * scale, dh = 22 * scale;
         ctx.fillStyle = '#160e08';
         archPath(dp.x, dp.y, dw, dh);
@@ -1234,6 +1265,64 @@
         archPath(dp.x, dp.y, dw, dh);
         ctx.stroke();
       }
+    }
+  }
+
+  // the flat, lit top surface of the projecting stone course — same idea
+  // as the eave ring below, just narrower and mid-height instead of at the
+  // very top
+  function drawLedgeTop(y, innerR, outerR, rot) {
+    const innerPts = circlePts.map(c => project(innerR * c.cx, y, innerR * c.cz, rot));
+    const outerPts = circlePts.map(c => project(outerR * c.cx, y, outerR * c.cz, rot));
+    const quads = [];
+    for (let i = 0; i < N_SEG; i++) {
+      const mid = (circlePts[i].a + circlePts[i + 1].a) / 2;
+      const depth = (innerPts[i].depth + innerPts[i + 1].depth + outerPts[i].depth + outerPts[i + 1].depth) / 4;
+      quads.push({ mid, depth, pts: [innerPts[i], innerPts[i + 1], outerPts[i + 1], outerPts[i]] });
+    }
+    quads.sort((a, b) => a.depth - b.depth);
+    for (const q of quads) {
+      ctx.fillStyle = `hsl(26, 30%, ${Math.round(24 + wallLight(q.mid) * 26)}%)`;
+      buildQuad(q.pts);
+    }
+  }
+
+  function drawCastle(rot) {
+    const wallTopY = state.castleH;
+    const baseCircle = circlePts.map(c => project(R * c.cx, 0, R * c.cz, rot));
+
+    // the donjon had no floor: the top is capped (the flat disc drawn
+    // below), but the base was a bare opening, so at some angles you could
+    // see straight through the tube to the far inside wall and beyond —
+    // read as "the bottom circle showing through in the back". A dark cap
+    // closes it; any hairline seam between wall bands now shows this
+    // instead of the bright background, which is what actually made the
+    // gap visible in the first place.
+    ctx.fillStyle = '#1c130a';
+    ctx.beginPath();
+    ctx.moveTo(baseCircle[0].x, baseCircle[0].y);
+    for (let i = 1; i <= N_SEG; i++) ctx.lineTo(baseCircle[i].x, baseCircle[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // a projecting stone course partway up breaks the silhouette into a
+    // base and an upper drum instead of one plain straight tube — only
+    // once the donjon is tall enough to have room for it; skipped while
+    // badly damaged (short) so nothing degenerates
+    const showLedge = wallTopY > 70;
+    if (showLedge) {
+      const ledgeY = Math.min(wallTopY * 0.46, wallTopY - LEDGE_H - 16);
+      drawWallBand(0, ledgeY, R, rot, true);
+      // two flat shelves close the radius jump at each end of the
+      // projecting band — same fix as the wall-top/platform eave: without
+      // them the step between R and R+LEDGE_OUT is an open seam you can
+      // see straight through at some angles
+      drawLedgeTop(ledgeY, R, R + LEDGE_OUT, rot);
+      drawWallBand(ledgeY, ledgeY + LEDGE_H, R + LEDGE_OUT, rot, false);
+      drawLedgeTop(ledgeY + LEDGE_H, R, R + LEDGE_OUT, rot);
+      drawWallBand(ledgeY + LEDGE_H, wallTopY, R, rot, true);
+    } else {
+      drawWallBand(0, wallTopY, R, rot, true);
     }
 
     drawPlatform(rot);
