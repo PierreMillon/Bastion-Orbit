@@ -34,6 +34,15 @@ Implique : un moyen de sortir de la boucle orbite/plateforme actuelle,
 probablement une phase de jeu à part (descente + déplacement au sol vers
 la cible), à concevoir.
 
+## Vue intérieure du donjon
+
+Idée donnée avec une image de référence (intérieur de donjon en vue
+isométrique, escaliers, tonneaux, personnages) : un bouton (peut-être sur
+la base/le socle du donjon) pour basculer sur une vue de l'intérieur du
+donjon, avec du gameplay propre à cet espace. Pas encore conçu — juste
+noté pour ne pas perdre l'idée. Référence visuelle vue en conversation,
+pas encore enregistrée dans le repo.
+
 ## Huile bouillante
 
 Depuis l'ajout de la plateforme (v0.5) qui dépasse le donjon, il y a de la

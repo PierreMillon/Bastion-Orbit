@@ -174,10 +174,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.13</button>
+  <button id="versionBtn">v0.14</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.14</b> — donjon plus sombre/brique (référence visuelle donnée en conversation) : fenêtres et porte en arc au lieu de rectangles, teinte brun-roux au lieu de beige</div>
   <div><b>v0.13</b> — sièges : des ennemis regroupés au pied du mur (2+) fusionnent en engin de siège — bouclier (2, invincible aux tirs), arbalète (3), trébuchet (4), tour de siège (5, grandit et finit par frapper la plateforme directement) ; nouveau bouton "Sortie" (maintien) : le seigneur sort par la porte pour taper au corps à corps, seul moyen de percer le bouclier ; une vague ne se termine plus tant qu'il reste un engin de siège debout</div>
   <div><b>v0.12</b> — arc de vision : viser un ennemi de face fait 2x dégâts, en périphérie large 1,5x, ailleurs 1x — encourage à tourner ; ajoute une porte et une princesse (bouton dédié) qui remonte le moral en haut (+1,5% attaque) ou se détend en bas (+50% or du jardin), mais un ennemi qui l'atteint en bas la tue : malus permanent -90% attaque du seigneur, +10% tourelles ; le jardin n'existe plus du tout avant le tout premier achat</div>
   <div><b>v0.11</b> — douves : retour à un bouton, elles inondent le jardin, plus sombres/dangereuses par palier ; jardin achetable par paliers, rapporte de l'or automatiquement</div>
@@ -1096,6 +1097,20 @@
   }
 
   // ---- rendering ----
+  // rounded-top opening (window/door) instead of a plain rectangle — traces
+  // the path only, caller does fill()/stroke() (reference: arched stone
+  // openings on the donjon, not square cutouts)
+  function archPath(cx, cy, w, h) {
+    const r = w / 2;
+    const top = cy - h / 2 + r;
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy + h / 2);
+    ctx.lineTo(cx - r, top);
+    ctx.arc(cx, top, r, Math.PI, 0);
+    ctx.lineTo(cx + r, cy + h / 2);
+    ctx.closePath();
+  }
+
   function buildQuad(pts) {
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -1151,12 +1166,12 @@
     quads.sort((a, b) => a.depth - b.depth);
 
     for (const q of quads) {
-      // kept clearly darker/more saturated than the beige background at
-      // every angle, so the wall doesn't wash out into it (was read as
-      // "transparent" before)
-      const light = 0.45 + 0.25 * Math.cos(q.mid - Math.PI * 0.75);
-      const g = Math.round(90 * light + 55);
-      ctx.fillStyle = `rgb(${g + 50},${g + 35},${g + 5})`;
+      // dark warm brick/stone (reference: a weathered brown donjon, not a
+      // pale tan one) — kept clearly darker/more saturated than the beige
+      // background at every angle, so the wall doesn't wash out into it
+      const light = 0.45 + 0.3 * Math.cos(q.mid - Math.PI * 0.75);
+      const g = Math.round(70 * light + 30);
+      ctx.fillStyle = `rgb(${g + 55},${g + 24},${g + 4})`;
       buildQuad(q.pts);
 
       for (const wa of WINDOW_ANGLES) {
@@ -1165,23 +1180,27 @@
         // past the silhouette edge and stay visible from the back too
         if (Math.cos(q.mid - rot) > 0.15 && Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
           const wp = project(R * 0.99 * Math.cos(wa), wallTopY * 0.55, R * 0.99 * Math.sin(wa), rot);
-          const ww = 5 * scale, wh = 9 * scale;
-          ctx.fillStyle = '#241c14';
-          ctx.fillRect(wp.x - ww / 2, wp.y - wh / 2, ww, wh);
-          ctx.fillStyle = 'rgba(217,185,138,0.6)';
-          ctx.fillRect(wp.x - ww / 2, wp.y - wh / 2, ww, wh * 0.3);
+          const ww = 6 * scale, wh = 11 * scale;
+          ctx.fillStyle = '#1c1109';
+          archPath(wp.x, wp.y, ww, wh);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(217,185,138,0.55)';
+          ctx.fillRect(wp.x - ww / 2, wp.y - wh / 2 + wh * 0.7, ww, wh * 0.3);
         }
       }
 
-      // the door, ground level, same facing rule as the windows
+      // the door, ground level, same facing rule as the windows — an arch
+      // like the windows, just wider/taller
       if (Math.cos(q.mid - rot) > 0.15 && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
         const dp = project(R * 0.99 * Math.cos(DOOR_ANGLE), 12, R * 0.99 * Math.sin(DOOR_ANGLE), rot);
-        const dw = 11 * scale, dh = 20 * scale;
-        ctx.fillStyle = '#1c140d';
-        ctx.fillRect(dp.x - dw / 2, dp.y - dh / 2, dw, dh);
-        ctx.strokeStyle = '#6b5636';
+        const dw = 12 * scale, dh = 22 * scale;
+        ctx.fillStyle = '#160e08';
+        archPath(dp.x, dp.y, dw, dh);
+        ctx.fill();
+        ctx.strokeStyle = '#5c3f28';
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(dp.x - dw / 2, dp.y - dh / 2, dw, dh);
+        archPath(dp.x, dp.y, dw, dh);
+        ctx.stroke();
       }
     }
 
