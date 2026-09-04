@@ -98,23 +98,25 @@
   }
 
   #bottombar button:disabled { opacity: 0.4; }
+  #repairBtn.active { background: #7a8f5c; }
 
-  #nextWave {
+  #moatHint {
     position: fixed;
     left: 50%;
     bottom: 76px;
     transform: translateX(-50%);
-    padding: 12px 22px;
-    border: none;
-    border-radius: 10px;
-    background: #b5482e;
+    padding: 7px 14px;
+    border-radius: 20px;
+    background: rgba(59,50,34,0.85);
     color: #f2ead9;
-    font-size: 14px;
+    font-size: 12px;
     font-family: inherit;
+    white-space: nowrap;
+    pointer-events: none;
     z-index: 10;
   }
 
-  #nextWave[hidden] { display: none; }
+  #moatHint[hidden] { display: none; }
 
   #menu, #overlay {
     position: fixed;
@@ -159,20 +161,20 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.6</button>
+  <button id="versionBtn">v0.7</button>
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v0.6</b> — correctif : perso/tours ne disparaissent plus en tournant, fenêtres qui ne traversent plus le mur, trou entre mur et plateforme comblé, tourelles teintées en bleu (plus foncé si empilées), douves ralentissantes achetables par paliers</div>
+  <div><b>v0.7</b> — vagues enchaînées sans bouton ni pause, réparation à l'appui maintenu (relâche = retour au combat), douves activées en tapant directement dessus (plus de bouton), paliers repoussés au-delà des buissons</div>
+  <div><b>v0.6</b> — correctif : perso/tours ne disparaissent plus en tournant, fenêtres qui ne traversent plus le mur, trou entre mur et plateforme comblé, tourelles teintées en bleu</div>
   <div><b>v0.5</b> — croix retirée, plateforme large sur le donjon, tourelles en vrais cubes, ennemis avec un peu de vie</div>
-  <div><b>v0.4</b> — taille ÷3, vague 1 auto, fenêtres, douves + buissons, réparation au marteau, sons, inertie</div>
 </div>
 
-<button id="nextWave" hidden>Vague suivante</button>
+<div id="moatHint" hidden></div>
 
 <div id="bottombar">
   <button id="towerBtn">Tourelle (🪙5)</button>
-  <button id="moatBtn">Douves (🪙20)</button>
+  <button id="repairBtn">Réparer</button>
 </div>
 
 <div id="menu" hidden>
@@ -271,13 +273,16 @@
   const TURRET_INFLUENCE_R = 20; // turrets within this distance darken each other's blue
 
   // moat upgrade tiers: each purchase extends how far out the slowing water
-  // reaches (enemies inside move at half speed), escalating in cost
+  // reaches (enemies inside move at half speed), escalating in cost. Kept
+  // clearly beyond the bushes (max radius ~118) so the tap target for the
+  // next tier never overlaps the garden.
   const MOAT_TIERS = [
-    { cost: 20, r: BASE_R + 45 },
-    { cost: 50, r: BASE_R + 80 },
-    { cost: 200, r: BASE_R + 125 },
-    { cost: 500, r: BASE_R + 180 }
+    { cost: 20, r: 130 },
+    { cost: 50, r: 165 },
+    { cost: 200, r: 205 },
+    { cost: 500, r: 260 }
   ];
+  const MOAT_TAP_TOLERANCE = 20; // world units of slack when tapping a moat ring
 
   const circlePts = [];
   for (let i = 0; i <= N_SEG; i++) {
@@ -313,8 +318,9 @@
     castleH: 128,
     gold: 0,
     moatLevel: 0,
+    repairHeld: false, // true while the Réparer button is pressed and held
     wave: 1,
-    waveState: 'prep', // prep | active | cleared | gameover
+    waveState: 'prep', // prep | active | gameover
     toSpawn: 0,
     spawnTimer: 0,
     spawnInterval: 0.9,
@@ -370,7 +376,6 @@
     state.toSpawn = 3 + state.wave * 2;
     state.spawnTimer = 0;
     state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
-    document.getElementById('nextWave').hidden = true;
   }
 
   function fire(from, target, dmg) {
@@ -437,11 +442,40 @@
 
   // ---- input: drag to orbit, with inertia after a fast flick ----
   let dragging = false, lastX = 0, lastT = 0;
+  // inverse of project(): given a screen point, find the world (x,z) that
+  // projects there assuming it lies on the ground (y=0) — used only to
+  // tell whether a tap landed on a moat ring, nothing else needs it
+  function unprojectGround(sx, sy) {
+    const rot = state.theta - Math.PI / 4;
+    const A = (sx - cx) / (cosIso * scale);
+    const B = (sy - cy) / (sinIso * scale);
+    const rx = (A + B) / 2;
+    const rz = (B - A) / 2;
+    const x = rx * Math.cos(rot) - rz * Math.sin(rot);
+    const z = rx * Math.sin(rot) + rz * Math.cos(rot);
+    return Math.hypot(x, z);
+  }
+
+  function tryBuyMoat(sx, sy) {
+    if (state.moatLevel >= MOAT_TIERS.length) return;
+    const tier = MOAT_TIERS[state.moatLevel];
+    if (state.gold < tier.cost) return;
+    const r = unprojectGround(sx, sy);
+    if (Math.abs(r - tier.r) > MOAT_TAP_TOLERANCE) return;
+    state.gold -= tier.cost;
+    document.getElementById('goldNum').textContent = state.gold;
+    state.moatLevel++;
+    playHammer();
+    updateMoatHint();
+  }
+
+  let downX = 0, downY = 0;
   canvas.addEventListener('pointerdown', e => {
     ensureAudio();
     dragging = true;
     state.omega = 0;
-    lastX = e.clientX;
+    lastX = downX = e.clientX;
+    downY = e.clientY;
     lastT = performance.now();
   });
   canvas.addEventListener('pointermove', e => {
@@ -456,15 +490,29 @@
     lastX = e.clientX;
     lastT = now;
   });
-  canvas.addEventListener('pointerup', () => dragging = false);
+  canvas.addEventListener('pointerup', e => {
+    dragging = false;
+    // a tap (barely moved) on a moat ring buys/extends it — dragging to
+    // orbit the camera never triggers a purchase
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 10) tryBuyMoat(e.clientX, e.clientY);
+  });
   canvas.addEventListener('pointercancel', () => dragging = false);
 
   // ---- UI ----
   const towerBtn = document.getElementById('towerBtn');
-  const nextWaveBtn = document.getElementById('nextWave');
+  const repairBtn = document.getElementById('repairBtn');
   const overlay = document.getElementById('overlay');
   const menu = document.getElementById('menu');
   const changelog = document.getElementById('changelog');
+  const moatHint = document.getElementById('moatHint');
+
+  function updateMoatHint() {
+    if (state.moatLevel >= MOAT_TIERS.length) { moatHint.hidden = true; return; }
+    moatHint.hidden = false;
+    const verb = state.moatLevel === 0 ? 'activer' : 'agrandir';
+    moatHint.textContent = '🪙' + MOAT_TIERS[state.moatLevel].cost + ' — appuie sur les douves pour les ' + verb;
+  }
+  updateMoatHint();
 
   towerBtn.addEventListener('click', () => {
     if (state.gold < 5 || state.player.behavior !== 'combat') return;
@@ -473,27 +521,15 @@
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
   });
 
-  const moatBtn = document.getElementById('moatBtn');
-  function updateMoatBtn() {
-    if (state.moatLevel >= MOAT_TIERS.length) {
-      moatBtn.textContent = 'Douves max';
-      moatBtn.disabled = true;
-    } else {
-      moatBtn.textContent = 'Douves (🪙' + MOAT_TIERS[state.moatLevel].cost + ')';
-    }
-  }
-  moatBtn.addEventListener('click', () => {
-    if (state.moatLevel >= MOAT_TIERS.length) return;
-    const tier = MOAT_TIERS[state.moatLevel];
-    if (state.gold < tier.cost) return;
-    state.gold -= tier.cost;
-    document.getElementById('goldNum').textContent = state.gold;
-    state.moatLevel++;
-    updateMoatBtn();
-  });
-  updateMoatBtn();
+  // press and hold to repair the donjon: the lord walks to the centre while
+  // held, and returns to his post the instant you let go
+  const startRepair = e => { e.preventDefault(); state.repairHeld = true; repairBtn.classList.add('active'); };
+  const stopRepair = () => { state.repairHeld = false; repairBtn.classList.remove('active'); };
+  repairBtn.addEventListener('pointerdown', startRepair);
+  repairBtn.addEventListener('pointerup', stopRepair);
+  repairBtn.addEventListener('pointercancel', stopRepair);
+  repairBtn.addEventListener('pointerleave', stopRepair);
 
-  nextWaveBtn.addEventListener('click', startWave);
   document.getElementById('restartBtn').addEventListener('click', () => location.reload());
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
@@ -516,21 +552,23 @@
       if (Math.abs(state.omega) < 0.02) state.omega = 0;
     }
 
-    // decide behavior: fight if a threat is near the camera-guarded spot,
-    // otherwise auto-repair the nearest damaged turret, else heal the castle
+    // decide behavior: holding Réparer always sends the lord to the centre
+    // (a deliberate choice, overrides everything else — he only comes back
+    // to fight the instant you let go); otherwise fight if a threat is near
+    // the camera-guarded spot, else auto-repair the nearest damaged turret
     const guardPos = worldPos(PLAYER_R, state.theta, platformTopY());
     const threat = nearestEnemyTo(guardPos, ATTACK_RANGE);
     const damagedTurret = threat ? null : nearestDamagedTurret(p.angle);
 
     let targetAngle = state.theta, targetR = PLAYER_R;
-    if (threat) {
+    if (state.repairHeld) {
+      p.behavior = 'repairCastle';
+      targetR = 0;
+    } else if (threat) {
       p.behavior = 'combat';
     } else if (damagedTurret) {
       p.behavior = 'repairTurret';
       targetAngle = damagedTurret.angle;
-    } else if (state.castleH < CASTLE_MAX_H) {
-      p.behavior = 'repairCastle';
-      targetR = 0;
     } else {
       p.behavior = 'combat';
     }
@@ -566,10 +604,10 @@
       }
     }
     if (state.waveState === 'active' && state.toSpawn === 0 && state.enemies.length === 0) {
-      state.waveState = 'cleared';
+      // straight into the next wave — no button, no pause to notice
       state.wave++;
       document.getElementById('waveNum').textContent = state.wave;
-      nextWaveBtn.hidden = false;
+      startWave();
     }
 
     // enemies
@@ -918,6 +956,22 @@
     for (let i = 1; i < moatPts.length; i++) ctx.lineTo(moatPts[i].x, moatPts[i].y);
     ctx.closePath();
     ctx.fill();
+
+    // a dashed preview ring, beyond the bushes, marking where to tap for
+    // the next tier — this is the actual tap target, see tryBuyMoat()
+    if (state.moatLevel < MOAT_TIERS.length) {
+      const nextR = MOAT_TIERS[state.moatLevel].r;
+      const ringPts = circlePts.map(c => project(nextR * c.cx, 0, nextR * c.cz, rot));
+      ctx.strokeStyle = 'rgba(130,180,220,0.85)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(ringPts[0].x, ringPts[0].y);
+      for (let i = 1; i < ringPts.length; i++) ctx.lineTo(ringPts[i].x, ringPts[i].y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // ground-level things (bushes, approaching/attacking enemies) can
     // legitimately be hidden behind the donjon, so split them far/near and
