@@ -143,13 +143,13 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.8</button>
+  <button id="versionBtn">v0.9</button>
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or (bande d'eau + prix apparaissent d'un coup, plus de bouton ni de message permanent), réparation auto de secours quand rien à défendre, son débridé même si le premier tap est sur un bouton</div>
+  <div><b>v0.9</b> — donjon fermé à la base (il n'avait jamais eu de fond : on voyait parfois à travers jusqu'à l'arrière du cercle du bas)</div>
+  <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or, réparation auto de secours, son débridé même si le premier tap est sur un bouton</div>
   <div><b>v0.7</b> — vagues enchaînées sans bouton ni pause, réparation à l'appui maintenu</div>
-  <div><b>v0.6</b> — correctif : perso/tours ne disparaissent plus en tournant, fenêtres, trou dans le mur, tourelles bleues</div>
 </div>
 
 <div id="bottombar">
@@ -776,6 +776,20 @@
     const wallTopY = state.castleH;
     const tops = circlePts.map(c => project(R * c.cx, wallTopY, R * c.cz, rot));
     const bots = circlePts.map(c => project(R * c.cx, 0, R * c.cz, rot));
+
+    // the donjon had no floor: the top is capped (the flat disc drawn
+    // below), but the base was a bare opening, so at some angles you could
+    // see straight through the tube to the far inside wall and beyond —
+    // read as "the bottom circle showing through in the back". A dark cap
+    // closes it; any hairline seam between wall quads now shows this
+    // instead of the bright background, which is what actually made the
+    // gap visible in the first place.
+    ctx.fillStyle = '#241d15';
+    ctx.beginPath();
+    ctx.moveTo(bots[0].x, bots[0].y);
+    for (let i = 1; i <= N_SEG; i++) ctx.lineTo(bots[i].x, bots[i].y);
+    ctx.closePath();
+    ctx.fill();
 
     // depth-sort the wall quads so the near side is always painted last —
     // fixes back-side quads (and windows) sometimes drawing over the front
