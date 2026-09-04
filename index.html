@@ -193,10 +193,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.17</button>
+  <button id="versionBtn">v0.18</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.18</b> — dégradés mis en cache (sprites)</div>
   <div><b>v0.17</b> — Jardin/Princesse visibles (bug caché), ennemis vivants (écart, hop rare, zigzag, boude/fuit), FPS dans le menu, changelog scrollable</div>
   <div><b>v0.16</b> — donjon redessiné : facettes, contraste, texture pierre</div>
   <div><b>v0.15</b> — corrections : hauteur initiale, bandeau FIGHT!, culling porte/fenêtres, boutons, double-tap iOS, son</div>
@@ -1232,6 +1233,42 @@
     ctx.closePath();
   }
 
+  // sprite cache: circles with a radial gradient (enemy/player/bush/
+  // princess/siege body) are identical every frame for a given entity
+  // type — instead of recomputing the gradient and re-filling the arc 60
+  // times a second per instance, each distinct look is drawn once onto a
+  // small offscreen canvas and reused with a plain drawImage() blit from
+  // then on, however many instances are on screen. Rebuilt automatically
+  // if `scale` changes (window resize / rotation), since the cached size
+  // was baked in at the old scale.
+  const spriteCache = new Map();
+  function getSprite(key, sizePx, draw) {
+    const entry = spriteCache.get(key);
+    if (entry && entry.scale === scale) return entry.canvas;
+    const c = document.createElement('canvas');
+    c.width = c.height = Math.max(1, Math.ceil(sizePx));
+    draw(c.getContext('2d'), c.width);
+    spriteCache.set(key, { canvas: c, scale });
+    return c;
+  }
+  // the common case: a flat-shaded ball with a two-stop radial gradient,
+  // cached by key + radius + colors, blitted centered on `pos`
+  function drawBallSprite(key, rad, colorA, colorB, pos) {
+    const pad = 2;
+    const size = rad * 2 + pad * 2;
+    const sprite = getSprite(key, size, (octx, s) => {
+      const c = s / 2;
+      const g = octx.createRadialGradient(c - rad * 0.3, c - rad * 0.3, 1, c, c, rad);
+      g.addColorStop(0, colorA);
+      g.addColorStop(1, colorB);
+      octx.fillStyle = g;
+      octx.beginPath();
+      octx.arc(c, c, rad, 0, Math.PI * 2);
+      octx.fill();
+    });
+    ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height / 2);
+  }
+
   function buildQuad(pts) {
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -1524,14 +1561,7 @@
     const shown = Math.min(b.offs.length, state.gardenLevel);
     for (const o of b.offs.slice(0, shown)) {
       const pos = project(b.x + o.dx, 0, b.z + o.dz, rot);
-      const rad = 7 * scale;
-      const g = ctx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
-      g.addColorStop(0, '#7ea457');
-      g.addColorStop(1, '#385226');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
-      ctx.fill();
+      drawBallSprite('bush', 7 * scale, '#7ea457', '#385226', pos);
     }
   }
 
@@ -1542,13 +1572,7 @@
     else if (e.state === 'onTop') y = platformTopY();
     const pos = project(e.r * Math.cos(e.angle), y, e.r * Math.sin(e.angle), rot);
     const rad = 10 * scale;
-    const g = ctx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
-    g.addColorStop(0, '#8a3b2e');
-    g.addColorStop(1, '#2a1a15');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
-    ctx.fill();
+    drawBallSprite('enemy', rad, '#8a3b2e', '#2a1a15', pos);
     if (e.hp < e.maxHp) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(pos.x - rad, pos.y - rad - 6, rad * 2, 3);
@@ -1561,13 +1585,7 @@
     const w = playerWorld();
     const pos = project(w.x, w.y, w.z, rot);
     const rad = 11 * scale;
-    const g = ctx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
-    g.addColorStop(0, '#7fa0c9');
-    g.addColorStop(1, '#28405e');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
-    ctx.fill();
+    drawBallSprite('player', rad, '#7fa0c9', '#28405e', pos);
 
     const p = state.player;
     const bw = 30;
@@ -1596,13 +1614,7 @@
     const pos = project(x, 0, z, rot);
     const rad = (13 + s.tierIdx * 3) * scale;
     const colors = ['#5a6b8a', '#8a6a3b', '#7a3b2e', '#4a3b6b'];
-    const g = ctx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
-    g.addColorStop(0, colors[s.tierIdx]);
-    g.addColorStop(1, '#201828');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
-    ctx.fill();
+    drawBallSprite('siege' + s.tierIdx, rad, colors[s.tierIdx], '#201828', pos);
     if (tier.invincible) {
       ctx.strokeStyle = 'rgba(180,210,255,0.75)';
       ctx.lineWidth = 2;
@@ -1620,14 +1632,7 @@
   function drawPrincess(rot) {
     const w = princessWorld();
     const pos = project(w.x, w.y, w.z, rot);
-    const rad = 9 * scale;
-    const g = ctx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
-    g.addColorStop(0, '#f3d6e8');
-    g.addColorStop(1, '#a4568c');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
-    ctx.fill();
+    drawBallSprite('princess', 9 * scale, '#f3d6e8', '#a4568c', pos);
   }
 
   function drawProjectile(pr, rot) {
