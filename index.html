@@ -143,13 +143,13 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.9</button>
+  <button id="versionBtn">v0.10</button>
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v0.9</b> — donjon fermé à la base (il n'avait jamais eu de fond : on voyait parfois à travers jusqu'à l'arrière du cercle du bas)</div>
-  <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or, réparation auto de secours, son débridé même si le premier tap est sur un bouton</div>
-  <div><b>v0.7</b> — vagues enchaînées sans bouton ni pause, réparation à l'appui maintenu</div>
+  <div><b>v0.10</b> — aller-retour vers le centre du donjon adouci (rapide puis ralentit en approchant, dans les deux sens), un "clang" distinct signale un donjon déjà à pleine force pendant qu'on tient Réparer (plus de marteau qui répète pour rien)</div>
+  <div><b>v0.9</b> — donjon fermé à la base (il n'avait jamais eu de fond)</div>
+  <div><b>v0.8</b> — douves invisibles tant qu'on n'a pas assez d'or, réparation auto de secours, son débridé</div>
 </div>
 
 <div id="bottombar">
@@ -236,6 +236,9 @@
   }
   const playHammer = () => beep({ freq: 180, freqEnd: 75, dur: 0.16, type: 'triangle', vol: 0.35 });
   const playShoot = () => beep({ freq: 520, freqEnd: 180, dur: 0.07, type: 'square', vol: 0.12 });
+  // higher-pitched, metallic — deliberately distinct from the low wooden
+  // hammer thud, so it reads as "nothing to fix here" rather than a hit
+  const playRepairMaxed = () => beep({ freq: 900, freqEnd: 620, dur: 0.1, type: 'square', vol: 0.28 });
 
   // ---- world constants ----
   const R = 49;                 // donjon (main tower) radius
@@ -246,7 +249,7 @@
   const JUMP_H = 56;            // donjon height at/below which jumping onto the platform becomes possible — see jumpChance, it stays rare even then
   const ATTACK_RANGE = 260;
   const ANGLE_SPEED = 1.6;      // rad/s, player catching up to camera
-  const RADIAL_SPEED = 90;      // units/s, player moving in/out
+  const RADIAL_EASE_RATE = 5.5; // how fast the in/out ease converges (higher = snappier)
   const PLATFORM_R = R * 1.4;   // wide walkway on top of the donjon — player and turrets actually stand here, not on the bare donjon rim
   const PLATFORM_H = 7;         // platform thickness
   const PLAYER_R = PLATFORM_R * 0.8; // stand a bit inside the platform's edge, not hanging off it
@@ -322,7 +325,8 @@
       hp: 5,
       maxHp: 5,
       atkTimer: 0,
-      repairTimer: REPAIR_TICK
+      repairTimer: REPAIR_TICK,
+      repairMaxedPlayed: false
     }
   };
 
@@ -612,22 +616,36 @@
     const maxStep = ANGLE_SPEED * dt;
     const d = angDiff(p.angle, targetAngle);
     p.angle += Math.max(-maxStep, Math.min(maxStep, d));
-    const maxRStep = RADIAL_SPEED * dt;
-    p.r += Math.max(-maxRStep, Math.min(maxRStep, targetR - p.r));
+
+    // radial move (to the centre and back) eases instead of running at a
+    // constant speed: fast while far from the target, naturally slowing as
+    // it arrives — same going back out. A plain per-frame lerp toward the
+    // target gives exactly that, organically, with no keyframed curve.
+    const rDelta = targetR - p.r;
+    if (Math.abs(rDelta) < 0.4) p.r = targetR;
+    else p.r += rDelta * (1 - Math.exp(-RADIAL_EASE_RATE * dt));
 
     if (p.behavior === 'repairTurret' && Math.abs(angDiff(p.angle, targetAngle)) < 0.12 && Math.abs(p.r - PLAYER_R) < 6) {
       damagedTurret.hp = Math.min(damagedTurret.maxHp, damagedTurret.hp + TURRET_HEAL * dt);
     } else if (p.behavior === 'repairCastle' && p.r < 8) {
-      // repairs in visible, audible increments — one hammer hit per notch,
-      // not a smooth ramp — even while enemies chip the wall continuously
-      p.repairTimer -= dt;
-      if (p.repairTimer <= 0) {
-        state.castleH = Math.min(CASTLE_MAX_H, state.castleH + CASTLE_HEAL_STEP);
-        playHammer();
-        p.repairTimer = REPAIR_TICK;
+      if (state.castleH >= CASTLE_MAX_H) {
+        // already at full strength: one higher-pitched "clang" to say so,
+        // not the repeating hammer — and only once per hold, even if kept
+        // pressed down
+        if (!p.repairMaxedPlayed) { playRepairMaxed(); p.repairMaxedPlayed = true; }
+      } else {
+        // repairs in visible, audible increments — one hammer hit per
+        // notch, not a smooth ramp — even while enemies chip the wall
+        p.repairTimer -= dt;
+        if (p.repairTimer <= 0) {
+          state.castleH = Math.min(CASTLE_MAX_H, state.castleH + CASTLE_HEAL_STEP);
+          playHammer();
+          p.repairTimer = REPAIR_TICK;
+        }
       }
     } else {
       p.repairTimer = REPAIR_TICK;
+      p.repairMaxedPlayed = false;
     }
 
     // spawning
