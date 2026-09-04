@@ -530,7 +530,13 @@
   repairBtn.addEventListener('pointercancel', stopRepair);
   repairBtn.addEventListener('pointerleave', stopRepair);
 
-  document.getElementById('restartBtn').addEventListener('click', () => location.reload());
+  // "Recommencer" faisait déjà un reload inconditionnel (donc allait déjà
+  // chercher la dernière version) — on passe juste par reloadIfUpdateAvailable()
+  // d'abord pour le suivi de version cohérent avec les autres sites, mais le
+  // comportement observable ne change pas : ça recharge dans tous les cas.
+  document.getElementById('restartBtn').addEventListener('click', () => {
+    if (!reloadIfUpdateAvailable()) location.reload();
+  });
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
@@ -538,6 +544,51 @@
   document.getElementById('versionBtn').addEventListener('click', () => {
     changelog.hidden = !changelog.hidden;
   });
+
+  /* ---------- MISE À JOUR AUTOMATIQUE (pas de service worker, cf. Knight
+     Wars — un service worker de cache avait causé plus de bugs qu'il n'en
+     résolvait là-bas : PWA figée sur une vieille version malgré des
+     relances répétées). Ici : vérification légère en tâche de fond (ETag/
+     Last-Modified). Les vagues s'enchaînent automatiquement dès le
+     chargement, sans jamais de pause "rien en jeu" — contrairement à
+     Forge Line, la mise à jour n'est donc appliquée qu'au clic explicite
+     sur "Recommencer" (qui rechargeait déjà de toute façon), jamais
+     silencieusement en pleine partie. ---------- */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+      .catch(() => {});
+  }
+  if ('caches' in window) {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).catch(() => {});
+  }
+  let updateAvailable = false;
+  let pendingVersionTag = null;
+  async function checkForUpdate() {
+    try {
+      const res = await fetch(location.pathname || 'index.html', { cache: 'no-store' });
+      if (!res.ok) return;
+      const tag = res.headers.get('etag') || res.headers.get('last-modified');
+      if (!tag) return; // l'hébergeur n'envoie ni l'un ni l'autre — rien de fiable à comparer
+      const stored = localStorage.getItem('bo_pageVersion');
+      if (stored === null) { localStorage.setItem('bo_pageVersion', tag); return; }
+      if (tag !== stored) { updateAvailable = true; pendingVersionTag = tag; }
+    } catch (e) { /* hors-ligne, ou requête bloquée — on ignore, on retentera plus tard */ }
+  }
+  // renvoie true (et recharge) si une mise à jour était en attente
+  function reloadIfUpdateAvailable() {
+    if (!updateAvailable) return false;
+    const now = Date.now();
+    let lastReload = 0;
+    try { lastReload = Number(sessionStorage.getItem('bo_lastUpdateReload')) || 0; } catch (e) { /* ignore */ }
+    if (now - lastReload < 10000) return false; // garde-fou anti-boucle
+    if (pendingVersionTag) { try { localStorage.setItem('bo_pageVersion', pendingVersionTag); } catch (e) { /* ignore */ } }
+    try { sessionStorage.setItem('bo_lastUpdateReload', String(now)); } catch (e) { /* ignore */ }
+    location.reload();
+    return true;
+  }
+  checkForUpdate();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 
   // ---- update ----
   let last = performance.now();
