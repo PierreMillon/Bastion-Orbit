@@ -133,9 +133,13 @@
   }
   #bottomStack button:disabled { opacity: 0.4; }
 
+  /* Réparer/Sortie only ever involve the lord — his own sprite blue.
+     Descendre/Remonter only ever involves the princess — her sprite pink.
+     .active overrides stay distinct (held-state feedback, not ownership). */
+  #repairBtn, #sortieBtn { background: #3a5c82; }
   #repairBtn.active { background: #7a8f5c; }
   #sortieBtn.active { background: #9c4a3f; }
-  #princessBtn { background: #8a4a7a; }
+  #princessBtn { background: #a4568c; }
   #gardenBtn { background: #4f6b2e; }
 
   #menu, #overlay {
@@ -186,10 +190,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.20</button>
+  <button id="versionBtn">v0.21</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.21</b> — boutons simplifiés (plus de coût/icônes), couleurs roi/princesse</div>
   <div><b>v0.20</b> — boutons réorganisés, château détruit = défaite, recommencer depuis le menu</div>
   <div><b>v0.19</b> — écart entre ennemis en grille (plus O(n²))</div>
   <div><b>v0.18</b> — dégradés mis en cache (sprites)</div>
@@ -207,13 +212,13 @@
 <div id="bottomStack">
   <div id="secondRow">
     <button id="repairBtn">Réparer</button>
-    <button id="princessBtn">👑 Descendre</button>
-    <button id="sortieBtn">⚔️ Sortie</button>
+    <button id="princessBtn">Descendre</button>
+    <button id="sortieBtn">Sortie</button>
   </div>
   <div id="bottombar">
-    <button id="towerBtn">Tourelle (🪙5)</button>
-    <button id="gardenBtn">Jardin (🪙15)</button>
-    <button id="moatBtn">Douves (🪙20)</button>
+    <button id="towerBtn">Tourelle</button>
+    <button id="gardenBtn">Jardin</button>
+    <button id="moatBtn">Douves</button>
   </div>
 </div>
 
@@ -768,7 +773,7 @@
 
   function updateMoatBtn() {
     if (state.moatLevel >= MOAT_TIERS.length) { moatBtn.textContent = 'Douves max'; moatBtn.disabled = true; }
-    else moatBtn.textContent = 'Douves (🪙' + MOAT_TIERS[state.moatLevel].cost + ')';
+    else moatBtn.textContent = 'Douves';
   }
   moatBtn.addEventListener('click', () => {
     if (state.moatLevel >= MOAT_TIERS.length) return;
@@ -784,7 +789,7 @@
 
   function updateGardenBtn() {
     if (state.gardenLevel >= GARDEN_TIERS.length) { gardenBtn.textContent = 'Jardin max'; gardenBtn.disabled = true; }
-    else gardenBtn.textContent = 'Jardin (🪙' + GARDEN_TIERS[state.gardenLevel].cost + ')';
+    else gardenBtn.textContent = 'Jardin';
   }
   gardenBtn.addEventListener('click', () => {
     if (state.gardenLevel >= GARDEN_TIERS.length) return;
@@ -798,8 +803,8 @@
   updateGardenBtn();
 
   function updatePrincessBtn() {
-    if (state.princessDead) { princessBtn.textContent = '👑 †'; princessBtn.disabled = true; return; }
-    princessBtn.textContent = state.princess.target === 0 ? '👑 Descendre' : '👑 Remonter';
+    if (state.princessDead) { princessBtn.textContent = '†'; princessBtn.disabled = true; return; }
+    princessBtn.textContent = state.princess.target === 0 ? 'Descendre' : 'Remonter';
   }
   princessBtn.addEventListener('click', () => {
     if (state.princessDead) return;

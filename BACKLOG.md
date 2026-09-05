@@ -243,6 +243,15 @@ large sur l'éclairage. Ne rien changer ici, juste s'en souvenir.
   étendre ce langage visuel aux autres éléments (ennemis, tourelles...) le
   jour où on retravaille le look général.
 
+## Direction graphique "fil de fer" (fond noir, très début informatique)
+
+Repéré sur une maquette de comparaison de perspective (fond noir, formes
+en traits, points jaunes en contraste) : jugé très beau, esthétique
+"début de l'informatique" façon jeux vectoriels. À garder en mémoire
+comme piste de style à part entière, réutilisable plus tard (pas
+forcément pour le rendu du jeu par défaut, mais comme option/thème visuel
+possible).
+
 ## Notes de contexte (pour ne rien perdre)
 
 - "Tour" = les tourelles construites par le joueur (créneaux/cubes) ;
