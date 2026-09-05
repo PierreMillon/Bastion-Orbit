@@ -114,7 +114,10 @@
   #changelog div { margin-bottom: 6px; }
   #changelog b { color: #d9b98a; }
 
-  #bottombar button {
+  /* shared base for every button in either row — which row a button lives
+     in is just layout (top row: hold-to-act combat buttons; bottom row:
+     purchases), the look is the same, only the accent color differs */
+  #bottomStack button {
     flex: 1 1 0;
     min-width: 0;
     padding: 11px 6px;
@@ -128,22 +131,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  #bottomStack button:disabled { opacity: 0.4; }
 
-  #bottombar button:disabled { opacity: 0.4; }
   #repairBtn.active { background: #7a8f5c; }
   #sortieBtn.active { background: #9c4a3f; }
-
-  #gardenBtn, #princessBtn {
-    padding: 9px 16px;
-    border: none;
-    border-radius: 10px;
-    color: #f2ead9;
-    font-size: 12px;
-    font-family: inherit;
-  }
-  #gardenBtn { background: #4f6b2e; }
   #princessBtn { background: #8a4a7a; }
-  #gardenBtn:disabled, #princessBtn:disabled { opacity: 0.4; }
+  #gardenBtn { background: #4f6b2e; }
 
   #menu, #overlay {
     position: fixed;
@@ -193,10 +186,11 @@
   <div class="stat">Vague <span id="waveNum">1</span></div>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.19</button>
+  <button id="versionBtn">v0.20</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.20</b> — boutons réorganisés, château détruit = défaite, recommencer depuis le menu</div>
   <div><b>v0.19</b> — écart entre ennemis en grille (plus O(n²))</div>
   <div><b>v0.18</b> — dégradés mis en cache (sprites)</div>
   <div><b>v0.17</b> — Jardin/Princesse visibles (bug caché), ennemis vivants (écart, hop rare, zigzag, boude/fuit), FPS dans le menu, changelog scrollable</div>
@@ -212,13 +206,13 @@
 
 <div id="bottomStack">
   <div id="secondRow">
-    <button id="gardenBtn">Jardin (🪙15)</button>
+    <button id="repairBtn">Réparer</button>
     <button id="princessBtn">👑 Descendre</button>
+    <button id="sortieBtn">⚔️ Sortie</button>
   </div>
   <div id="bottombar">
     <button id="towerBtn">Tourelle (🪙5)</button>
-    <button id="repairBtn">Réparer</button>
-    <button id="sortieBtn">⚔️ Sortie</button>
+    <button id="gardenBtn">Jardin (🪙15)</button>
     <button id="moatBtn">Douves (🪙20)</button>
   </div>
 </div>
@@ -226,6 +220,7 @@
 <div id="menu" hidden>
   <a href="https://pierremillon.github.io/Forge-Line/">→ Forge Line</a>
   <a href="https://pierremillon.github.io/knight-wars/">→ Knight Wars</a>
+  <button id="menuRestartBtn">Recommencer depuis le début</button>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
@@ -601,6 +596,17 @@
     document.getElementById('goldNum').textContent = state.gold;
   }
 
+  // the donjon never actually loses on its own — castleH clamps at
+  // CASTLE_MIN_H and just sits there forever, with nothing to stop the
+  // game. This is the missing loss condition, called wherever castleH is
+  // reduced (attackBase chipping, siege-engine bombardment).
+  function castleDestroyed() {
+    if (state.waveState === 'gameover') return;
+    state.waveState = 'gameover';
+    document.getElementById('overlayText').textContent = 'Votre château a été détruit, Seigneur. Vous avez perdu.';
+    document.getElementById('overlay').hidden = false;
+  }
+
   function hurtPlayer(n) {
     const p = state.player;
     p.hp -= n;
@@ -827,6 +833,12 @@
   // d'abord pour le suivi de version cohérent avec les autres sites, mais le
   // comportement observable ne change pas : ça recharge dans tous les cas.
   document.getElementById('restartBtn').addEventListener('click', () => {
+    if (!reloadIfUpdateAvailable()) location.reload();
+  });
+
+  // same full reset, but reachable mid-game from the menu instead of only
+  // after a game over
+  document.getElementById('menuRestartBtn').addEventListener('click', () => {
     if (!reloadIfUpdateAvailable()) location.reload();
   });
 
@@ -1140,6 +1152,7 @@
             e.jumpT = 0;
           } else {
             state.castleH = Math.max(CASTLE_MIN_H, state.castleH - 6);
+            if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
           }
           e.timer = 1.2;
         }
@@ -1192,6 +1205,7 @@
           else def.ref.hp -= tier.dmg;
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
+          if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
         }
       }
     }
