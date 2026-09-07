@@ -422,10 +422,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.38</button>
+  <button id="versionBtn">v0.39</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.39</b> — vraie caméra en perspective (bouton menu), base du donjon elliptique en phosphore</div>
   <div><b>v0.38</b> — vue "cosy" (bouton 🔥) : roi/princesse au coin du feu, purement visuel</div>
   <div><b>v0.37</b> — deux routes serpentantes : ennemis plus rapides mais prévisibles dessus, ou lents en tout-terrain pour encercler</div>
   <div><b>v0.36</b> — corrige la forme du donjon en phosphore, fausse pub à la défaite, bouton Neige ON/OFF, seigneur moins lent</div>
@@ -479,6 +480,7 @@
   <button id="styleBtn">Style : Phosphore</button>
   <button id="hueBtn">Teinte : Vert</button>
   <button id="snowBtn">Neige : ON</button>
+  <button id="cameraBtn">Caméra : Axonométrique</button>
   <button id="musicBtn">Musique : ON</button>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
@@ -661,9 +663,29 @@
   const cosIso = Math.cos(Math.PI / 6);
   const sinIso = Math.sin(Math.PI / 6);
 
+  // real perspective camera, validated first as a standalone mock-up
+  // (comparateur d'essai, hors dépôt) before wiring in here — same
+  // rotate-by-rot step as the axonometric path (so dragging still orbits
+  // the same way), then a camera sitting back and above the origin,
+  // pitched down, with a plain perspective divide. Vanishing point always
+  // stays off-screen above, by construction of CAM_TILT/CAM_HEIGHT below.
+  const CAM_HEIGHT = 250, CAM_DIST = 300, CAM_TILT = 0.9, CAM_FOCAL = 400;
+  let perspectiveMode = false;
+  try { perspectiveMode = localStorage.getItem('bo_perspective') === 'on'; } catch (e) { /* ignore */ }
+
   function project(x, y, z, rot) {
     const rx = x * Math.cos(rot) + z * Math.sin(rot);
     const rz = -x * Math.sin(rot) + z * Math.cos(rot);
+    if (perspectiveMode) {
+      const cy2 = CAM_HEIGHT - y;
+      const cz2 = rz + CAM_DIST;
+      const y2 = cy2 * Math.cos(CAM_TILT) - cz2 * Math.sin(CAM_TILT);
+      const z2 = cy2 * Math.sin(CAM_TILT) + cz2 * Math.cos(CAM_TILT);
+      const zSafe = Math.max(1, z2); // clamp rather than let anything behind the camera blow up/flip
+      const sx = CAM_FOCAL * rx / zSafe;
+      const sy = CAM_FOCAL * y2 / zSafe;
+      return { x: cx + sx * scale, y: cy + sy * scale, depth: -z2 };
+    }
     const sx = (rx - rz) * cosIso;
     const sy = (rx + rz) * sinIso - y;
     return { x: cx + sx * scale, y: cy + sy * scale, depth: rx + rz };
@@ -760,6 +782,18 @@
     snowOn = !snowOn;
     try { localStorage.setItem('bo_snowOn', snowOn ? 'on' : 'off'); } catch (e) { /* ignore */ }
     snowBtn.textContent = 'Neige : ' + (snowOn ? 'ON' : 'OFF');
+  });
+
+  // caméra en perspective réelle (essai validé séparément, intégré ici en
+  // session) : bascule project() lui-même, donc tout le placement à
+  // l'écran suit sans qu'aucune autre fonction n'ait eu besoin de changer
+  const cameraBtn = document.getElementById('cameraBtn');
+  function updateCameraBtn() { cameraBtn.textContent = 'Caméra : ' + (perspectiveMode ? 'Perspective' : 'Axonométrique'); }
+  updateCameraBtn();
+  cameraBtn.addEventListener('click', () => {
+    perspectiveMode = !perspectiveMode;
+    try { localStorage.setItem('bo_perspective', perspectiveMode ? 'on' : 'off'); } catch (e) { /* ignore */ }
+    updateCameraBtn();
   });
 
   // iOS still shows its double-tap-to-zoom magnifier here and there even
@@ -2564,16 +2598,26 @@
     const leftPts = profile.map(p => project(p.r * Math.cos(aL), p.y, p.r * Math.sin(aL), rot));
     const rightPts = profile.map(p => project(p.r * Math.cos(aR), p.y, p.r * Math.sin(aR), rot));
 
-    // base rim: the left/right profile only traces the two tangent edges,
-    // straight lines by construction — but the true cross-section still
-    // bulges past that flat chord at the very bottom (same reason the
-    // original renderer capped this with a dark disc: without it, ground-
-    // level things directly behind the tower's near face show through the
-    // gap between the chord and the real curve). Filled first, everything
-    // else draws over it.
-    // plain occlusion fills, no outline wanted here (they're not a real
-    // edge of the silhouette, just backing plates) — drawn straight on the
-    // raw context so wrapPhosphor's fill→stroke doesn't add clutter lines
+    // base: the left/right profile only traces the two tangent edges,
+    // straight lines by construction — but the tower's true footprint is a
+    // circle, which bulges past that flat chord at the very bottom, on the
+    // near side (the far side is genuinely hidden behind the tower's own
+    // bulk, same as the original renderer's dark base disc was there for).
+    // Traced explicitly (not just occlusion-filled) so the bottom actually
+    // reads as the round base it is, signalled in session — folded into
+    // the same path as the body so it's one continuous outline, not a
+    // separate seam.
+    const BASE_ARC_STEPS = 16;
+    const baseArcPts = [];
+    for (let i = 0; i <= BASE_ARC_STEPS; i++) {
+      const phi = -Math.PI / 4 + (i / BASE_ARC_STEPS) * Math.PI; // aR..aL, the near half only
+      const a = phi + rot;
+      baseArcPts.push(project(R * Math.cos(a), 0, R * Math.sin(a), rot));
+    }
+
+    // the eave's own near-facing bulge (wall → wider platform, a flat step
+    // not a slope) — same reasoning, plain occlusion is enough here since
+    // its curve is too short to read as anything on its own either way
     const fillDisc = (pts) => {
       rawCtx.fillStyle = PHOSPHOR_BG;
       rawCtx.beginPath();
@@ -2582,15 +2626,16 @@
       rawCtx.closePath();
       rawCtx.fill();
     };
-    fillDisc(circlePts.map(c => project(R * c.cx, 0, R * c.cz, rot)));
-    // same reasoning at the eave (wall → wider platform, a flat step, not
-    // a slope) — its own near-facing bulge past the profile's flat jog
     fillDisc(circlePts.map(c => project(PLATFORM_R * c.cx, eaveY, PLATFORM_R * c.cz, rot)));
 
     ctx.beginPath();
     ctx.moveTo(leftPts[0].x, leftPts[0].y);
     for (let i = 1; i < leftPts.length; i++) ctx.lineTo(leftPts[i].x, leftPts[i].y);
     for (let i = rightPts.length - 1; i >= 0; i--) ctx.lineTo(rightPts[i].x, rightPts[i].y);
+    // rightPts[0] is the base at aR; sweep the visible half of the base
+    // circle from there over to leftPts[0] (the base at aL) instead of
+    // closing on a straight chord
+    for (const p of baseArcPts) ctx.lineTo(p.x, p.y);
     ctx.closePath();
     ctx.fill();
 
