@@ -152,6 +152,14 @@ besoin, mais "le plus proche" comme comportement par défaut.
 
 ## Princesse : vivante et utile en haut, absente en bas
 
+Fait en v0.23, partiellement : vraie jauge de vie + barre affichée
+au-dessus de sa tête, vulnérable en haut aussi (pas seulement en bas),
+régénération de fin de vague (moitié du manquant, comme le seigneur).
+**Pas encore fait** : déplacement vivant en haut/en bas (elle reste
+statique aux deux points fixes actuels), aide à la réparation, affichage
+du gain d'or au-dessus de sa tête, ciblage prioritaire/decoy. Détail
+d'origine conservé ci-dessous pour ces parties restantes.
+
 Rassemblé de plusieurs remarques successives sur la princesse :
 - **En haut du donjon** (comportement par défaut) : elle ne doit pas être
   statique. Elle se promène près du sommet quand rien ne se passe, se
@@ -189,15 +197,14 @@ plus ou moins à leur position cible. Voulu : ils descendent/montent
 toujours par un chemin fixe au centre de la tour, et ne sortent/entrent
 dans le monde extérieur que par la porte — jamais à travers le mur.
 
-## Câlin roi/reine : régénération rapide à deux
+## Câlin roi/reine : régénération rapide à deux → fait en v0.23
 
-Mécanique proposée : un appui simple sur le bouton princesse la fait
-descendre ; un second appui simple la fait remonter (déjà le cas). Un
-appui **maintenu** sur ce même bouton appelle le roi à la rejoindre, où
-qu'il soit — il vient se coller à elle (façon câlin/bisous). Pendant ce
-contact, leur vie à tous les deux régénère rapidement (proposé : ~3
-secondes de maintien pour un retour à 100%), avec un petit cœur affiché
-au-dessus d'eux pendant que ça régénère.
+Implémenté : tap = bascule descendre/remonter (comme avant) ; maintien
+(uniquement si elle est déjà en bas) = le seigneur la rejoint, 3s de
+maintien pour un retour à 100% pour les deux, cœur affiché au-dessus
+d'eux. Au relâchement, léger temps de rémanence puis reprise de la file
+de priorité normale (retour en haut, ou sortie si ce bouton est
+maintenu en même temps).
 
 ## Roi livré à lui-même : errer, pas revenir à la porte
 
