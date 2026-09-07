@@ -192,6 +192,97 @@
     opacity: 0.65;
   }
 
+  /* fausse pub à la défaite : gag volontairement criard, aux antipodes du
+     reste de l'interface (fond parchemin sobre) — c'est le but */
+  #fakeAd {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(10,10,10,0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #fakeAd[hidden] { display: none; }
+  #fakeAdBox {
+    position: relative;
+    max-width: 320px;
+    background: linear-gradient(180deg, #ffe14d, #ffb703);
+    border: 4px solid #d62828;
+    border-radius: 4px;
+    padding: 22px 18px 18px;
+    text-align: center;
+    box-shadow: 0 0 0 6px #1a1a1a, 0 20px 40px rgba(0,0,0,0.6);
+    font-family: system-ui, sans-serif;
+    color: #1a1a1a;
+  }
+  #fakeAdClose {
+    position: absolute;
+    top: -14px;
+    right: -14px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #555;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    cursor: not-allowed;
+  }
+  .fakeAdSiren {
+    color: #d62828;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    animation: fakeAdBlink 0.8s steps(1) infinite;
+  }
+  .fakeAdTitle {
+    font-weight: 900;
+    font-size: 20px;
+    line-height: 1.15;
+    margin: 8px 0;
+    text-shadow: 1px 1px 0 #fff;
+  }
+  .fakeAdBody {
+    font-size: 12.5px;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  .fakeAdMeter {
+    height: 14px;
+    background: #fff;
+    border: 2px solid #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .fakeAdMeterFill {
+    height: 100%;
+    width: 99%;
+    background: repeating-linear-gradient(45deg, #2a9d8f, #2a9d8f 8px, #264653 8px, #264653 16px);
+    animation: fakeAdStripe 0.6s linear infinite;
+  }
+  .fakeAdSmall {
+    font-size: 10.5px;
+    opacity: 0.75;
+    margin-bottom: 14px;
+  }
+  #fakeAdContinue {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #1a1a1a;
+    color: #ffe14d;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  @keyframes fakeAdBlink { 50% { opacity: 0.25; } }
+  @keyframes fakeAdStripe { from { background-position: 0 0; } to { background-position: 32px 0; } }
+
   /* mode phosphore/filaire: le donjon lui-même passe en fil de fer (voir
      wrapPhosphor() dans le script) — ici le chrome autour (barres, boutons,
      menu, changelog) suit, tout en monochrome noir/vert (décidé en
@@ -245,10 +336,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.35</button>
+  <button id="versionBtn">v0.36</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.36</b> — corrige la forme du donjon en phosphore, fausse pub à la défaite, bouton Neige ON/OFF, seigneur moins lent</div>
   <div><b>v0.35</b> — échelle (montée garantie dès vague 4), huile bouillante (bouton, nécessite une tourelle)</div>
   <div><b>v0.34</b> — CRITIQUE : le jeu ne démarrait plus du tout (écran vide, boutons morts) depuis v0.30</div>
   <div><b>v0.33</b> — bouton Teinte (vert/ambre), correctif d'occlusion sur la silhouette du donjon</div>
@@ -298,11 +390,25 @@
   <button id="menuRestartBtn">Recommencer depuis le début</button>
   <button id="styleBtn">Style : Phosphore</button>
   <button id="hueBtn">Teinte : Vert</button>
+  <button id="snowBtn">Neige : ON</button>
   <button id="musicBtn">Musique : ON</button>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
 <audio id="bgMusic" src="music.wav" loop preload="auto"></audio>
+
+<div id="fakeAd" hidden>
+  <div id="fakeAdBox">
+    <div id="fakeAdClose">✕</div>
+    <div class="fakeAdSiren">⚠️ ALERTE SÉCURITÉ ⚠️</div>
+    <div class="fakeAdTitle">VOTRE CHÂTEAU EST EN DANGER !!!</div>
+    <div class="fakeAdBody">1 (UN) ennemi a été détecté dans votre système de défense.
+      Téléchargez Antivirus Royal PRO maintenant pour continuer à régner !</div>
+    <div class="fakeAdMeter"><div class="fakeAdMeterFill"></div></div>
+    <div class="fakeAdSmall">Scan en cours... 99% — ne fermez pas cette fenêtre</div>
+    <button id="fakeAdContinue">Continuer quand même →</button>
+  </div>
+</div>
 
 <div id="overlay" hidden>
   <div id="overlayText"></div>
@@ -411,6 +517,8 @@
     { size: 7.5, speed: 55, count: 11, alpha: 0.78, sway: 38 }
   ];
   let snowflakes = [];
+  let snowOn = true;
+  try { snowOn = localStorage.getItem('bo_snowOn') !== 'off'; } catch (e) { /* ignore */ }
   const SPAWN_R_BASE = 480; // the old flat radius — speed is scaled by SPAWN_R/this so a taller spawn distance doesn't change how long the walk actually takes
 
   function resize() {
@@ -546,6 +654,13 @@
     applyPhosphorStyle();
     spriteCache.clear(); // cached sprites were baked in the old hue
   });
+  const snowBtn = document.getElementById('snowBtn');
+  snowBtn.textContent = 'Neige : ' + (snowOn ? 'ON' : 'OFF');
+  snowBtn.addEventListener('click', () => {
+    snowOn = !snowOn;
+    try { localStorage.setItem('bo_snowOn', snowOn ? 'on' : 'off'); } catch (e) { /* ignore */ }
+    snowBtn.textContent = 'Neige : ' + (snowOn ? 'ON' : 'OFF');
+  });
 
   // iOS still shows its double-tap-to-zoom magnifier here and there even
   // with touch-action:none + user-scalable=no on the viewport — this is the
@@ -593,8 +708,14 @@
   // covered most of its ground in a couple of frames — read as a teleport
   // instead of a walk. Capping the per-frame radial step to a real walking
   // speed keeps short moves snappy (ease finishes under the cap anyway)
-  // while long ones actually take visible time.
-  const PLAYER_WALK_SPEED = 70; // world units/s, lord's own two feet
+  // while long ones actually take visible time. First pass (70) turned out
+  // to also cap ordinary in/out moves (repairCastle's PLAYER_R→0 trip is
+  // ~55 units, well within where the cap kicks in) — signalled in session
+  // as the lord feeling generally slower than before, not just less
+  // teleport-y on long treks. Raised so a normal platform-scale move stays
+  // close to the old snappy feel; only a genuinely long sortie still reads
+  // as a real walk.
+  const PLAYER_WALK_SPEED = 140; // world units/s, lord's own two feet
   const PLATFORM_R = R * 1.4;   // wide walkway on top of the donjon — player and turrets actually stand here, not on the bare donjon rim
   const PLATFORM_H = 7;         // platform thickness
   const PLAYER_R = PLATFORM_R * 0.8; // stand a bit inside the platform's edge, not hanging off it
@@ -1087,25 +1208,27 @@
     }
   }
 
+  // gag à la défaite : la fausse pub s'affiche d'abord, "Continuer quand
+  // même" révèle le véritable écran de défaite en dessous
+  function showGameOver(text) {
+    if (state.waveState === 'gameover') return;
+    state.waveState = 'gameover';
+    document.getElementById('overlayText').textContent = text;
+    document.getElementById('fakeAd').hidden = false;
+  }
+
   // the donjon never actually loses on its own — castleH clamps at
   // CASTLE_MIN_H and just sits there forever, with nothing to stop the
   // game. This is the missing loss condition, called wherever castleH is
   // reduced (attackBase chipping, siege-engine bombardment).
   function castleDestroyed() {
-    if (state.waveState === 'gameover') return;
-    state.waveState = 'gameover';
-    document.getElementById('overlayText').textContent = 'Votre château a été détruit, Seigneur. Vous avez perdu.';
-    document.getElementById('overlay').hidden = false;
+    showGameOver('Votre château a été détruit, Seigneur. Vous avez perdu.');
   }
 
   function hurtPlayer(n) {
     const p = state.player;
     p.hp -= n;
-    if (p.hp <= 0) {
-      state.waveState = 'gameover';
-      document.getElementById('overlayText').textContent = 'Tu es tombé à la vague ' + state.wave;
-      document.getElementById('overlay').hidden = false;
-    }
+    if (p.hp <= 0) showGameOver('Tu es tombé à la vague ' + state.wave);
   }
 
   // stalled enemies (state === 'attackBase') close enough to each other stop
@@ -1280,6 +1403,7 @@
   const gardenBtn = document.getElementById('gardenBtn');
   const princessBtn = document.getElementById('princessBtn');
   const overlay = document.getElementById('overlay');
+  const fakeAd = document.getElementById('fakeAd');
   const menu = document.getElementById('menu');
   const changelog = document.getElementById('changelog');
   const goldNum = document.getElementById('goldNum');
@@ -1405,6 +1529,13 @@
   // comportement observable ne change pas : ça recharge dans tous les cas.
   document.getElementById('restartBtn').addEventListener('click', () => {
     if (!reloadIfUpdateAvailable()) location.reload();
+  });
+
+  // the fake ad's own ✕ is a gag, not a real close — only "Continuer quand
+  // même" actually dismisses it, revealing the real defeat screen beneath
+  document.getElementById('fakeAdContinue').addEventListener('click', () => {
+    fakeAd.hidden = true;
+    overlay.hidden = false;
   });
 
   // same full reset, but reachable mid-game from the menu instead of only
@@ -1926,12 +2057,7 @@
           const def = nearestDefender(lx, lz);
           if (def.type === 'player') {
             p.hp -= 1;
-            if (p.hp <= 0) {
-              state.waveState = 'gameover';
-              document.getElementById('overlayText').textContent =
-                'Tu es tombé à la vague ' + state.wave;
-              overlay.hidden = false;
-            }
+            if (p.hp <= 0) showGameOver('Tu es tombé à la vague ' + state.wave);
           } else {
             def.ref.hp -= 2;
           }
@@ -2257,6 +2383,19 @@
     const ledgeY = showLedge ? Math.min(wallTopY * 0.46, wallTopY - LEDGE_H - 16) : 0;
     const platY = platformTopY();
 
+    // the platform's own vertical rim (PLATFORM_H, 7 world units) is only
+    // ~3px tall at typical scale — geometrically correct but visually
+    // imperceptible as a step, reading as the tower just running straight
+    // into the roof disc instead of a wider platform sitting on it (this
+    // is what didn't "respect the previous shape": the widening was
+    // computed right, just invisible). Starting the outward jog a bit
+    // below the true wall top gives it enough vertical room to actually
+    // read as a step, while the top still lands exactly on the real roof
+    // height (platY) so turrets/the lord still stand where they visually
+    // should.
+    const EAVE_VISUAL_DROP = 14;
+    const eaveY = Math.max(showLedge ? ledgeY + LEDGE_H + 4 : 4, wallTopY - EAVE_VISUAL_DROP);
+
     const profile = [{ r: R, y: 0 }];
     if (showLedge) {
       profile.push({ r: R, y: ledgeY });
@@ -2264,8 +2403,8 @@
       profile.push({ r: R + LEDGE_OUT, y: ledgeY + LEDGE_H });
       profile.push({ r: R, y: ledgeY + LEDGE_H });
     }
-    profile.push({ r: R, y: wallTopY });
-    profile.push({ r: PLATFORM_R, y: wallTopY });
+    profile.push({ r: R, y: eaveY });
+    profile.push({ r: PLATFORM_R, y: eaveY });
     profile.push({ r: PLATFORM_R, y: platY });
 
     const aR = rot - Math.PI / 4;
@@ -2294,7 +2433,7 @@
     fillDisc(circlePts.map(c => project(R * c.cx, 0, R * c.cz, rot)));
     // same reasoning at the eave (wall → wider platform, a flat step, not
     // a slope) — its own near-facing bulge past the profile's flat jog
-    fillDisc(circlePts.map(c => project(PLATFORM_R * c.cx, wallTopY, PLATFORM_R * c.cz, rot)));
+    fillDisc(circlePts.map(c => project(PLATFORM_R * c.cx, eaveY, PLATFORM_R * c.cz, rot)));
 
     ctx.beginPath();
     ctx.moveTo(leftPts[0].x, leftPts[0].y);
@@ -2684,6 +2823,7 @@
     });
   }
   function updateSnow(dt) {
+    if (!snowOn) return;
     for (const f of snowflakes) {
       const layer = SNOW_LAYERS[f.li];
       f.phase += dt;
@@ -2694,6 +2834,7 @@
     }
   }
   function drawSnow() {
+    if (!snowOn) return;
     for (const f of snowflakes) {
       const layer = SNOW_LAYERS[f.li];
       drawBallSprite(`snow${f.li}`, layer.size * scale, `rgba(255,255,255,${layer.alpha})`, 'rgba(255,255,255,0)', f);
