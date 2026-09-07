@@ -243,10 +243,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.33</button>
+  <button id="versionBtn">v0.34</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.34</b> — CRITIQUE : le jeu ne démarrait plus du tout (écran vide, boutons morts) depuis v0.30</div>
   <div><b>v0.33</b> — bouton Teinte (vert/ambre), correctif d'occlusion sur la silhouette du donjon</div>
   <div><b>v0.32</b> — mode Style (Phosphore par défaut / Filaire pur / Couleur), donjon en silhouette vectorielle, chrome et boutons monochromes en phosphore</div>
   <div><b>v0.31</b> — équipage vivant des engins de siège (régén continue, sortie tue au corps), jardin en progression par formule (sans plafond)</div>
@@ -391,6 +392,21 @@
   const rawCtx = canvas.getContext('2d');
   const ctx = wrapPhosphor(rawCtx);
   let W, H, cx, cy, scale, SPAWN_R;
+  // declared up here (not next to the rest of the snow system, further
+  // down) because resize() — called immediately below — already seeds it
+  // via initSnow(); a `let`/`const` declared later in the file is in its
+  // temporal dead zone until that later line actually runs, and resize()
+  // runs first, so this was throwing "Cannot access '...' before
+  // initialization" on every single load — the whole game silently died
+  // right there, before any button's event listener ever got attached.
+  // Three depth layers (back/mid/front) for the "air/volume" feeling:
+  // far flakes small/slow/faint, near ones big/fast/bolder.
+  const SNOW_LAYERS = [
+    { size: 2.2, speed: 16, count: 34, alpha: 0.30, sway: 10 },
+    { size: 4.2, speed: 32, count: 20, alpha: 0.50, sway: 22 },
+    { size: 7.5, speed: 55, count: 11, alpha: 0.78, sway: 38 }
+  ];
+  let snowflakes = [];
   const SPAWN_R_BASE = 480; // the old flat radius — speed is scaled by SPAWN_R/this so a taller spawn distance doesn't change how long the walk actually takes
 
   function resize() {
@@ -2569,18 +2585,8 @@
     }
   }
 
-  // ---- ambient snow ----
-  // pure screen-space weather overlay, not tied to the iso world at all —
-  // three depth layers (back/mid/front) give the "air/volume" feeling asked
-  // for: far flakes small, slow, faint; near ones big, fast, bolder. A slow
-  // sine drives the lateral wind so it drifts rather than falling dead
-  // straight, alternating gently left/right rather than committing one way.
-  const SNOW_LAYERS = [
-    { size: 2.2, speed: 16, count: 34, alpha: 0.30, sway: 10 },
-    { size: 4.2, speed: 32, count: 20, alpha: 0.50, sway: 22 },
-    { size: 7.5, speed: 55, count: 11, alpha: 0.78, sway: 38 }
-  ];
-  let snowflakes = [];
+  // ---- ambient snow ---- (SNOW_LAYERS/snowflakes declared up near W/H/
+  // scale, for the same "resize() runs first" TDZ reason)
   function initSnow() {
     snowflakes = [];
     SNOW_LAYERS.forEach((layer, li) => {
