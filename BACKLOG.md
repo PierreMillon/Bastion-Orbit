@@ -49,20 +49,51 @@ Un mode "cosy" contemplatif, pendant que la bataille continue dehors.
 Belle opposition tonale (repos à l'intérieur / urgence dehors) à garder
 si cette vue voit le jour.
 
-## Huile bouillante
+## Huile bouillante → fait en v0.35
 
 Depuis l'ajout de la plateforme (v0.5) qui dépasse le donjon, il y a de la
 place pour percer des trous dans le rebord et y verser de l'huile
 bouillante sur les ennemis en bas. Pas encore de mécanique, juste rendu
 possible par la plateforme.
 
-## Échelle portée par un ennemi
+Mécanique précisée en session : bouton dédié, désactivé tant qu'aucune
+tourelle n'existe. Tenu, le seigneur marche jusqu'à la tourelle la plus
+proche et, une fois là, verse périodiquement des dégâts de zone sur tout
+attaquant stalled au pied du mur près de cette tourelle — simplifié par
+rapport à la description (pas de zone d'approvisionnement séparée à
+laquelle faire des allers-retours), noté ici en cas de vouloir la vraie
+version plus tard.
+
+## Échelle portée par un ennemi → fait en v0.35
 
 Un type d'ennemi qui porte une échelle, la pose contre le donjon, et
 permet aux autres de monter directement sur la plateforme sans avoir à
 démolir le mur — un chemin d'attaque alternatif à ajouter au système de
 saut existant (qui, lui, reste tel quel : rare, lié à la hauteur du
 donjon). Idée brute, pas conçue.
+
+À partir de la vague 4, un attaquant par vague porte une échelle (teinte
+bois distincte). Contrairement au saut (rare, dépend de castleH), planter
+une échelle est garanti après un temps fixe — une vraie menace à
+prioriser avant qu'elle ne plante.
+
+## Deux routes serpentantes (retrouvée après une coupure de résumé) → fait en v0.37
+
+Mentionnée en session, perdue avant d'être notée ici (aucune trace au
+moment où le joueur a demandé si elle avait été prise en compte) —
+reconstituée sur demande directe, ne pas la reperdre cette fois.
+
+Deux chemins qui arrivent de loin en serpentant et rejoignent le château.
+Les ennemis avancent plus vite dessus, donc ils choisissent de les
+utiliser ou non — pour pouvoir encercler par exemple (en restant en
+tout-terrain, plus lent mais réparti sur tout le pourtour).
+
+Fait : deux angles fixes, tracé sinusoïdal qui se redresse en approchant
+du mur (arrivée nette, pas n'importe où). ~40% des attaquants (hors
+porteurs d'échelle/de pont) prennent une route à l'apparition ; sur la
+route, vitesse boostée et angle asservi au tracé ; sinon, comportement
+normal (oscillation libre, vitesse normale) — c'est ce qui permet
+l'encerclement.
 
 ## Chemin vers un autre château (progression multi-niveaux)
 
@@ -270,12 +301,18 @@ de volume. Fait en pur espace écran (indépendant de la caméra iso), 3
 plans (34/20/11 flocons, tailles et vitesses croissantes), vent latéral en
 sinus par flocon.
 
-## Fausse pub à la défaite
+## Fausse pub à la défaite → fait en v0.36 (version simple, pas copiée de l'original)
 
 Sur l'écran de défaite, proposer une option façon "publicité factice avec
 un faux message d'erreur" qui dit en substance "vous pouvez continuer quand
 même" — référence donnée à ce qui existe déjà dans un des autres jeux du
 portfolio (à retrouver et adapter, pas juste copier).
+
+Version simple approuvée en session (pas d'accès au dépôt Knight Wars
+pour reprendre l'original) : #fakeAd, gag volontairement criard (fond
+jaune/rouge, fausse alerte sécurité, fausse barre de scan à 99%), affiché
+avant l'écran de défaite normal — "Continuer quand même" révèle l'écran
+réel en dessous.
 
 ## Bugs signalés à vérifier
 

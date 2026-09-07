@@ -283,6 +283,91 @@
   @keyframes fakeAdBlink { 50% { opacity: 0.25; } }
   @keyframes fakeAdStripe { from { background-position: 0 0; } to { background-position: 32px 0; } }
 
+  /* vue intérieure "cosy" : une pause visuelle, pas un vrai mode de jeu à
+     ses propres règles (ça, c'est un chantier à part — voir BACKLOG) — le
+     jeu continue de tourner derrière, ceci n'est qu'un rideau qu'on tire */
+  #cosyBtn {
+    background: none;
+    border: none;
+    color: #f2ead9;
+    font-size: 16px;
+    padding: 4px 6px;
+    line-height: 1;
+  }
+  #cosyOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    background: radial-gradient(ellipse at 50% 65%, #3a2415 0%, #1c1108 60%, #0c0704 100%);
+  }
+  #cosyOverlay[hidden] { display: none; }
+  #cosyRoom {
+    position: relative;
+    width: min(320px, 86vw);
+    height: 220px;
+  }
+  .cosyFireGlow {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    width: 180px;
+    height: 180px;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, rgba(255,150,60,0.55) 0%, rgba(255,150,60,0) 70%);
+    animation: cosyFlicker 2.4s ease-in-out infinite;
+  }
+  .cosyFire {
+    position: absolute;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    font-size: 34px;
+    animation: cosyFlicker 1.6s ease-in-out infinite;
+  }
+  .cosyChessTable {
+    position: absolute;
+    left: 50%;
+    bottom: 78px;
+    transform: translateX(-50%);
+    font-size: 15px;
+    opacity: 0.8;
+    color: #d9b98a;
+  }
+  .cosyKing, .cosyPrincess {
+    position: absolute;
+    bottom: 55px;
+    font-size: 30px;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+  }
+  .cosyKing { left: 32%; transform: translateX(-50%) scaleX(-1); }
+  .cosyPrincess { left: 68%; transform: translateX(-50%); }
+  .cosyCaption {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: 100%;
+    text-align: center;
+    color: #d9b98a;
+    font-size: 12px;
+    font-style: italic;
+  }
+  @keyframes cosyFlicker { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+  #cosyClose {
+    padding: 10px 22px;
+    border-radius: 10px;
+    background: none;
+    border: 1px solid rgba(242,234,217,0.4);
+    color: #f2ead9;
+    font-size: 14px;
+    font-family: inherit;
+  }
+
   /* mode phosphore/filaire: le donjon lui-même passe en fil de fer (voir
      wrapPhosphor() dans le script) — ici le chrome autour (barres, boutons,
      menu, changelog) suit, tout en monochrome noir/vert (décidé en
@@ -336,10 +421,12 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.37</button>
+  <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
+  <button id="versionBtn">v0.38</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.38</b> — vue "cosy" (bouton 🔥) : roi/princesse au coin du feu, purement visuel</div>
   <div><b>v0.37</b> — deux routes serpentantes : ennemis plus rapides mais prévisibles dessus, ou lents en tout-terrain pour encercler</div>
   <div><b>v0.36</b> — corrige la forme du donjon en phosphore, fausse pub à la défaite, bouton Neige ON/OFF, seigneur moins lent</div>
   <div><b>v0.35</b> — échelle (montée garantie dès vague 4), huile bouillante (bouton, nécessite une tourelle)</div>
@@ -397,6 +484,18 @@
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
 <audio id="bgMusic" src="music.wav" loop preload="auto"></audio>
+
+<div id="cosyOverlay" hidden>
+  <div id="cosyRoom">
+    <div class="cosyFireGlow"></div>
+    <div class="cosyFire">🔥</div>
+    <div class="cosyChessTable">♟</div>
+    <div class="cosyKing">🤴</div>
+    <div class="cosyPrincess" id="cosyPrincess">👸</div>
+    <div class="cosyCaption">Un instant de calme au coin du feu — dehors, la bataille continue.</div>
+  </div>
+  <button id="cosyClose">Retour au mur</button>
+</div>
 
 <div id="fakeAd" hidden>
   <div id="fakeAdBox">
@@ -1577,6 +1676,17 @@
   });
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
+
+  // vue "cosy" : un rideau purement visuel — pas de pause, pas de règles à
+  // part (voir le commentaire CSS sur #cosyOverlay). La princesse n'y
+  // apparaît que si elle est encore vivante.
+  const cosyOverlay = document.getElementById('cosyOverlay');
+  const cosyPrincess = document.getElementById('cosyPrincess');
+  document.getElementById('cosyBtn').addEventListener('click', () => {
+    cosyPrincess.style.display = state.princessDead ? 'none' : '';
+    cosyOverlay.hidden = false;
+  });
+  document.getElementById('cosyClose').addEventListener('click', () => { cosyOverlay.hidden = true; });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
 
   document.getElementById('versionBtn').addEventListener('click', () => {
