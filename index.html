@@ -202,10 +202,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.27</button>
+  <button id="versionBtn">v0.28</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.28</b> — porte/fenêtres foreshortening, pont de fortune sur les douves</div>
   <div><b>v0.27</b> — seigneur erre sorti sans cible, entrée/sortie forcée par la porte, câlin vise la vraie position</div>
   <div><b>v0.26</b> — apparition toujours hors écran, tir sans limite si visible, effets de mort</div>
   <div><b>v0.25</b> — princesse dans le jardin, tourelles décalées, douves décalées, ligne plus droite, sortie sur cible de repli</div>
@@ -454,6 +455,15 @@
   ];
   const FLOODED_PER_TIER = 2; // bush clumps submerged per moat level (of 8)
 
+  // a wave slowed by the moat sends a couple of builders next wave to lay
+  // a crossing — once up, every wave after ignores the slow (and the
+  // tier-3+ chip damage) at that angle, until it's destroyed
+  const BRIDGE_BUILD_TIME = 2.5;
+  const BRIDGE_HP = 20;               // ~10x a soldier's 2 hp
+  const BRIDGE_ANGULAR_WIDTH = 0.16;  // how wide a crossing lane it covers
+  const BRIDGE_BUILDERS_PER_WAVE = 2;
+  const BRIDGE_MAX_COUNT = 2;         // keeps the moat from turning into a colander
+
   // garden upgrade tiers: each level makes it lusher (more plants per
   // clump, drawn denser) and raises the passive gold it produces —
   // proportional to "how nice the garden is", i.e. its level, minus
@@ -527,6 +537,9 @@
     calin: { held: false, grace: 0, hugging: false },
     siegeEngines: [],
     particles: [], // short-lived death effects (smoke/sparkle), purely visual
+    bridges: [], // { angle, hp, maxHp } — planks laid across the moat
+    moatSlowedThisWave: false, // did the moat actually slow anyone this wave
+    buildersToSpawn: 0, // how many of the next spawns should be flagged as bridge builders
     siegeTimer: SIEGE_CHECK_INTERVAL,
     wave: 1,
     waveState: 'prep', // prep | active | gameover
@@ -593,6 +606,12 @@
       const d = Math.abs(angDiff(fromAngle, e.angle));
       if (d < bestD) { bestD = d; best = e; }
     }
+    if (best) return best;
+    // nothing left to fight: a standing bridge is fair game too
+    for (const b of state.bridges) {
+      const d = Math.abs(angDiff(fromAngle, b.angle));
+      if (d < bestD) { bestD = d; best = b; }
+    }
     return best;
   }
 
@@ -619,6 +638,8 @@
   }
 
   function spawnEnemy() {
+    const builder = state.buildersToSpawn > 0;
+    if (builder) state.buildersToSpawn--;
     state.enemies.push({
       angle: Math.random() * Math.PI * 2,
       r: SPAWN_R,
@@ -630,7 +651,9 @@
       hopping: false,              // rare short jump-for-joy, not a constant bob
       hopT: 0,
       fleeing: false,              // spooked, walking off the map for good — no gold on exit
-      state: 'approach', // approach | attackBase | jumping | onTop
+      builder,                     // stops at the moat to lay a bridge instead of wading through
+      buildTimer: 0,
+      state: 'approach', // approach | attackBase | jumping | onTop | building
       timer: 0,
       jumpFrom: 0,
       jumpT: 0,
@@ -647,6 +670,13 @@
     state.fightBanner = FIGHT_BANNER_DUR;
     state.spawnTimer = FIGHT_BANNER_SPAWN_DELAY;
     state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
+
+    // last wave got slowed by the moat: a couple of this wave's spawns
+    // will stop and lay a crossing instead of just wading through
+    if (state.moatSlowedThisWave && state.moatLevel > 0 && state.bridges.length < BRIDGE_MAX_COUNT) {
+      state.buildersToSpawn = BRIDGE_BUILDERS_PER_WAVE;
+    }
+    state.moatSlowedThisWave = false;
   }
 
   // manual early call: stacks a fresh wave's worth of spawns on top of
@@ -828,6 +858,13 @@
   // steer an approaching enemy around any bush it would otherwise walk into —
   // a flat circle-vs-circle push in the (x,z) plane, same trick as any
   // top-down game's unit separation; the "3D" is only in how it's drawn
+  function bridgeCovers(angle) {
+    for (const b of state.bridges) {
+      if (Math.abs(angDiff(angle, b.angle)) < BRIDGE_ANGULAR_WIDTH) return true;
+    }
+    return false;
+  }
+
   function avoidBushes(e) {
     if (state.gardenLevel <= 0) return; // nothing planted yet, nothing to dodge
     const flooded = Math.min(BUSHES.length, state.moatLevel * FLOODED_PER_TIER);
@@ -1237,6 +1274,8 @@
               goldNum.textContent = state.gold;
               spawnBurst(sortieTarget.r * Math.cos(sortieTarget.angle), 0,
                 sortieTarget.r * Math.sin(sortieTarget.angle), 'sparkle');
+            } else if (sortieTarget.isBridge) {
+              state.bridges = state.bridges.filter(b => b !== sortieTarget);
             } else {
               killEnemy(sortieTarget);
             }
@@ -1446,10 +1485,19 @@
         // straight line — skipped while fleeing (that one walks straight out)
         if (!e.fleeing) e.angle += Math.sin(e.wt * 0.4 + e.wanderSeed) * 0.175 * dt;
 
-        if (state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r) {
+        const inMoat = state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r;
+        const bridged = inMoat && bridgeCovers(e.angle);
+        if (inMoat && !bridged) {
+          if (e.builder && e.r > BASE_R) {
+            // stops right here and lays a crossing instead of wading in
+            e.state = 'building';
+            e.buildTimer = BRIDGE_BUILD_TIME;
+            continue;
+          }
           // deeper water (higher level) slows more, and from level 3 the
           // water itself is deep/dark enough to chip away a little health
           // on anything that lingers in it
+          state.moatSlowedThisWave = true;
           speedMul *= Math.max(0.15, 0.55 - 0.1 * (state.moatLevel - 1));
           if (state.moatLevel >= 3) {
             e.hp -= 0.15 * dt;
@@ -1462,6 +1510,15 @@
         // player didn't kill it, it just lost its nerve)
         if (e.fleeing && e.r >= SPAWN_R - 1) { e.dead = true; continue; }
         if (e.r <= BASE_R) { e.r = BASE_R; e.state = 'attackBase'; e.timer = 1.2; }
+      } else if (e.state === 'building') {
+        e.buildTimer -= dt;
+        if (e.buildTimer <= 0) {
+          if (state.bridges.length < BRIDGE_MAX_COUNT && !bridgeCovers(e.angle)) {
+            const midR = (BASE_R + MOAT_TIERS[state.moatLevel - 1].r) / 2;
+            state.bridges.push({ angle: e.angle, r: midR, hp: BRIDGE_HP, maxHp: BRIDGE_HP, isBridge: true });
+          }
+          e.state = 'approach'; // done — carries on in same as any other approach
+        }
       } else if (e.state === 'attackBase') {
         e.timer -= dt;
         if (e.timer <= 0) {
@@ -1740,7 +1797,12 @@
         for (const wa of WINDOW_ANGLES) {
           if (Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
             const wp = project(radius * 0.99 * Math.cos(wa), windowY, radius * 0.99 * Math.sin(wa), rot);
-            const ww = 6 * scale, wh = 14 * scale;
+            // foreshortening: a flat arch drawn at constant width read as a
+            // sticker glued to the camera rather than a feature embedded in
+            // a turning cylindrical wall — compressing its width as it
+            // turns away from facing the camera sells the rotation
+            const wf = Math.max(0.15, Math.cos(wa - rot));
+            const ww = 6 * scale * wf, wh = 14 * scale;
             ctx.fillStyle = '#1c1109';
             archPath(wp.x, wp.y, ww, wh);
             ctx.fill();
@@ -1751,7 +1813,8 @@
       }
       if (doorHere && facing && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
         const dp = project(radius * 0.99 * Math.cos(DOOR_ANGLE), 12, radius * 0.99 * Math.sin(DOOR_ANGLE), rot);
-        const dw = 12 * scale, dh = 22 * scale;
+        const df = Math.max(0.15, Math.cos(DOOR_ANGLE - rot));
+        const dw = 12 * scale * df, dh = 22 * scale;
         ctx.fillStyle = '#160e08';
         archPath(dp.x, dp.y, dw, dh);
         ctx.fill();
@@ -1970,6 +2033,36 @@
     ctx.fillRect(pos.x - bw / 2, pos.y - rad - 12, bw * (p.hp / p.maxHp), 4);
   }
 
+  function drawBridge(b, rot) {
+    if (state.moatLevel <= 0) return;
+    const innerR = BASE_R, outerR = MOAT_TIERS[state.moatLevel - 1].r;
+    const hw = BRIDGE_ANGULAR_WIDTH * 0.7;
+    const pts = [
+      [innerR * Math.cos(b.angle - hw), innerR * Math.sin(b.angle - hw)],
+      [innerR * Math.cos(b.angle + hw), innerR * Math.sin(b.angle + hw)],
+      [outerR * Math.cos(b.angle + hw), outerR * Math.sin(b.angle + hw)],
+      [outerR * Math.cos(b.angle - hw), outerR * Math.sin(b.angle - hw)]
+    ].map(([x, z]) => project(x, 1, z, rot));
+    ctx.fillStyle = '#8a6a42';
+    buildQuad(pts);
+    ctx.strokeStyle = '#5c4526';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.stroke();
+
+    if (b.hp < b.maxHp) {
+      const mid = project((innerR + outerR) / 2 * Math.cos(b.angle), 10, (innerR + outerR) / 2 * Math.sin(b.angle), rot);
+      const bw = 22;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(mid.x - bw / 2, mid.y - 10, bw, 3);
+      ctx.fillStyle = '#c9a24a';
+      ctx.fillRect(mid.x - bw / 2, mid.y - 10, bw * (b.hp / b.maxHp), 3);
+    }
+  }
+
   function drawSiegeEngine(s, rot) {
     // several stalled attackers combine into one of these; the shield tier
     // is drawn with a glowing ring (immune to ranged fire — needs a sortie),
@@ -2105,6 +2198,8 @@
     const nearBushes = liveBushes.filter(b => Math.cos(b.angle - rot) >= 0);
     const farSiege = state.siegeEngines.filter(s => Math.cos(s.angle - rot) < 0);
     const nearSiege = state.siegeEngines.filter(s => Math.cos(s.angle - rot) >= 0);
+    const farBridges = state.bridges.filter(b => Math.cos(b.angle - rot) < 0);
+    const nearBridges = state.bridges.filter(b => Math.cos(b.angle - rot) >= 0);
 
     // she's on the platform for the first half of the trip (elevated,
     // grouped with player/turrets below) and out in the garden for the
@@ -2125,6 +2220,7 @@
     for (const b of farBushes) drawBush(b, rot);
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
+    for (const br of farBridges) drawBridge(br, rot);
     if (princessFar) drawPrincess(rot);
     if (playerFar) drawPlayer(rot);
 
@@ -2133,6 +2229,7 @@
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
+    for (const br of nearBridges) drawBridge(br, rot);
     if (princessNear) drawPrincess(rot);
     if (playerNear) drawPlayer(rot);
 
