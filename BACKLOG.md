@@ -195,12 +195,13 @@ Rassemblé de plusieurs remarques successives sur la princesse :
   donnée : le "système de mémoire/stratégie" d'un des autres jeux du
   portfolio (à retrouver/comparer le principe le moment venu).
 
-## Roi et Reine : entrée/sortie par la porte uniquement
+## Roi et Reine : entrée/sortie par la porte uniquement → fait en v0.27
 
-Aujourd'hui le seigneur (et la future princesse au sol) se téléportent
-plus ou moins à leur position cible. Voulu : ils descendent/montent
-toujours par un chemin fixe au centre de la tour, et ne sortent/entrent
-dans le monde extérieur que par la porte — jamais à travers le mur.
+Le seigneur passe désormais toujours par DOOR_ANGLE pendant la
+transition haut/bas, quelle que soit sa vraie destination, avant de la
+reprendre une fois effectivement de l'autre côté. La princesse (déjà
+gérée séparément depuis v0.25) faisait déjà de même pour sa propre
+transition.
 
 ## Câlin roi/reine : régénération rapide à deux → fait en v0.23
 
@@ -211,13 +212,12 @@ d'eux. Au relâchement, léger temps de rémanence puis reprise de la file
 de priorité normale (retour en haut, ou sortie si ce bouton est
 maintenu en même temps).
 
-## Roi livré à lui-même : errer, pas revenir à la porte
+## Roi livré à lui-même : errer, pas revenir à la porte → fait en v0.27
 
-Si le seigneur est sorti (Sortie) et qu'il n'y a rien à attaquer, le
-comportement actuel (retour automatique pile devant la porte) n'est pas
-satisfaisant. Il devrait pouvoir se déplacer librement dans le jardin,
-voire "nager" dans les douves (éventuellement un moyen de régénérer un
-peu, à l'étude) plutôt que revenir toujours au même endroit fixe.
+Erre maintenant sur le terrain (angle et rayon aléatoires, re-tirés
+toutes les quelques secondes) au lieu de rester planté devant la porte.
+**Pas encore fait** : un éventuel bonus de régénération en "nageant"
+dans les douves — idée à l'étude, pas construite.
 
 ## Ennemis : apparition et portée de tir → fait en v0.26
 
