@@ -226,15 +226,14 @@ Rayon d'apparition calculé dynamiquement selon la forme de l'écran
 tir vise n'importe quelle cible réellement visible à l'écran plutôt
 qu'une portée fixe.
 
-## Pont de fortune sur les douves
+## Pont de fortune sur les douves → fait en v0.28
 
 Une vague qui se fait ralentir dans l'eau envoie quelques soldats (pas
 tous) poser un petit pont/planche (rectangle, largeur = leur diamètre,
 longueur un peu plus que la largeur des douves) — ça leur prend un
 instant à poser, et une fois posé toute vague suivante peut traverser
-sans ralentir. Détruisible (proposé : 2-3 coups d'épée, ~10x la
-résistance d'un soldat) — s'il n'est pas détruit, les vagues suivantes
-continuent de s'en servir.
+sans ralentir. Détruisible (via sortie) — s'il n'est pas détruit, les
+vagues suivantes continuent de s'en servir.
 
 ## Douves décalées du jardin → fait en v0.25
 
@@ -373,3 +372,38 @@ procédurale côté décor — PAS le level design/gameplay lui-même, juste
 des touches visuelles. Exemples évoqués : le jardin ou l'eau autour du
 donjon qui fonce progressivement, ou l'ajout de buissons au fil du jeu.
 Idée brute, à retravailler plus tard.
+
+## Musique de fond → fait en v0.29
+
+Ajouter une musique de fond en boucle, avec un bouton pour la couper dans
+le menu. Fichier audio fourni par l'utilisateur, converti en mono 22kHz
+pour rester léger dans le dépôt (music.wav, ~2 Mo). Démarre sur le même
+premier geste que le déblocage audio existant ; préférence ON/OFF retenue
+en localStorage.
+
+## Ennemis visibles dès leur apparition → fait en v0.29
+
+Signalé comme bug/manque d'intérêt : avec le rayon d'apparition "pire cas"
+introduit en v0.26 (hors écran quel que soit l'angle), les ennemis
+marchaient plusieurs secondes hors champ avant d'apparaître réellement à
+l'écran — y compris le tout premier ennemi de la vague 1. Corrigé en
+calculant, par ennemi, le rayon minimal qui le garde hors écran POUR SON
+ANGLE précis (au lieu du pire cas sur tous les angles), plus un boost de
+vitesse tant qu'il n'est pas effectivement visible — l'apparition hors
+écran reste garantie, mais la marche invisible devient minime.
+
+## Sortie du seigneur trop rapide (téléportation) → fait en v0.29
+
+Signalé : en sortie vers un engin de siège ou un pont lointain, le
+déplacement radial (ease exponentiel, pensé pour les petits ajustements
+comme réparer une tourelle) couvrait presque toute la distance en une ou
+deux frames — lu comme une téléportation plutôt qu'une marche. Corrigé en
+plafonnant ce déplacement à une vraie vitesse de marche (PLAYER_WALK_SPEED).
+
+## Bouton "Remonter" princesse parfois sans effet → fait en v0.29
+
+Signalé : après avoir fait descendre la princesse, le bouton pour la faire
+remonter ne répondait parfois plus. Cause : sur un petit bouton mobile, un
+tap pouvait déclencher pointerleave (le doigt dérive hors des limites du
+bouton) PUIS pointerup — deux bascules de la cible qui s'annulaient.
+Corrigé avec la capture de pointeur + une garde anti-double-déclenchement.
