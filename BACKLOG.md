@@ -43,6 +43,12 @@ donjon, avec du gameplay propre à cet espace. Pas encore conçu — juste
 noté pour ne pas perdre l'idée. Référence visuelle vue en conversation,
 pas encore enregistrée dans le repo.
 
+Précision d'ambiance donnée ensuite : à l'intérieur, le seigneur vient se
+reposer près d'un feu — si la princesse le suit, ils jouent aux échecs.
+Un mode "cosy" contemplatif, pendant que la bataille continue dehors.
+Belle opposition tonale (repos à l'intérieur / urgence dehors) à garder
+si cette vue voit le jour.
+
 ## Huile bouillante
 
 Depuis l'ajout de la plateforme (v0.5) qui dépasse le donjon, il y a de la
@@ -84,15 +90,57 @@ Le zigzag latéral ajouté en v0.17 est jugé trop marqué — le réduire d'env
 50% (ennemis qui avancent visiblement plus droit vers le donjon qu'aujourd'hui,
 sans revenir à une ligne parfaitement radiale).
 
-## Bouclier de siège : très résistant plutôt qu'invincible
+## Bouclier de siège : très résistant → fait en v0.22 (première passe, à revoir)
 
-Actuellement le palier "bouclier" (2 ennemis groupés) ignore complètement
-les tirs à distance — seule la sortie peut le toucher. Retour d'expérience :
-si on ne sort pas, la partie se bloque, ce n'est pas satisfaisant. Piste :
-au lieu d'une immunité totale, le rendre juste très résistant aux tirs à
-distance (3 à 5x plus de coups qu'un ennemi normal) plutôt qu'invincible —
-la sortie reste plus rapide/efficace, mais rester sur les remparts doit
-rester une option viable, juste plus lente.
+Première passe déjà en ligne (v0.22) : le palier "bouclier" n'est plus
+invincible aux tirs à distance, juste très résistant (rangedResist 0.2,
+~5x plus de coups). Fonctionnel, mais la conversation qui a suivi a
+précisé une conception plus riche que ça ne couvre pas encore — voir
+ci-dessous. À revoir/étendre, pas à refaire de zéro.
+
+## Engins de siège : équipage vivant plutôt que fusion abstraite
+
+Précision importante sur le fonctionnement voulu, différente de
+l'implémentation actuelle (v0.13/v0.22 : les ennemis regroupés
+disparaissent, remplacés par un objet "engin de siège" abstrait unique) :
+
+- Les soldats qui décident de construire un engin (bouclier, trébuchet…)
+  **ne disparaissent pas et ne fusionnent pas** avec la machine — ce sont
+  toujours des individus, visibles, chacun avec sa propre vie, positionnés
+  autour de l'engin selon son rôle (derrière pour un bouclier — protégés
+  des tirs à distance tant qu'ils y sont ; tout autour pour faire
+  manœuvrer un trébuchet, "~12 personnes" selon la référence donnée).
+- Ils restent **tuables individuellement au corps à corps** (sortie) sans
+  devoir "casser" une carapace commune d'abord.
+- Si des soldats de l'équipage meurent, **d'autres soldats ailleurs sur le
+  champ peuvent venir prendre leur place** — construire l'engin s'il n'est
+  pas fini, ou l'opérer une fois construit. La machine elle-même n'est
+  pas liée à des individus précis.
+- Capacité proposée pour le bouclier : 2 fondateurs + jusqu'à 1
+  supplémentaire (3 au total) qui peuvent venir s'abriter derrière.
+- **Portée à distance** : le bouclier reste attaquable à distance (pas
+  d'immunité), juste beaucoup plus résistant — cohérent avec le
+  rangedResist déjà en place. Question encore ouverte, explicitement pas
+  tranchée par le joueur pendant la discussion : faut-il aussi permettre
+  aux soldats de **réparer l'engin en continu** pendant qu'il encaisse des
+  tirs (à un rythme dépendant du nombre de soldats dessus) ? Si oui, ça
+  change l'équilibre : avec peu de tourelles, tirer à distance sur un
+  bouclier entretenu pourrait devenir inutile, sauf à en avoir beaucoup.
+  Complexité reconnue par le joueur lui-même ("il faut faire un choix...
+  on est dans une situation d'équilibre") — **pas encore tranché**,
+  vraisemblablement pas la même règle indéfiniment ; prévoir plusieurs
+  itérations d'équilibrage une fois une première version jouable en place
+  plutôt que de viser le bon réglage du premier coup.
+- Se pose aussi la question de **cibler la machine directement vs cibler
+  l'équipage qui la construit/répare** — un vrai choix tactique à
+  concevoir, pas juste une case à cocher.
+
+Chantier plus lourd qu'une simple valeur de résistance : implique de
+retravailler le modèle de données (état.siegeEngines redevient un
+regroupement de soldats individuels + un objet "machine" séparé plutôt
+qu'un seul objet fusionné), le rendu (plusieurs soldats + la machine,
+pas une seule pastille), et l'IA (rejoindre/quitter un équipage). À
+concevoir plus en détail avant de coder.
 
 ## Priorité de ciblage à la sortie
 
