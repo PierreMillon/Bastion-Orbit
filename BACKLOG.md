@@ -363,7 +363,7 @@ large sur l'éclairage. Ne rien changer ici, juste s'en souvenir.
   étendre ce langage visuel aux autres éléments (ennemis, tourelles...) le
   jour où on retravaille le look général.
 
-## Mode "Test Perspective" dans le menu
+## Mode "Test Perspective" dans le menu → intégré au jeu en v0.39
 
 Demande d'origine, pas encore construite dans le jeu (toute l'exploration
 faite jusqu'ici est restée dans une maquette à part, en dehors du dépôt —
@@ -386,14 +386,23 @@ Pas encore implémenté dans `index.html` — nécessiterait de dupliquer/
 adapter `project()` avec une vraie caméra (comme dans la maquette) et un
 bouton de bascule, sans casser l'ancien rendu axonométrique par défaut.
 
-**Statut** : approuvé pour intégration en session ("Intégrons-le aussi",
-suite au succès du mode phosphore) mais **pas fait** — repoussé faute de
-temps dans cette session, et parce que c'est d'une autre nature que le
-phosphore : pas juste un style de rendu (wrapPhosphor s'est branché sans
-toucher project()), mais un changement du moteur de projection lui-même,
-utilisé par TOUT le placement à l'écran (UI, cibles, clics...). Chantier
-à part entière, à reprendre spécifiquement plutôt qu'en à-côté d'autre
-chose.
+**Fait en v0.39** : bouton "Caméra" dans le menu (Axonométrique ↔
+Perspective), persisté. `project()` lui-même bascule entre les deux
+formules selon le mode — un seul point de bascule, donc les dizaines de
+fonctions de dessin (et tout le placement à l'écran : UI, cibles, clics)
+suivent sans avoir été modifiées individuellement. Caméra reculée/élevée,
+inclinée vers le bas, division perspective classique ; validée
+numériquement avant d'être branchée (profondeur toujours positive dans
+la plage de jeu, centrage horizontal correct, point de fuite hors-écran
+en haut comme sur le comparateur). Testé en jeu réel dans les deux styles
+Couleur et Phosphore.
+
+**Pas fait** : la logique de jeu elle-même (rayon d'apparition hors
+écran, ciblage à l'écran) reste pensée pour l'axonométrie — fonctionne
+en pratique en perspective (testé, pas d'erreur), mais n'a pas été
+ré-étudiée pour en tirer parti (ex. voir plus loin dans le même cadre,
+comme évoqué ci-dessus). Reste un habillage visuel pour l'instant, pas
+un vrai second mode de jeu.
 
 ## Direction graphique "fil de fer" (fond noir, très début informatique) → intégré au jeu en v0.32, activé par défaut
 
