@@ -152,13 +152,20 @@ besoin, mais "le plus proche" comme comportement par défaut.
 
 ## Princesse : vivante et utile en haut, absente en bas
 
-Fait en v0.23, partiellement : vraie jauge de vie + barre affichée
-au-dessus de sa tête, vulnérable en haut aussi (pas seulement en bas),
-régénération de fin de vague (moitié du manquant, comme le seigneur).
-**Pas encore fait** : déplacement vivant en haut/en bas (elle reste
-statique aux deux points fixes actuels), aide à la réparation, affichage
-du gain d'or au-dessus de sa tête, ciblage prioritaire/decoy. Détail
-d'origine conservé ci-dessous pour ces parties restantes.
+Fait en v0.23 : vraie jauge de vie + barre affichée au-dessus de sa tête,
+vulnérable en haut aussi (pas seulement en bas), régénération de fin de
+vague (moitié du manquant, comme le seigneur).
+
+Fait en v0.24 : déplacement vivant **en haut seulement** (erre sur toute
+la plateforme, va se poster près du seigneur dès 5 ennemis ou plus à
+proximité), réparation à deux 3x plus rapide (uniquement si elle est en
+haut), ciblage prioritaire absolu (decoy) sur le seigneur et les
+tourelles quand elle est menacée.
+
+**Pas encore fait** : déplacement vivant **en bas dans le jardin** (elle
+reste au point fixe actuel une fois descendue), affichage du gain d'or
+au-dessus de sa tête. Détail d'origine conservé ci-dessous pour ces
+parties restantes.
 
 Rassemblé de plusieurs remarques successives sur la princesse :
 - **En haut du donjon** (comportement par défaut) : elle ne doit pas être
