@@ -202,10 +202,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.26</button>
+  <button id="versionBtn">v0.27</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.27</b> — seigneur erre sorti sans cible, entrée/sortie forcée par la porte, câlin vise la vraie position</div>
   <div><b>v0.26</b> — apparition toujours hors écran, tir sans limite si visible, effets de mort</div>
   <div><b>v0.25</b> — princesse dans le jardin, tourelles décalées, douves décalées, ligne plus droite, sortie sur cible de repli</div>
   <div><b>v0.24</b> — princesse vivante en haut (déplacement, aide réparation, decoy)</div>
@@ -545,7 +546,10 @@
       atkTimer: 0,
       sortieTimer: SORTIE_TICK,
       repairTimer: REPAIR_TICK,
-      repairMaxedPlayed: false
+      repairMaxedPlayed: false,
+      // sortied out with nothing to fight: wanders the grounds instead of
+      // parking at a fixed spot right outside the door
+      wanderTimer: 0, wanderAngle: 0, wanderR: BASE_R
     }
   };
 
@@ -1135,11 +1139,12 @@
 
     let targetAngle = state.theta, targetR = PLAYER_R, targetGround = 0;
     if (calinActive) {
-      // walk to wherever she is and stay there hugging — takes priority
+      // walk to wherever she actually is (she can wander the garden now,
+      // not just sit at the door) and stay there hugging — takes priority
       // over everything else while actually held
       p.behavior = 'calin';
-      targetAngle = DOOR_ANGLE;
-      targetR = PRINCESS_DOWN_R;
+      targetAngle = state.princess.angle;
+      targetR = state.princess.r;
       targetGround = 1;
     } else if (state.repairHeld) {
       p.behavior = 'repairCastle';
@@ -1153,9 +1158,18 @@
       targetR = sortieTarget.r;
       targetGround = 1;
     } else if (state.sortieHeld) {
-      // held with nothing to sortie against: still steps outside, just idles
+      // held with nothing to sortie against: wanders the grounds instead
+      // of parking at a fixed spot right outside the door — the garden,
+      // the moat, wherever
       p.behavior = 'sortie';
-      targetR = BASE_R;
+      p.wanderTimer -= dt;
+      if (p.wanderTimer <= 0) {
+        p.wanderAngle = Math.random() * Math.PI * 2;
+        p.wanderR = BASE_R + 20 + Math.random() * 120;
+        p.wanderTimer = 2.5 + Math.random() * 3;
+      }
+      targetAngle = p.wanderAngle;
+      targetR = p.wanderR;
       targetGround = 1;
     } else if (threat) {
       p.behavior = 'combat';
@@ -1168,6 +1182,14 @@
     } else {
       p.behavior = 'combat';
     }
+
+    // he only ever crosses in/out through the door — while still mostly
+    // up but headed down (or still mostly down but headed up), the real
+    // destination angle (a siege engine, a wander spot, wherever) is put
+    // on hold in favour of the door, which then hands off to it once
+    // he's actually through
+    if (targetGround === 1 && p.groundPos < 0.5) targetAngle = DOOR_ANGLE;
+    else if (targetGround === 0 && p.groundPos > 0.5) targetAngle = DOOR_ANGLE;
 
     const maxStep = ANGLE_SPEED * dt;
     const d = angDiff(p.angle, targetAngle);
