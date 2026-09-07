@@ -96,7 +96,7 @@ invincible aux tirs à distance, juste très résistant (rangedResist 0.2,
 précisé une conception plus riche que ça ne couvre pas encore — voir
 ci-dessous. À revoir/étendre, pas à refaire de zéro.
 
-## Engins de siège : équipage vivant plutôt que fusion abstraite
+## Engins de siège : équipage vivant plutôt que fusion abstraite → fait en v0.31 (première passe), pas encore fait : rendu multi-soldats
 
 Précision importante sur le fonctionnement voulu, différente de
 l'implémentation actuelle (v0.13/v0.22 : les ennemis regroupés
@@ -139,6 +139,27 @@ regroupement de soldats individuels + un objet "machine" séparé plutôt
 qu'un seul objet fusionné), le rendu (plusieurs soldats + la machine,
 pas une seule pastille), et l'IA (rejoindre/quitter un équipage). À
 concevoir plus en détail avant de coder.
+
+**Fait en v0.31** (décision prise en session : réparation continue, oui) :
+- Chaque engin garde un compte `crew` (pas des soldats individuellement
+  rendus) plafonné à fondateurs+1 — la formation n'absorbe que jusqu'au
+  plafond, les traînards en trop restent des ennemis normaux au lieu de
+  disparaître pour rien.
+- Un ennemi stalled près d'un engin déjà formé peut le rejoindre plus
+  tard (renfort jusqu'au plafond, sans changer de palier).
+- Tant qu'il reste de l'équipage, l'engin régénère son hp en continu — le
+  tir à distance est plafonné à 1 hp minimum sur un engin (jamais achevé
+  par ce biais), la sortie devient la seule vraie option, comme décidé.
+- La sortie tue l'équipage un par un (plus un pool de hp partagé) ; la
+  machine tombe à 0 équipage.
+- Rendu : une rangée de pastilles au-dessus de la barre de vie montre
+  l'équipage restant / le plafond — **toujours une seule pastille pour la
+  machine elle-même**, pas plusieurs soldats individuellement dessinés
+  autour (le "chantier plus lourd" du rendu multi-soldats, ci-dessus,
+  reste à faire si voulu).
+- **Pas encore fait** : cibler l'équipage vs la machine comme deux choses
+  distinctes à l'écran (actuellement un seul objet cliquable/ciblable) ;
+  ré-équilibrage ultérieur si le tir à distance s'avère *trop* inutile.
 
 ## Priorité de ciblage à la sortie → fait en v0.25
 
@@ -334,7 +355,7 @@ possible).
   "château"/"donjon" = la structure principale qui grandit/rétrécit.
   Vocabulaire à garder cohérent dans le code et les futures discussions.
 
-## Progression par formule plutôt que par niveaux codés à la main
+## Progression par formule plutôt que par niveaux codés à la main → fait en v0.31 pour le jardin
 
 Idée venue d'une discussion sur Forge Line (le jeu-frère du portfolio),
 à appliquer ici aussi — résumé pour ne pas avoir à refaire la discussion
@@ -365,6 +386,18 @@ directement le palier 300 sans qu'on ait eu à l'écrire une par une.
 Pas encore codé ni côté Forge Line ni ici — encore au stade discussion
 au moment de cette note (étape 1 : se comprendre ; étape 2 : concevoir ;
 étape 3 : coder — demandé explicitement dans cet ordre côté Forge Line).
+
+**Fait en v0.31**, pour le jardin uniquement : géométrique choisi (rapport
+coût/revenu stable), gardenCost(n) = 15 × 1,35^(n-1), gardenRate(n) =
+1 × 1,35^(n-1) — même taux des deux côtés, sans plafond de palier. Taux
+35%/palier plutôt que les 2,7% de Forge Line : l'économie de ce jeu-ci
+tourne sur des dizaines/centaines d'or, pas sur un million — un taux plus
+doux aurait rendu les premiers paliers quasi gratuits par rapport aux
+anciens (15/40/100/250). **Pas fait** : les douves restent à 4 paliers
+fixes codés en dur — leur géométrie (rayon d'eau, buissons inondés,
+BRIDGE_MAX_COUNT) est intrinsèquement finie, pas un bon candidat pour une
+formule sans plafond. Les tourelles et les autres "améliorations du
+joueur" évoquées dans le principe général n'ont pas été touchées.
 
 ## Décor procédural (jardin/eau, buissons)
 
