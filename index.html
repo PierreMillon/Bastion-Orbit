@@ -336,10 +336,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.36</button>
+  <button id="versionBtn">v0.37</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.37</b> — deux routes serpentantes : ennemis plus rapides mais prévisibles dessus, ou lents en tout-terrain pour encercler</div>
   <div><b>v0.36</b> — corrige la forme du donjon en phosphore, fausse pub à la défaite, bouton Neige ON/OFF, seigneur moins lent</div>
   <div><b>v0.35</b> — échelle (montée garantie dès vague 4), huile bouillante (bouton, nécessite une tourelle)</div>
   <div><b>v0.34</b> — CRITIQUE : le jeu ne démarrait plus du tout (écran vide, boutons morts) depuis v0.30</div>
@@ -751,6 +752,29 @@
 
   // the door (and the princess who uses it) sit at this fixed world angle
   const DOOR_ANGLE = 0;
+
+  // two roads winding in from far out and converging on the wall — a real
+  // tactical choice for attackers (demandé en session) : take a road and
+  // arrive faster but along a predictable line the defense can anticipate,
+  // or go cross-country at normal speed to spread out and come from
+  // several angles at once (encercler). Fixed world angles, well clear of
+  // the door itself so they don't visually compete with it.
+  const ROAD_ANGLES = [DOOR_ANGLE + 2.1, DOOR_ANGLE - 2.3];
+  const ROAD_MAX_R = 420;             // how far out the drawn road reaches
+  const ROAD_WIDTH = 0.11;            // angular half-width of the lane
+  const ROAD_WIND_AMP = 0.55;         // how far the road snakes off its base angle at its widest
+  const ROAD_WIND_FREQ = 0.011;       // how tightly it winds per world unit of radius
+  const ROAD_CHANCE = 0.4;            // fraction of new spawns that pick a road
+  const ROAD_SPEED_MUL = 1.45;        // speed bonus while actually on the road
+  const ROAD_SNAP_RATE = 2.2;         // how fast a road-walker's angle eases onto the lane
+  // the wind straightens out on final approach — a road has to actually
+  // meet the wall at one clean point, not arrive wherever its last wiggle
+  // left it
+  function roadAngleAt(idx, r) {
+    const base = ROAD_ANGLES[idx];
+    const t = Math.max(0, Math.min(1, (r - BASE_R) / (ROAD_MAX_R - BASE_R)));
+    return base + Math.sin(r * ROAD_WIND_FREQ + idx * 7) * ROAD_WIND_AMP * t;
+  }
   const PRINCESS_EASE_RATE = 3.2;
   const PRINCESS_ATK_BONUS = 1.015;      // +1.5% player attack while she's up, raising morale
   const PRINCESS_GOLD_BONUS = 1.5;       // ×1.5 garden income while she's down relaxing (needs the garden bonus already running)
@@ -1024,7 +1048,14 @@
     if (builder) state.buildersToSpawn--;
     const ladder = !builder && state.laddersToSpawn > 0; // never both at once
     if (ladder) state.laddersToSpawn--;
-    const angle = Math.random() * Math.PI * 2;
+    // roads are for plain attackers only — a builder still needs to reach
+    // the moat band on its own line, a ladder-carrier its own wall spot
+    const onRoad = !builder && !ladder && Math.random() < ROAD_CHANCE;
+    const roadIdx = onRoad ? (Math.random() < 0.5 ? 0 : 1) : -1;
+    // spawning right where its road already is, rather than a fully random
+    // angle then snapping over, reads as "arriving via that road" from the
+    // first frame it's visible instead of a late course correction
+    const angle = onRoad ? roadAngleAt(roadIdx, ROAD_MAX_R) + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2;
     state.enemies.push({
       angle,
       r: tightSpawnR(angle),
@@ -1039,6 +1070,7 @@
       builder,                     // stops at the moat to lay a bridge instead of wading through
       buildTimer: 0,
       ladder,                      // skips the wall entirely — guaranteed climb onto the platform, no rangedResist/hp trade needed like the tour de siège
+      roadIdx,                     // -1 = cross-country (own wander, normal speed); 0/1 = hugs that road, faster, no lateral sway
       state: 'approach', // approach | attackBase | jumping | onTop | building
       timer: 0,
       jumpFrom: 0,
@@ -1978,9 +2010,19 @@
         else if (e.mood === 'retreat') speedMul = -0.5;
         else speedMul = 1 + Math.min(nearby, 4) * 0.12;
 
-        // a gentle side-to-side sway so the approach doesn't read as a laser-
-        // straight line — skipped while fleeing (that one walks straight out)
-        if (!e.fleeing) e.angle += Math.sin(e.wt * 0.4 + e.wanderSeed) * 0.175 * dt;
+        if (e.roadIdx >= 0 && !e.fleeing) {
+          // hugs its road instead of wandering laterally — arrives faster,
+          // but along a fixed, predictable line the defense can see coming
+          const roadTarget = roadAngleAt(e.roadIdx, e.r);
+          const rd = angDiff(e.angle, roadTarget);
+          const rStep = ROAD_SNAP_RATE * dt;
+          e.angle += Math.max(-rStep, Math.min(rStep, rd));
+          if (Math.abs(rd) < ROAD_WIDTH * 1.5) speedMul *= ROAD_SPEED_MUL;
+        } else if (!e.fleeing) {
+          // a gentle side-to-side sway so the approach doesn't read as a
+          // laser-straight line — skipped while fleeing (walks straight out)
+          e.angle += Math.sin(e.wt * 0.4 + e.wanderSeed) * 0.175 * dt;
+        }
 
         const inMoat = state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r;
         const bridged = inMoat && bridgeCovers(e.angle);
@@ -2662,6 +2704,32 @@
     ctx.fillRect(pos.x - bw / 2, pos.y - rad - 12, bw * (p.hp / p.maxHp), 4);
   }
 
+  // a road is drawn as a chain of short quads following roadAngleAt(), not
+  // one long shape — cheap, and each segment can be depth-sorted far/near
+  // against the donjon on its own, same as everything else at ground level
+  const ROAD_SEG_COUNT = 22;
+  function roadSegs(idx) {
+    const segs = [];
+    for (let i = 0; i < ROAD_SEG_COUNT; i++) {
+      const r0 = BASE_R + (ROAD_MAX_R - BASE_R) * (i / ROAD_SEG_COUNT);
+      const r1 = BASE_R + (ROAD_MAX_R - BASE_R) * ((i + 1) / ROAD_SEG_COUNT);
+      const a0 = roadAngleAt(idx, r0), a1 = roadAngleAt(idx, r1);
+      segs.push({ angle: (a0 + a1) / 2, r0, r1, a0, a1 });
+    }
+    return segs;
+  }
+  function drawRoadSeg(seg, rot) {
+    const hw = ROAD_WIDTH;
+    const pts = [
+      [seg.r0 * Math.cos(seg.a0 - hw), seg.r0 * Math.sin(seg.a0 - hw)],
+      [seg.r0 * Math.cos(seg.a0 + hw), seg.r0 * Math.sin(seg.a0 + hw)],
+      [seg.r1 * Math.cos(seg.a1 + hw), seg.r1 * Math.sin(seg.a1 + hw)],
+      [seg.r1 * Math.cos(seg.a1 - hw), seg.r1 * Math.sin(seg.a1 - hw)]
+    ].map(([x, z]) => project(x, 0.5, z, rot));
+    ctx.fillStyle = '#9c8360';
+    buildQuad(pts);
+  }
+
   function drawBridge(b, rot) {
     if (state.moatLevel <= 0) return;
     const innerR = BASE_R, outerR = MOAT_TIERS[state.moatLevel - 1].r;
@@ -2885,6 +2953,9 @@
     const nearSiege = state.siegeEngines.filter(s => Math.cos(s.angle - rot) >= 0);
     const farBridges = state.bridges.filter(b => Math.cos(b.angle - rot) < 0);
     const nearBridges = state.bridges.filter(b => Math.cos(b.angle - rot) >= 0);
+    const allRoadSegs = [0, 1].flatMap(roadSegs);
+    const farRoadSegs = allRoadSegs.filter(s => Math.cos(s.angle - rot) < 0);
+    const nearRoadSegs = allRoadSegs.filter(s => Math.cos(s.angle - rot) >= 0);
 
     // she's on the platform for the first half of the trip (elevated,
     // grouped with player/turrets below) and out in the garden for the
@@ -2902,6 +2973,7 @@
     const playerFar = playerGrounded && Math.cos(state.player.angle - rot) < 0;
     const playerNear = playerGrounded && Math.cos(state.player.angle - rot) >= 0;
 
+    for (const s of farRoadSegs) drawRoadSeg(s, rot);
     for (const b of farBushes) drawBush(b, rot);
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
@@ -2911,6 +2983,7 @@
 
     if (phosphorStyle === 'phosphore') drawCastleSilhouette(rot); else drawCastle(rot);
 
+    for (const s of nearRoadSegs) drawRoadSeg(s, rot);
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
