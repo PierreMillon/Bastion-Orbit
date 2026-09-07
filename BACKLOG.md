@@ -169,7 +169,7 @@ sans rien faire. La partie "ennemi en train de construire un engin, ou
 qui porte une échelle" reste à faire — dépend d'idées pas encore
 construites (équipage vivant, échelle portée).
 
-## Princesse : vivante et utile en haut, absente en bas
+## Princesse : vivante et utile en haut, absente en bas → tout fait (v0.23-v0.25)
 
 Fait en v0.23 : vraie jauge de vie + barre affichée au-dessus de sa tête,
 vulnérable en haut aussi (pas seulement en bas), régénération de fin de
@@ -181,10 +181,11 @@ proximité), réparation à deux 3x plus rapide (uniquement si elle est en
 haut), ciblage prioritaire absolu (decoy) sur le seigneur et les
 tourelles quand elle est menacée.
 
-**Pas encore fait** : déplacement vivant **en bas dans le jardin** (elle
-reste au point fixe actuel une fois descendue), affichage du gain d'or
-au-dessus de sa tête. Détail d'origine conservé ci-dessous pour ces
-parties restantes.
+Fait en v0.25 (rattrapé ici, pas marqué au moment du ship) : déplacement
+vivant **en bas dans le jardin** aussi — elle erre sur un petit patch
+autour de la porte au lieu de rester à un point fixe — et affichage du
+gain d'or au-dessus de sa tête quand elle est en bas. Détail d'origine
+conservé ci-dessous pour mémoire.
 
 Rassemblé de plusieurs remarques successives sur la princesse :
 - **En haut du donjon** (comportement par défaut) : elle ne doit pas être

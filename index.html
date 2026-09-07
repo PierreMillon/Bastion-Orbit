@@ -190,6 +190,38 @@
     font-size: 12px;
     opacity: 0.65;
   }
+
+  /* mode phosphore/filaire: le donjon lui-même passe en fil de fer (voir
+     wrapPhosphor() dans le script) — ici le chrome autour (barres, boutons,
+     menu, changelog) suit, tout en monochrome noir/vert (décidé en
+     session : pas de couleurs d'accent par bouton, cohérent avec la scène) */
+  body.phosphor { background: #04070a; }
+  body.phosphor #topbar,
+  body.phosphor #secondRow,
+  body.phosphor #bottombar,
+  body.phosphor #changelog { background: #071812; color: #8ffcc4; box-shadow: none; }
+  body.phosphor #menuBtn,
+  body.phosphor #versionBtn,
+  body.phosphor #fpsLine { color: #8ffcc4; }
+  body.phosphor #versionBtn { border-color: rgba(70,255,160,0.4); }
+  body.phosphor #changelog b { color: #46ffa0; }
+  body.phosphor #menu,
+  body.phosphor #overlay { background: rgba(4,10,8,0.94); color: #8ffcc4; }
+  body.phosphor #menu button.ghost { border-color: rgba(70,255,160,0.4); color: #8ffcc4; }
+  body.phosphor #bottomStack button,
+  body.phosphor #menu a, body.phosphor #overlay button, body.phosphor #menu button {
+    background: #0a1f16;
+    color: #8ffcc4;
+    border: 1px solid rgba(70,255,160,0.35);
+  }
+  body.phosphor #repairBtn.active,
+  body.phosphor #sortieBtn.active,
+  body.phosphor #princessBtn.active {
+    background: #163f2b;
+    border-color: #46ffa0;
+    color: #eafff2;
+  }
+  body.phosphor #bottomStack button:disabled { opacity: 0.3; }
 </style>
 </head>
 <body>
@@ -202,10 +234,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.31</button>
+  <button id="versionBtn">v0.32</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.32</b> — mode Style (Phosphore par défaut / Filaire pur / Couleur), donjon en silhouette vectorielle, chrome et boutons monochromes en phosphore</div>
   <div><b>v0.31</b> — équipage vivant des engins de siège (régén continue, sortie tue au corps), jardin en progression par formule (sans plafond)</div>
   <div><b>v0.30</b> — neige d'ambiance (3 plans de profondeur, vent latéral)</div>
   <div><b>v0.29</b> — musique de fond (bouton ON/OFF), spawn ennemis quasi à l'écran, sortie à vitesse de marche, bug bouton princesse</div>
@@ -248,6 +281,7 @@
   <a href="https://pierremillon.github.io/Forge-Line/">→ Forge Line</a>
   <a href="https://pierremillon.github.io/knight-wars/">→ Knight Wars</a>
   <button id="menuRestartBtn">Recommencer depuis le début</button>
+  <button id="styleBtn">Style : Phosphore</button>
   <button id="musicBtn">Musique : ON</button>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
@@ -262,7 +296,80 @@
 <script>
 (() => {
   const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+
+  // ---- mode phosphore: 'couleur' (rendu d'origine) / 'phosphore' (silhouette
+  // noire + contour) / 'filaire' (aucun remplissage, tous les traits) ----
+  // Cycle par défaut sur 'phosphore' — décidé en session. Le rendu du donjon
+  // lui-même (drawCastleSilhouette, plus bas) est spécifique au mode
+  // 'phosphore' ; tout le reste (ennemis, tourelles, princesse, engins de
+  // siège, ponts, particules, barres de vie...) passe par le même wrapper
+  // générique ci-dessous dans les deux modes phosphore/filaire — chaque
+  // fill() existant du jeu redevient un remplissage noir + contour vert
+  // ('phosphore') ou juste un contour sans remplissage ('filaire'), sans
+  // toucher à la cinquantaine de fonctions de dessin elles-mêmes.
+  const PHOSPHOR_LINE = '70, 255, 160'; // vert phosphore — teinte à confirmer (comparateur publié, pas encore vu)
+  const PHOSPHOR_BG = '#04070a';
+  let phosphorStyle = 'phosphore';
+  try {
+    const stored = localStorage.getItem('bo_phosphorStyle');
+    if (stored === 'couleur' || stored === 'phosphore' || stored === 'filaire') phosphorStyle = stored;
+  } catch (e) { /* ignore */ }
+
+  function wrapPhosphor(real) {
+    return new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'fill') {
+          return function (...args) {
+            if (phosphorStyle === 'couleur') return target.fill(...args);
+            const fs = target.fillStyle, ss = target.strokeStyle, lw = target.lineWidth;
+            if (phosphorStyle === 'phosphore') { target.fillStyle = PHOSPHOR_BG; target.fill(...args); }
+            target.strokeStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.lineWidth = Math.max(1, 1.2 * (scale || 1));
+            // stroke() only ever takes an optional Path2D — never a fill
+            // rule ('evenodd'/'nonzero'), which fill() does accept, so
+            // that argument (if present) is dropped rather than forwarded
+            const strokeArgs = args.filter(a => typeof a !== 'string');
+            target.stroke(...strokeArgs);
+            target.fillStyle = fs; target.strokeStyle = ss; target.lineWidth = lw;
+          };
+        }
+        if (prop === 'fillRect') {
+          return function (x, y, w, h) {
+            if (phosphorStyle === 'couleur') return target.fillRect(x, y, w, h);
+            const fs = target.fillStyle, ss = target.strokeStyle, lw = target.lineWidth;
+            if (phosphorStyle === 'phosphore') { target.fillStyle = PHOSPHOR_BG; target.fillRect(x, y, w, h); }
+            target.strokeStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.lineWidth = Math.max(1, 1.1 * (scale || 1));
+            target.strokeRect(x, y, w, h);
+            target.fillStyle = fs; target.strokeStyle = ss; target.lineWidth = lw;
+          };
+        }
+        if (prop === 'fillText') {
+          return function (...args) {
+            if (phosphorStyle === 'couleur') return target.fillText(...args);
+            const fs = target.fillStyle;
+            target.fillStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.fillText(...args);
+            target.fillStyle = fs;
+          };
+        }
+        if (prop === 'stroke') {
+          return function (...args) {
+            if (phosphorStyle === 'couleur') return target.stroke(...args);
+            const ss = target.strokeStyle;
+            target.strokeStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.stroke(...args);
+            target.strokeStyle = ss;
+          };
+        }
+        const val = target[prop];
+        return typeof val === 'function' ? val.bind(target) : val;
+      },
+      set(target, prop, value) { target[prop] = value; return true; }
+    });
+  }
+  const rawCtx = canvas.getContext('2d');
+  const ctx = wrapPhosphor(rawCtx);
   let W, H, cx, cy, scale, SPAWN_R;
   const SPAWN_R_BASE = 480; // the old flat radius — speed is scaled by SPAWN_R/this so a taller spawn distance doesn't change how long the walk actually takes
 
@@ -361,6 +468,23 @@
     try { localStorage.setItem('bo_musicOn', musicOn ? 'on' : 'off'); } catch (e) { /* ignore */ }
     updateMusicBtn();
     if (musicOn) tryPlayMusic(); else bgMusic.pause();
+  });
+
+  // ---- style : Couleur → Phosphore → Filaire → Couleur (phosphorStyle
+  // itself, and its persistence, is declared up near the canvas/ctx setup) --
+  const styleBtn = document.getElementById('styleBtn');
+  const STYLE_LABELS = { couleur: 'Couleur', phosphore: 'Phosphore', filaire: 'Filaire pur' };
+  const STYLE_NEXT = { couleur: 'phosphore', phosphore: 'filaire', filaire: 'couleur' };
+  function applyPhosphorStyle() {
+    styleBtn.textContent = 'Style : ' + STYLE_LABELS[phosphorStyle];
+    document.body.classList.toggle('phosphor', phosphorStyle !== 'couleur');
+  }
+  applyPhosphorStyle();
+  styleBtn.addEventListener('click', () => {
+    phosphorStyle = STYLE_NEXT[phosphorStyle];
+    try { localStorage.setItem('bo_phosphorStyle', phosphorStyle); } catch (e) { /* ignore */ }
+    applyPhosphorStyle();
+    spriteCache.clear(); // cached sprites were baked for the old style
   });
 
   // iOS still shows its double-tap-to-zoom magnifier here and there even
@@ -1810,12 +1934,13 @@
   // was baked in at the old scale.
   const spriteCache = new Map();
   function getSprite(key, sizePx, draw) {
-    const entry = spriteCache.get(key);
+    const cacheKey = key + ':' + phosphorStyle; // appearance depends on the mode too now
+    const entry = spriteCache.get(cacheKey);
     if (entry && entry.scale === scale) return entry.canvas;
     const c = document.createElement('canvas');
     c.width = c.height = Math.max(1, Math.ceil(sizePx));
-    draw(c.getContext('2d'), c.width);
-    spriteCache.set(key, { canvas: c, scale });
+    draw(wrapPhosphor(c.getContext('2d')), c.width);
+    spriteCache.set(cacheKey, { canvas: c, scale });
     return c;
   }
   // the common case: a flat-shaded ball with a two-stop radial gradient,
@@ -1978,6 +2103,75 @@
       ctx.fillStyle = `hsl(26, 30%, ${Math.round(24 + wallLight(q.mid) * 26)}%)`;
       buildQuad(q.pts);
     }
+  }
+
+  // mode phosphore ('phosphore', pas 'filaire'): la vraie silhouette
+  // extérieure du donjon, pas le contour de chacune de ses 24 facettes.
+  // Ça tient sur une propriété de cette projection axonométrique précise :
+  // pour un empilement de cercles concentriques (ce que le donjon EST —
+  // tour, corniche, plate-forme, chacune un cylindre à son propre rayon),
+  // le point projeté le plus à gauche/droite d'un cercle de rayon r se
+  // trouve TOUJOURS au même angle (aL/aR ci-dessous), quel que soit r ou
+  // sa hauteur. Le contour exact de tout l'édifice (marches comprises) se
+  // trace donc juste en suivant son propre profil (rayon, hauteur) le long
+  // de ces deux angles fixes — pas de coque convexe à calculer, pas de
+  // retrait des arêtes cachées : c'est déjà exact.
+  function drawCastleSilhouette(rot) {
+    const wallTopY = state.castleH;
+    const showLedge = wallTopY > 70;
+    const ledgeY = showLedge ? Math.min(wallTopY * 0.46, wallTopY - LEDGE_H - 16) : 0;
+    const platY = platformTopY();
+
+    const profile = [{ r: R, y: 0 }];
+    if (showLedge) {
+      profile.push({ r: R, y: ledgeY });
+      profile.push({ r: R + LEDGE_OUT, y: ledgeY });
+      profile.push({ r: R + LEDGE_OUT, y: ledgeY + LEDGE_H });
+      profile.push({ r: R, y: ledgeY + LEDGE_H });
+    }
+    profile.push({ r: R, y: wallTopY });
+    profile.push({ r: PLATFORM_R, y: wallTopY });
+    profile.push({ r: PLATFORM_R, y: platY });
+
+    const aR = rot - Math.PI / 4;
+    const aL = aR + Math.PI;
+    const leftPts = profile.map(p => project(p.r * Math.cos(aL), p.y, p.r * Math.sin(aL), rot));
+    const rightPts = profile.map(p => project(p.r * Math.cos(aR), p.y, p.r * Math.sin(aR), rot));
+
+    ctx.beginPath();
+    ctx.moveTo(leftPts[0].x, leftPts[0].y);
+    for (let i = 1; i < leftPts.length; i++) ctx.lineTo(leftPts[i].x, leftPts[i].y);
+    for (let i = rightPts.length - 1; i >= 0; i--) ctx.lineTo(rightPts[i].x, rightPts[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // the platform's own flat roof — a real ellipse from this angle, and
+    // fully visible from above — drawn as its own shape on top, which also
+    // covers the straight "lid" segment the body silhouette closed with
+    const topRim = circlePts.map(c => project(PLATFORM_R * c.cx, platY, PLATFORM_R * c.cz, rot));
+    ctx.beginPath();
+    ctx.moveTo(topRim[0].x, topRim[0].y);
+    for (let i = 1; i < topRim.length; i++) ctx.lineTo(topRim[i].x, topRim[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // door + windows: same cutout trick as the detailed renderer (paint a
+    // background-coloured notch, then outline it) but simplified — one
+    // shape per opening instead of per-facet, no N_SEG quantization needed
+    // now that there are no facets to quantize against
+    const cutout = (angle, y, w, h) => {
+      if (Math.cos(angle - rot) < 0.05) return; // facing away, skip
+      const p = project(R * 0.99 * Math.cos(angle), y, R * 0.99 * Math.sin(angle), rot);
+      const f = Math.max(0.15, Math.cos(angle - rot));
+      // this function only ever runs in 'phosphore' style, so the wrapped
+      // ctx already does exactly what's wanted here: a background-colour
+      // notch with a phosphor outline, in one fill() call
+      archPath(p.x, p.y, w * scale * f, h * scale);
+      ctx.fill();
+    };
+    cutout(DOOR_ANGLE, 12, 12, 22);
+    const windowY = state.castleH * 0.55;
+    if (windowY > 0 && windowY < wallTopY) for (const wa of WINDOW_ANGLES) cutout(wa, windowY, 6, 14);
   }
 
   function drawCastle(rot) {
@@ -2356,8 +2550,12 @@
   }
 
   function render() {
-    ctx.fillStyle = '#e9dfc7';
-    ctx.fillRect(0, 0, W, H);
+    // background clear bypasses the phosphore wrapper on purpose — every
+    // other fillRect gets outlined by wrapPhosphor, but a full-viewport
+    // rectangle stroked on its own edge would just draw a distracting
+    // border around the whole screen
+    rawCtx.fillStyle = phosphorStyle === 'couleur' ? '#e9dfc7' : PHOSPHOR_BG;
+    rawCtx.fillRect(0, 0, W, H);
 
     // -45°: aligns "world angle == camera theta" with the nearest point of
     // the ellipse (the iso basis itself is rotated 45° from rx/rz)
@@ -2419,7 +2617,7 @@
     if (princessFar) drawPrincess(rot);
     if (playerFar) drawPlayer(rot);
 
-    drawCastle(rot);
+    if (phosphorStyle === 'phosphore') drawCastleSilhouette(rot); else drawCastle(rot);
 
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
