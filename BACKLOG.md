@@ -340,7 +340,7 @@ Pas encore implémenté dans `index.html` — nécessiterait de dupliquer/
 adapter `project()` avec une vraie caméra (comme dans la maquette) et un
 bouton de bascule, sans casser l'ancien rendu axonométrique par défaut.
 
-## Direction graphique "fil de fer" (fond noir, très début informatique)
+## Direction graphique "fil de fer" (fond noir, très début informatique) → premier essai fait (hors production)
 
 Repéré sur une maquette de comparaison de perspective (fond noir, formes
 en traits, points jaunes en contraste) : jugé très beau, esthétique
@@ -348,6 +348,14 @@ en traits, points jaunes en contraste) : jugé très beau, esthétique
 comme piste de style à part entière, réutilisable plus tard (pas
 forcément pour le rendu du jeu par défaut, mais comme option/thème visuel
 possible).
+
+Premier essai publié en artefact séparé (pas dans index.html, pas en
+production) : même géométrie que le vrai donjon (tour à 8 facettes,
+plate-forme, créneaux, douves, porte), redessinée en traits phosphore sur
+fond noir, glow, scanlines, rotation à la souris/au doigt comme dans le
+jeu. → https://claude.ai/code/artifact/97256e99-0532-45ba-9340-5a9863d27460
+Reste à décider : garder comme thème alternatif optionnel, ou laisser en
+simple souvenir de piste explorée.
 
 ## Notes de contexte (pour ne rien perdre)
 
