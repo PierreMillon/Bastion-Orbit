@@ -76,7 +76,7 @@ pas une ligne droite), qui tourne avec la carte. Idée à deux niveaux :
   plutôt qu'un seul château joué indéfiniment. Pas conçu, juste noté pour
   ne pas perdre le fil.
 
-## Vague manuelle (appel anticipé, cumulatif)
+## Vague manuelle (appel anticipé, cumulatif) → fait en v0.22
 
 Bouton pour faire venir la vague suivante par-dessus l'actuelle (pas de
 limite — 15 appuis = 15 vagues qui s'ajoutent). Intérêt : aller plus vite,
@@ -84,11 +84,9 @@ plus de challenge, et de l'or bonus. Formule proposée pour l'or, à tester :
 la moitié de ce que la vague précédente a rapporté (ou aurait rapporté si
 tous les ennemis avaient été tués).
 
-## IA ennemis : trajectoire plus directe
+## IA ennemis : trajectoire plus directe → fait en v0.25
 
-Le zigzag latéral ajouté en v0.17 est jugé trop marqué — le réduire d'environ
-50% (ennemis qui avancent visiblement plus droit vers le donjon qu'aujourd'hui,
-sans revenir à une ligne parfaitement radiale).
+Amplitude du zigzag latéral divisée par deux.
 
 ## Bouclier de siège : très résistant → fait en v0.22 (première passe, à revoir)
 
@@ -142,13 +140,13 @@ qu'un seul objet fusionné), le rendu (plusieurs soldats + la machine,
 pas une seule pastille), et l'IA (rejoindre/quitter un équipage). À
 concevoir plus en détail avant de coder.
 
-## Priorité de ciblage à la sortie
+## Priorité de ciblage à la sortie → fait en v0.25
 
-Quand le seigneur sort, il doit d'abord chercher : un engin de siège, ou un
-ennemi en train d'en construire un, ou un ennemi qui porte une échelle
-(cf. idée d'échelle ci-dessus). À défaut, il attaque l'ennemi le plus
-proche du mur (ou de lui-même). Contrôlable plus finement plus tard si
-besoin, mais "le plus proche" comme comportement par défaut.
+Un engin de siège en premier (déjà le cas depuis v0.13) ; à défaut,
+l'ennemi le plus proche du mur (ou approchant) au lieu de rester planté
+sans rien faire. La partie "ennemi en train de construire un engin, ou
+qui porte une échelle" reste à faire — dépend d'idées pas encore
+construites (équipage vivant, échelle portée).
 
 ## Princesse : vivante et utile en haut, absente en bas
 
@@ -221,15 +219,12 @@ satisfaisant. Il devrait pouvoir se déplacer librement dans le jardin,
 voire "nager" dans les douves (éventuellement un moyen de régénérer un
 peu, à l'étude) plutôt que revenir toujours au même endroit fixe.
 
-## Ennemis : apparition et portée de tir
+## Ennemis : apparition et portée de tir → fait en v0.26
 
-- Un ennemi doit **toujours** apparaître depuis l'extérieur de l'écran
-  visible, jamais directement près du donjon comme téléporté — quelle que
-  soit la taille/le ratio de l'écran du joueur.
-- Pas de limite de distance pour tirer : dès qu'un ennemi est visible à
-  l'écran (y compris tout en haut, donc loin), on peut lui tirer dessus.
-  Ceux qui seraient géométriquement proches mais hors-champ (sur le côté,
-  hors de l'écran) ne doivent pas être des cibles valables.
+Rayon d'apparition calculé dynamiquement selon la forme de l'écran
+(l'ellipse projetée doit toujours contenir tout le cadre visible), et le
+tir vise n'importe quelle cible réellement visible à l'écran plutôt
+qu'une portée fixe.
 
 ## Pont de fortune sur les douves
 
@@ -241,16 +236,9 @@ sans ralentir. Détruisible (proposé : 2-3 coups d'épée, ~10x la
 résistance d'un soldat) — s'il n'est pas détruit, les vagues suivantes
 continuent de s'en servir.
 
-## Douves décalées du jardin
+## Douves décalées du jardin → fait en v0.25
 
-Actuellement les douves démarrent au même rayon que le jardin, donc elles
-le touchent visuellement — il faut un écart net entre les deux (les
-douves plus loin du mur, pas collées au jardin).
-
-## Effets de mort
-
-Un ennemi tué déclenche un effet de fumée ; un engin de siège détruit
-déclenche un effet d'étincelles plutôt que le même effet.
+## Effets de mort → fait en v0.26
 
 ## Neige / effet de profondeur en particules
 
@@ -268,17 +256,19 @@ portfolio (à retrouver et adapter, pas juste copier).
 
 ## Bugs signalés à vérifier
 
-- **Arbres/jardin peu fluides en tournant la caméra** : mouvement saccadé
-  signalé pendant la rotation — à investiguer (pourrait être lié aux
-  sprites en cache ajoutés en v0.18, à vérifier en priorité).
-- **Le seigneur passe derrière les tourelles en tournant vite** : bug de
-  profondeur/z-order. Règle voulue : les tourelles doivent toujours être
-  au bord extérieur du dernier étage, le seigneur un cran plus à
-  l'intérieur. Comportement souhaité en prime : si on reste immobile une
-  demi-seconde, le seigneur "saute" sur une tourelle/les remparts, et en
-  tournant il saute de tourelle en tourelle façon ronde de garde ; s'il
-  est au sol (sorti), tourner la caméra le fait reculer d'un cran vers
-  l'intérieur.
+- **Arbres/jardin peu fluides en tournant la caméra** : investigué (v0.25)
+  — les buissons sont des positions monde fixes, pas d'animation, rendu
+  via sprites en cache (blit simple, pas de recalcul par frame). Aucun
+  bug trouvé dans le code lui-même. Si ça reste perceptible, comparer au
+  compteur FPS (menu) pendant la rotation pour distinguer une vraie
+  baisse de perf d'autre chose (à revoir avec des chiffres si le
+  problème persiste).
+- **Le seigneur passe derrière les tourelles en tournant vite** → fait en
+  v0.25 : tourelles décalées d'un cran vers le bord (TURRET_R), vraie
+  séparation radiale au lieu du même rayon que le seigneur. **Pas encore
+  fait** : la patrouille de créneaux (saut de tourelle en tourelle après
+  une demi-seconde d'immobilité, recul d'un cran au sol en tournant) —
+  animation à part entière, plus lourde que la correction du bug lui-même.
 
 ## Système d'éclairage à concevoir
 
