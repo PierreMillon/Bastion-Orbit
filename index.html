@@ -146,9 +146,10 @@
   /* Réparer/Sortie only ever involve the lord — his own sprite blue.
      Descendre/Remonter only ever involves the princess — her sprite pink.
      .active overrides stay distinct (held-state feedback, not ownership). */
-  #repairBtn, #sortieBtn { background: #3a5c82; }
+  #repairBtn, #sortieBtn, #oilBtn { background: #3a5c82; }
   #repairBtn.active { background: #7a8f5c; }
   #sortieBtn.active { background: #9c4a3f; }
+  #oilBtn.active { background: #8a6a1f; }
   #princessBtn { background: #a4568c; }
   #princessBtn.active { background: #e2a0cc; }
   #gardenBtn { background: #4f6b2e; }
@@ -225,6 +226,7 @@
   }
   body.phosphor #repairBtn.active,
   body.phosphor #sortieBtn.active,
+  body.phosphor #oilBtn.active,
   body.phosphor #princessBtn.active {
     background: var(--ph-fill);
     border-color: var(--ph-line);
@@ -243,10 +245,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.34</button>
+  <button id="versionBtn">v0.35</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.35</b> — échelle (montée garantie dès vague 4), huile bouillante (bouton, nécessite une tourelle)</div>
   <div><b>v0.34</b> — CRITIQUE : le jeu ne démarrait plus du tout (écran vide, boutons morts) depuis v0.30</div>
   <div><b>v0.33</b> — bouton Teinte (vert/ambre), correctif d'occlusion sur la silhouette du donjon</div>
   <div><b>v0.32</b> — mode Style (Phosphore par défaut / Filaire pur / Couleur), donjon en silhouette vectorielle, chrome et boutons monochromes en phosphore</div>
@@ -280,6 +283,7 @@
     <button id="repairBtn">Réparer</button>
     <button id="princessBtn">Descendre</button>
     <button id="sortieBtn">Sortie</button>
+    <button id="oilBtn" disabled>Huile</button>
   </div>
   <div id="bottombar">
     <button id="towerBtn">Tourelle</button>
@@ -580,6 +584,7 @@
   const CASTLE_MAX_H = 208;
   const CASTLE_MIN_H = 16;
   const JUMP_H = 56;            // donjon height at/below which jumping onto the platform becomes possible — see jumpChance, it stays rare even then
+  const LADDER_SETUP_TIME = 2.2; // planting a ladder takes a beat longer than a routine wall-chip cycle — a fair window to kill the carrier first
   const ATTACK_RANGE = 260;
   const ANGLE_SPEED = 1.6;      // rad/s, player catching up to camera
   const RADIAL_EASE_RATE = 5.5; // how fast the in/out ease converges (higher = snappier)
@@ -663,6 +668,12 @@
   const TOWER_DANGER_H = 3;       // tall enough to start hitting the platform directly
   const SORTIE_DMG = 4;
   const SORTIE_TICK = 0.4;
+  // huile bouillante: hold-to-act like Réparer/Sortie, but needs a turret
+  // to pour from — the lord walks over and, once there, it periodically
+  // scalds every attacker stalled at the wall near that turret's angle
+  const OIL_TICK = 1.6;
+  const OIL_DMG = 3;
+  const OIL_ANGULAR_WIDTH = 0.5; // how wide a stretch of wall one turret's oil covers
   const GROUND_EASE_RATE = 4;     // how fast the lord transitions platform <-> ground
 
   const FIGHT_BANNER_DUR = 1.1;   // "FIGHT!" banner total lifetime, in seconds
@@ -770,6 +781,7 @@
     bridges: [], // { angle, hp, maxHp } — planks laid across the moat
     moatSlowedThisWave: false, // did the moat actually slow anyone this wave
     buildersToSpawn: 0, // how many of the next spawns should be flagged as bridge builders
+    laddersToSpawn: 0,  // how many of the next spawns should carry a ladder
     siegeTimer: SIEGE_CHECK_INTERVAL,
     wave: 1,
     waveState: 'prep', // prep | active | gameover
@@ -783,12 +795,13 @@
       angle: 0,
       r: PLAYER_R,
       groundPos: 0, // 0 = up on the platform, 1 = down at the wall base (sortied)
-      behavior: 'combat', // combat | repairTurret | repairCastle | sortie
+      behavior: 'combat', // combat | repairTurret | repairCastle | sortie | oil
       hp: 5,
       maxHp: 5,
       atkTimer: 0,
       sortieTimer: SORTIE_TICK,
       repairTimer: REPAIR_TICK,
+      oilTimer: OIL_TICK,
       repairMaxedPlayed: false,
       // sortied out with nothing to fight: wanders the grounds instead of
       // parking at a fixed spot right outside the door
@@ -888,6 +901,8 @@
   function spawnEnemy() {
     const builder = state.buildersToSpawn > 0;
     if (builder) state.buildersToSpawn--;
+    const ladder = !builder && state.laddersToSpawn > 0; // never both at once
+    if (ladder) state.laddersToSpawn--;
     const angle = Math.random() * Math.PI * 2;
     state.enemies.push({
       angle,
@@ -902,6 +917,7 @@
       fleeing: false,              // spooked, walking off the map for good — no gold on exit
       builder,                     // stops at the moat to lay a bridge instead of wading through
       buildTimer: 0,
+      ladder,                      // skips the wall entirely — guaranteed climb onto the platform, no rangedResist/hp trade needed like the tour de siège
       state: 'approach', // approach | attackBase | jumping | onTop | building
       timer: 0,
       jumpFrom: 0,
@@ -926,6 +942,12 @@
       state.buildersToSpawn = BRIDGE_BUILDERS_PER_WAVE;
     }
     state.moatSlowedThisWave = false;
+
+    // from wave 4 on, one attacker each wave brings a ladder — a guaranteed
+    // way onto the platform, bypassing the wall (and its jumpChance dice
+    // roll) entirely, unlike a regular attacker who only rarely scales it
+    // once the donjon is nearly ruined
+    if (state.wave >= 4) state.laddersToSpawn = 1;
   }
 
   // manual early call: stacks a fresh wave's worth of spawns on top of
@@ -1010,6 +1032,17 @@
     let best = null, bestD = Infinity;
     for (const t of state.towers) {
       if (t.hp >= t.maxHp) continue;
+      const d = Math.abs(angDiff(fromAngle, t.angle));
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    return best;
+  }
+
+  // huile bouillante: any turret can pour, damaged or not — unlike
+  // nearestDamagedTurret this just picks the closest one to walk to
+  function nearestTower(fromAngle) {
+    let best = null, bestD = Infinity;
+    for (const t of state.towers) {
       const d = Math.abs(angDiff(fromAngle, t.angle));
       if (d < bestD) { bestD = d; best = t; }
     }
@@ -1242,6 +1275,7 @@
   const towerBtn = document.getElementById('towerBtn');
   const repairBtn = document.getElementById('repairBtn');
   const sortieBtn = document.getElementById('sortieBtn');
+  const oilBtn = document.getElementById('oilBtn');
   const moatBtn = document.getElementById('moatBtn');
   const gardenBtn = document.getElementById('gardenBtn');
   const princessBtn = document.getElementById('princessBtn');
@@ -1257,6 +1291,7 @@
     state.gold -= 5;
     goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
+    oilBtn.disabled = false; // huile bouillante needs an actual turret to pour from
   });
 
   function updateMoatBtn() {
@@ -1355,6 +1390,15 @@
   sortieBtn.addEventListener('pointercancel', stopSortie);
   sortieBtn.addEventListener('pointerleave', stopSortie);
 
+  // huile bouillante: same hold pattern, but disabled until at least one
+  // turret exists to actually pour from (see towerBtn's click handler)
+  const startOil = e => { e.preventDefault(); state.oilHeld = true; oilBtn.classList.add('active'); };
+  const stopOil = () => { state.oilHeld = false; oilBtn.classList.remove('active'); };
+  oilBtn.addEventListener('pointerdown', startOil);
+  oilBtn.addEventListener('pointerup', stopOil);
+  oilBtn.addEventListener('pointercancel', stopOil);
+  oilBtn.addEventListener('pointerleave', stopOil);
+
   // "Recommencer" faisait déjà un reload inconditionnel (donc allait déjà
   // chercher la dernière version) — on passe juste par reloadIfUpdateAvailable()
   // d'abord pour le suivi de version cohérent avec les autres sites, mais le
@@ -1450,6 +1494,7 @@
     const threat = nearestEnemyTo(guardPos, ATTACK_RANGE);
     const damagedTurret = threat ? null : nearestDamagedTurret(p.angle);
     const sortieTarget = state.sortieHeld ? nearestSortieTarget(p.angle) : null;
+    const oilTower = state.oilHeld ? nearestTower(p.angle) : null;
 
     // calin only ever triggers if she's already down there — holding the
     // button while she's still up (or dead) does nothing extra, it's just
@@ -1470,6 +1515,11 @@
     } else if (state.repairHeld) {
       p.behavior = 'repairCastle';
       targetR = 0;
+    } else if (oilTower) {
+      // needs an actual turret to pour from — no turret, no oil, same
+      // "held with nothing to do" fallback as sortie would need otherwise
+      p.behavior = 'oil';
+      targetAngle = oilTower.angle;
     } else if (sortieTarget) {
       // sortie: much faster than plinking away at rangedResist-armored
       // siege engines from the platform — walk out through the door and
@@ -1582,6 +1632,25 @@
       }
     } else if (p.behavior === 'repairTurret' && Math.abs(angDiff(p.angle, targetAngle)) < 0.12 && Math.abs(p.r - PLAYER_R) < 6) {
       damagedTurret.hp = Math.min(damagedTurret.maxHp, damagedTurret.hp + TURRET_HEAL * dt);
+    } else if (p.behavior === 'oil') {
+      if (oilTower && Math.abs(angDiff(p.angle, targetAngle)) < 0.12 && Math.abs(p.r - PLAYER_R) < 6) {
+        p.oilTimer -= dt;
+        if (p.oilTimer <= 0) {
+          p.oilTimer = OIL_TICK;
+          let hit = false;
+          for (const e of state.enemies) {
+            if (e.state !== 'attackBase') continue;
+            if (Math.abs(angDiff(e.angle, oilTower.angle)) > OIL_ANGULAR_WIDTH) continue;
+            hit = true;
+            e.hp -= OIL_DMG;
+            spawnBurst(e.r * Math.cos(e.angle), 0, e.r * Math.sin(e.angle), 'smoke');
+            if (e.hp <= 0) killEnemy(e);
+          }
+          if (hit) playHammer();
+        }
+      } else {
+        p.oilTimer = OIL_TICK;
+      }
     } else if (p.behavior === 'repairCastle' && p.r < 8) {
       if (state.castleH >= CASTLE_MAX_H) {
         // already at full strength: one higher-pitched "clang" to say so,
@@ -1810,7 +1879,7 @@
         // spooked and walked all the way back out — vanishes, no gold (the
         // player didn't kill it, it just lost its nerve)
         if (e.fleeing && e.r >= SPAWN_R - 1) { e.dead = true; continue; }
-        if (e.r <= BASE_R) { e.r = BASE_R; e.state = 'attackBase'; e.timer = 1.2; }
+        if (e.r <= BASE_R) { e.r = BASE_R; e.state = 'attackBase'; e.timer = e.ladder ? LADDER_SETUP_TIME : 1.2; }
       } else if (e.state === 'building') {
         e.buildTimer -= dt;
         if (e.buildTimer <= 0) {
@@ -1823,6 +1892,16 @@
       } else if (e.state === 'attackBase') {
         e.timer -= dt;
         if (e.timer <= 0) {
+          if (e.ladder) {
+            // a planted ladder is a guaranteed way up, not a dice roll —
+            // that's the whole point of carrying one instead of just
+            // chipping at the wall like everyone else
+            e.state = 'jumping';
+            e.jumpFrom = e.r;
+            e.jumpT = 0;
+            e.timer = LADDER_SETUP_TIME;
+            continue;
+          }
           // jumping onto the platform is rare, and only becomes likely once
           // the donjon is nearly ruined — not a routine move
           const jumpChance = state.castleH <= JUMP_H ? 0.16 * (1 - state.castleH / JUMP_H) : 0;
@@ -2418,7 +2497,10 @@
     else if (e.state === 'onTop') y = platformTopY();
     const pos = project(e.r * Math.cos(e.angle), y, e.r * Math.sin(e.angle), rot);
     const rad = 10 * scale;
-    drawBallSprite('enemy', rad, '#8a3b2e', '#2a1a15', pos);
+    // ladder carrier: distinct wood-ish colour — a guaranteed way onto the
+    // platform is worth spotting and prioritizing before it plants
+    if (e.ladder) drawBallSprite('enemyLadder', rad, '#b5813b', '#3a2a15', pos);
+    else drawBallSprite('enemy', rad, '#8a3b2e', '#2a1a15', pos);
     if (e.hp < e.maxHp) {
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(pos.x - rad, pos.y - rad - 6, rad * 2, 3);
