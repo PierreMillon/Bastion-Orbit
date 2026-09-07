@@ -195,31 +195,40 @@
      wrapPhosphor() dans le script) — ici le chrome autour (barres, boutons,
      menu, changelog) suit, tout en monochrome noir/vert (décidé en
      session : pas de couleurs d'accent par bouton, cohérent avec la scène) */
-  body.phosphor { background: #04070a; }
+  /* --ph-line/--ph-text/--ph-dim/--ph-fill set inline on <body> by the
+     script (applyPhosphorStyle) to follow the chosen teinte (vert/ambre) —
+     the values here are just a vert fallback in case JS hasn't run yet */
+  body.phosphor {
+    --ph-line: #46ffa0;
+    --ph-text: #8ffcc4;
+    --ph-dim: rgba(70,255,160,0.4);
+    --ph-fill: #0a1f16;
+    background: #04070a;
+  }
   body.phosphor #topbar,
   body.phosphor #secondRow,
   body.phosphor #bottombar,
-  body.phosphor #changelog { background: #071812; color: #8ffcc4; box-shadow: none; }
+  body.phosphor #changelog { background: #071812; color: var(--ph-text); box-shadow: none; }
   body.phosphor #menuBtn,
   body.phosphor #versionBtn,
-  body.phosphor #fpsLine { color: #8ffcc4; }
-  body.phosphor #versionBtn { border-color: rgba(70,255,160,0.4); }
-  body.phosphor #changelog b { color: #46ffa0; }
+  body.phosphor #fpsLine { color: var(--ph-text); }
+  body.phosphor #versionBtn { border-color: var(--ph-dim); }
+  body.phosphor #changelog b { color: var(--ph-line); }
   body.phosphor #menu,
-  body.phosphor #overlay { background: rgba(4,10,8,0.94); color: #8ffcc4; }
-  body.phosphor #menu button.ghost { border-color: rgba(70,255,160,0.4); color: #8ffcc4; }
+  body.phosphor #overlay { background: rgba(4,10,8,0.94); color: var(--ph-text); }
+  body.phosphor #menu button.ghost { border-color: var(--ph-dim); color: var(--ph-text); }
   body.phosphor #bottomStack button,
   body.phosphor #menu a, body.phosphor #overlay button, body.phosphor #menu button {
-    background: #0a1f16;
-    color: #8ffcc4;
-    border: 1px solid rgba(70,255,160,0.35);
+    background: var(--ph-fill);
+    color: var(--ph-text);
+    border: 1px solid var(--ph-dim);
   }
   body.phosphor #repairBtn.active,
   body.phosphor #sortieBtn.active,
   body.phosphor #princessBtn.active {
-    background: #163f2b;
-    border-color: #46ffa0;
-    color: #eafff2;
+    background: var(--ph-fill);
+    border-color: var(--ph-line);
+    color: #fff;
   }
   body.phosphor #bottomStack button:disabled { opacity: 0.3; }
 </style>
@@ -234,10 +243,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.32</button>
+  <button id="versionBtn">v0.33</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.33</b> — bouton Teinte (vert/ambre), correctif d'occlusion sur la silhouette du donjon</div>
   <div><b>v0.32</b> — mode Style (Phosphore par défaut / Filaire pur / Couleur), donjon en silhouette vectorielle, chrome et boutons monochromes en phosphore</div>
   <div><b>v0.31</b> — équipage vivant des engins de siège (régén continue, sortie tue au corps), jardin en progression par formule (sans plafond)</div>
   <div><b>v0.30</b> — neige d'ambiance (3 plans de profondeur, vent latéral)</div>
@@ -282,6 +292,7 @@
   <a href="https://pierremillon.github.io/knight-wars/">→ Knight Wars</a>
   <button id="menuRestartBtn">Recommencer depuis le début</button>
   <button id="styleBtn">Style : Phosphore</button>
+  <button id="hueBtn">Teinte : Vert</button>
   <button id="musicBtn">Musique : ON</button>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
@@ -307,13 +318,22 @@
   // fill() existant du jeu redevient un remplissage noir + contour vert
   // ('phosphore') ou juste un contour sans remplissage ('filaire'), sans
   // toucher à la cinquantaine de fonctions de dessin elles-mêmes.
-  const PHOSPHOR_LINE = '70, 255, 160'; // vert phosphore — teinte à confirmer (comparateur publié, pas encore vu)
+  // deux teintes retenues (la troisième option du comparateur, cyan, a été
+  // écartée) — vert par défaut, bascule via le bouton "Teinte" du menu
+  const PHOSPHOR_HUES = {
+    vert: '70, 255, 160',
+    ambre: '255, 176, 71'
+  };
   const PHOSPHOR_BG = '#04070a';
   let phosphorStyle = 'phosphore';
+  let phosphorHue = 'vert';
   try {
     const stored = localStorage.getItem('bo_phosphorStyle');
     if (stored === 'couleur' || stored === 'phosphore' || stored === 'filaire') phosphorStyle = stored;
+    const storedHue = localStorage.getItem('bo_phosphorHue');
+    if (storedHue === 'vert' || storedHue === 'ambre') phosphorHue = storedHue;
   } catch (e) { /* ignore */ }
+  function phosphorLine() { return `rgb(${PHOSPHOR_HUES[phosphorHue]})`; }
 
   function wrapPhosphor(real) {
     return new Proxy(real, {
@@ -323,7 +343,7 @@
             if (phosphorStyle === 'couleur') return target.fill(...args);
             const fs = target.fillStyle, ss = target.strokeStyle, lw = target.lineWidth;
             if (phosphorStyle === 'phosphore') { target.fillStyle = PHOSPHOR_BG; target.fill(...args); }
-            target.strokeStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.strokeStyle = phosphorLine();
             target.lineWidth = Math.max(1, 1.2 * (scale || 1));
             // stroke() only ever takes an optional Path2D — never a fill
             // rule ('evenodd'/'nonzero'), which fill() does accept, so
@@ -338,7 +358,7 @@
             if (phosphorStyle === 'couleur') return target.fillRect(x, y, w, h);
             const fs = target.fillStyle, ss = target.strokeStyle, lw = target.lineWidth;
             if (phosphorStyle === 'phosphore') { target.fillStyle = PHOSPHOR_BG; target.fillRect(x, y, w, h); }
-            target.strokeStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.strokeStyle = phosphorLine();
             target.lineWidth = Math.max(1, 1.1 * (scale || 1));
             target.strokeRect(x, y, w, h);
             target.fillStyle = fs; target.strokeStyle = ss; target.lineWidth = lw;
@@ -348,7 +368,7 @@
           return function (...args) {
             if (phosphorStyle === 'couleur') return target.fillText(...args);
             const fs = target.fillStyle;
-            target.fillStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.fillStyle = phosphorLine();
             target.fillText(...args);
             target.fillStyle = fs;
           };
@@ -357,7 +377,7 @@
           return function (...args) {
             if (phosphorStyle === 'couleur') return target.stroke(...args);
             const ss = target.strokeStyle;
-            target.strokeStyle = `rgb(${PHOSPHOR_LINE})`;
+            target.strokeStyle = phosphorLine();
             target.stroke(...args);
             target.strokeStyle = ss;
           };
@@ -473,11 +493,25 @@
   // ---- style : Couleur → Phosphore → Filaire → Couleur (phosphorStyle
   // itself, and its persistence, is declared up near the canvas/ctx setup) --
   const styleBtn = document.getElementById('styleBtn');
+  const hueBtn = document.getElementById('hueBtn');
   const STYLE_LABELS = { couleur: 'Couleur', phosphore: 'Phosphore', filaire: 'Filaire pur' };
   const STYLE_NEXT = { couleur: 'phosphore', phosphore: 'filaire', filaire: 'couleur' };
+  const HUE_LABELS = { vert: 'Vert', ambre: 'Ambre' };
+  const HUE_NEXT = { vert: 'ambre', ambre: 'vert' };
+  const HUE_CSS = {
+    vert: { line: '#46ffa0', text: '#8ffcc4', dim: 'rgba(70,255,160,0.4)', fill: '#0a1f16' },
+    ambre: { line: '#ffb347', text: '#ffd9a0', dim: 'rgba(255,176,71,0.4)', fill: '#241708' }
+  };
   function applyPhosphorStyle() {
     styleBtn.textContent = 'Style : ' + STYLE_LABELS[phosphorStyle];
+    hueBtn.textContent = 'Teinte : ' + HUE_LABELS[phosphorHue];
     document.body.classList.toggle('phosphor', phosphorStyle !== 'couleur');
+    const c = HUE_CSS[phosphorHue];
+    const root = document.body.style;
+    root.setProperty('--ph-line', c.line);
+    root.setProperty('--ph-text', c.text);
+    root.setProperty('--ph-dim', c.dim);
+    root.setProperty('--ph-fill', c.fill);
   }
   applyPhosphorStyle();
   styleBtn.addEventListener('click', () => {
@@ -485,6 +519,12 @@
     try { localStorage.setItem('bo_phosphorStyle', phosphorStyle); } catch (e) { /* ignore */ }
     applyPhosphorStyle();
     spriteCache.clear(); // cached sprites were baked for the old style
+  });
+  hueBtn.addEventListener('click', () => {
+    phosphorHue = HUE_NEXT[phosphorHue];
+    try { localStorage.setItem('bo_phosphorHue', phosphorHue); } catch (e) { /* ignore */ }
+    applyPhosphorStyle();
+    spriteCache.clear(); // cached sprites were baked in the old hue
   });
 
   // iOS still shows its double-tap-to-zoom magnifier here and there even
@@ -2137,6 +2177,29 @@
     const aL = aR + Math.PI;
     const leftPts = profile.map(p => project(p.r * Math.cos(aL), p.y, p.r * Math.sin(aL), rot));
     const rightPts = profile.map(p => project(p.r * Math.cos(aR), p.y, p.r * Math.sin(aR), rot));
+
+    // base rim: the left/right profile only traces the two tangent edges,
+    // straight lines by construction — but the true cross-section still
+    // bulges past that flat chord at the very bottom (same reason the
+    // original renderer capped this with a dark disc: without it, ground-
+    // level things directly behind the tower's near face show through the
+    // gap between the chord and the real curve). Filled first, everything
+    // else draws over it.
+    // plain occlusion fills, no outline wanted here (they're not a real
+    // edge of the silhouette, just backing plates) — drawn straight on the
+    // raw context so wrapPhosphor's fill→stroke doesn't add clutter lines
+    const fillDisc = (pts) => {
+      rawCtx.fillStyle = PHOSPHOR_BG;
+      rawCtx.beginPath();
+      rawCtx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) rawCtx.lineTo(pts[i].x, pts[i].y);
+      rawCtx.closePath();
+      rawCtx.fill();
+    };
+    fillDisc(circlePts.map(c => project(R * c.cx, 0, R * c.cz, rot)));
+    // same reasoning at the eave (wall → wider platform, a flat step, not
+    // a slope) — its own near-facing bulge past the profile's flat jog
+    fillDisc(circlePts.map(c => project(PLATFORM_R * c.cx, wallTopY, PLATFORM_R * c.cz, rot)));
 
     ctx.beginPath();
     ctx.moveTo(leftPts[0].x, leftPts[0].y);
