@@ -341,7 +341,7 @@ Pas encore implémenté dans `index.html` — nécessiterait de dupliquer/
 adapter `project()` avec une vraie caméra (comme dans la maquette) et un
 bouton de bascule, sans casser l'ancien rendu axonométrique par défaut.
 
-## Direction graphique "fil de fer" (fond noir, très début informatique) → premier essai fait (hors production)
+## Direction graphique "fil de fer" (fond noir, très début informatique) → intégré au jeu en v0.32, activé par défaut
 
 Repéré sur une maquette de comparaison de perspective (fond noir, formes
 en traits, points jaunes en contraste) : jugé très beau, esthétique
@@ -350,13 +350,40 @@ comme piste de style à part entière, réutilisable plus tard (pas
 forcément pour le rendu du jeu par défaut, mais comme option/thème visuel
 possible).
 
-Premier essai publié en artefact séparé (pas dans index.html, pas en
-production) : même géométrie que le vrai donjon (tour à 8 facettes,
-plate-forme, créneaux, douves, porte), redessinée en traits phosphore sur
-fond noir, glow, scanlines, rotation à la souris/au doigt comme dans le
-jeu. → https://claude.ai/code/artifact/97256e99-0532-45ba-9340-5a9863d27460
-Reste à décider : garder comme thème alternatif optionnel, ou laisser en
-simple souvenir de piste explorée.
+Premier essai publié en artefact séparé, hors dépôt (même géométrie que le
+vrai donjon, traits phosphore sur fond noir, glow, scanlines, rotation).
+Un second artefact a servi de comparateur vert/ambre/cyan + contour plein/
+filaire pur en direct → https://claude.ai/code/artifact/97256e99-0532-45ba-9340-5a9863d27460
+— **pas encore consulté par le joueur au moment du ship de v0.32**.
+
+**Fait en v0.32**, intégré au jeu (décidé en session : activé par défaut,
+pas juste une option cachée) :
+- Bouton "Style" dans le menu, cycle Phosphore → Filaire pur → Couleur →
+  Phosphore. Persisté (bo_phosphorStyle).
+- Tout le rendu existant (ennemis, tourelles, princesse, engins de siège,
+  ponts, particules, barres de vie, chrome/boutons) passe par un seul
+  wrapper générique autour du contexte canvas (wrapPhosphor) plutôt que
+  par une réécriture fonction par fonction.
+- Le donjon a une vraie silhouette calculée (pas juste le contour de
+  chacune de ses facettes) : exploite le fait que, dans cette projection
+  précise, le point le plus à gauche/droite d'un cercle projeté est
+  toujours au même angle quel que soit son rayon — donc le contour exact
+  de tout l'édifice (marches, corniche, plate-forme comprises) se lit
+  directement sur son propre profil (rayon, hauteur), sans calcul de coque
+  convexe. Vérifié numériquement.
+- Chrome (barres, menu, tous les boutons d'action) : monochrome noir/vert,
+  plus de couleurs d'accent distinctes par bouton (décidé en session).
+
+**Pas encore fait / en attente** :
+- Teinte : vert posé par défaut (#46ffa0), mais le joueur n'a pas encore
+  ouvert le comparateur pour trancher entre vert/ambre/cyan — à changer
+  via la constante `PHOSPHOR_LINE` (une seule ligne) une fois décidé.
+- Le mode "Filaire pur" réutilise le rendu détaillé à 24 facettes
+  (drawCastle d'origine) tel quel, pas la silhouette — cohérent avec l'idée
+  "montre tous les traits", mais pas vérifié visuellement en jeu.
+- Pas de retour visuel testé en conditions réelles (uniquement vérifié par
+  la lecture du code + un calcul numérique de la formule de silhouette) —
+  premier lancement en jeu à faire pour confirmer que ça rend bien.
 
 ## Notes de contexte (pour ne rien perdre)
 
