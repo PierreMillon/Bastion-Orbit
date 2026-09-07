@@ -34,7 +34,7 @@ Implique : un moyen de sortir de la boucle orbite/plateforme actuelle,
 probablement une phase de jeu à part (descente + déplacement au sol vers
 la cible), à concevoir.
 
-## Vue intérieure du donjon
+## Vue intérieure du donjon → version visuelle faite en v0.38, pas encore fait : la vraie scène/gameplay
 
 Idée donnée avec une image de référence (intérieur de donjon en vue
 isométrique, escaliers, tonneaux, personnages) : un bouton (peut-être sur
@@ -48,6 +48,14 @@ reposer près d'un feu — si la princesse le suit, ils jouent aux échecs.
 Un mode "cosy" contemplatif, pendant que la bataille continue dehors.
 Belle opposition tonale (repos à l'intérieur / urgence dehors) à garder
 si cette vue voit le jour.
+
+**Fait en v0.38** : un rideau CSS plein écran (bouton 🔥), roi + princesse
+(si vivante) au coin d'un feu animé, table d'échecs suggérée. **Pas fait,
+délibérément mis de côté par manque de temps** : la vraie scène en vue
+isométrique (escaliers, tonneaux, personnages dessinés comme le reste du
+jeu plutôt qu'en emoji), tout gameplay propre à cet espace, et une vraie
+pause/mécanique liée au fait d'y être (pour l'instant le jeu tourne
+derrière sans que rien ne change).
 
 ## Huile bouillante → fait en v0.35
 
@@ -378,6 +386,15 @@ Pas encore implémenté dans `index.html` — nécessiterait de dupliquer/
 adapter `project()` avec une vraie caméra (comme dans la maquette) et un
 bouton de bascule, sans casser l'ancien rendu axonométrique par défaut.
 
+**Statut** : approuvé pour intégration en session ("Intégrons-le aussi",
+suite au succès du mode phosphore) mais **pas fait** — repoussé faute de
+temps dans cette session, et parce que c'est d'une autre nature que le
+phosphore : pas juste un style de rendu (wrapPhosphor s'est branché sans
+toucher project()), mais un changement du moteur de projection lui-même,
+utilisé par TOUT le placement à l'écran (UI, cibles, clics...). Chantier
+à part entière, à reprendre spécifiquement plutôt qu'en à-côté d'autre
+chose.
+
 ## Direction graphique "fil de fer" (fond noir, très début informatique) → intégré au jeu en v0.32, activé par défaut
 
 Repéré sur une maquette de comparaison de perspective (fond noir, formes
@@ -472,7 +489,7 @@ BRIDGE_MAX_COUNT) est intrinsèquement finie, pas un bon candidat pour une
 formule sans plafond. Les tourelles et les autres "améliorations du
 joueur" évoquées dans le principe général n'ont pas été touchées.
 
-## Décor procédural (jardin/eau, buissons)
+## Décor procédural (jardin/eau, buissons) → l'eau qui fonce existe déjà, le reste pas fait
 
 Idée en passant : une fois qu'on aura une vraie logique de progression
 (ci-dessus), il pourrait rester une place pour un peu de génération
@@ -480,6 +497,14 @@ procédurale côté décor — PAS le level design/gameplay lui-même, juste
 des touches visuelles. Exemples évoqués : le jardin ou l'eau autour du
 donjon qui fonce progressivement, ou l'ajout de buissons au fil du jeu.
 Idée brute, à retravailler plus tard.
+
+**Constat en session** : l'eau des douves fonce déjà progressivement,
+mais par palier acheté (state.moatLevel), pas en continu/autonome — 4
+teintes de plus en plus sombres/profondes selon le tier. Approuvé pour
+une "première passe" en session mais pas retravaillé au-delà de ce qui
+existait déjà, faute de temps — l'idée d'un décor qui évolue tout seul
+(buissons qui apparaissent au fil du jeu, pas seulement au niveau du
+jardin acheté) reste à faire.
 
 ## Musique de fond → fait en v0.29
 
