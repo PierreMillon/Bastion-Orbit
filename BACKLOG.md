@@ -291,6 +291,29 @@ large sur l'éclairage. Ne rien changer ici, juste s'en souvenir.
   étendre ce langage visuel aux autres éléments (ennemis, tourelles...) le
   jour où on retravaille le look général.
 
+## Mode "Test Perspective" dans le menu
+
+Demande d'origine, pas encore construite dans le jeu (toute l'exploration
+faite jusqu'ici est restée dans une maquette à part, en dehors du dépôt —
+voir le fil de discussion) : un bouton dans le menu qui bascule le jeu
+d'une projection axonométrique (actuelle) à une vraie caméra en
+perspective (point de fuite hors champ, en haut de l'écran). La maquette
+a validé le sens correct (proche = grand comme aujourd'hui, loin = petit
+vers un point de fuite toujours hors cadre) et une plage de profondeur
+utile d'environ 8-10x la distance joueur→donjon avant qu'un repère
+devienne trop petit pour se lire.
+
+Réflexion gameplay associée : contrairement à l'axonométrie (où un
+ennemi occupe la même taille à 50m ou 500m, donc l'espace visible est
+limité par la taille de l'écran), la perspective permettrait de voir un
+champ de bataille plus large dans le même cadre — repérer les prochains
+arrivants plus tôt. Contrepartie : les repères lointains rétrécissent,
+donc moins lisibles individuellement.
+
+Pas encore implémenté dans `index.html` — nécessiterait de dupliquer/
+adapter `project()` avec une vraie caméra (comme dans la maquette) et un
+bouton de bascule, sans casser l'ancien rendu axonométrique par défaut.
+
 ## Direction graphique "fil de fer" (fond noir, très début informatique)
 
 Repéré sur une maquette de comparaison de perspective (fond noir, formes
