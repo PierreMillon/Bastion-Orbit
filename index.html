@@ -202,10 +202,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.25</button>
+  <button id="versionBtn">v0.26</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.26</b> — apparition toujours hors écran, tir sans limite si visible, effets de mort</div>
   <div><b>v0.25</b> — princesse dans le jardin, tourelles décalées, douves décalées, ligne plus droite, sortie sur cible de repli</div>
   <div><b>v0.24</b> — princesse vivante en haut (déplacement, aide réparation, decoy)</div>
   <div><b>v0.23</b> — câlin roi/reine (régén), princesse vulnérable en haut aussi, régén de fin de vague</div>
@@ -255,7 +256,8 @@
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  let W, H, cx, cy, scale;
+  let W, H, cx, cy, scale, SPAWN_R;
+  const SPAWN_R_BASE = 480; // the old flat radius — speed is scaled by SPAWN_R/this so a taller spawn distance doesn't change how long the walk actually takes
 
   function resize() {
     W = canvas.width = innerWidth;
@@ -263,6 +265,21 @@
     cx = W / 2;
     cy = H * 0.46;
     scale = Math.min(W, H) / 930; // /3 from v0.3 — was too tall on short viewports
+
+    // SPAWN_R used to be a flat 480 regardless of screen shape — fine on a
+    // roughly square viewport, but as angle sweeps, a spawn point at world
+    // radius R traces a screen-space ELLIPSE of half-width 1.2247·R·scale
+    // and half-height 0.7071·R·scale (the iso projection's own constants —
+    // see project()). A tall/narrow phone can poke past that ellipse's
+    // short (y) axis at some angles, spawning an enemy inside the visible
+    // frame ("teleported in", not walked in). The screen rectangle sits
+    // entirely inside the ellipse exactly when its corner does:
+    // (halfW/1.2247R)² + (halfH/0.7071R)² ≤ 1 — solved for R below, with a
+    // margin so it's genuinely off-screen, not just grazing the edge.
+    const MARGIN = 60;
+    const x0 = (W / 2 + MARGIN) / 1.2247;
+    const y0 = (H / 2 + MARGIN) / 0.7071;
+    SPAWN_R = Math.max(480, Math.hypot(x0, y0) / scale);
   }
   addEventListener('resize', resize);
   resize();
@@ -339,7 +356,6 @@
   // ---- world constants ----
   const R = 49;                 // donjon (main tower) radius
   const BASE_R = R + 25;        // ring where enemies stop and hit the wall
-  const SPAWN_R = 480;          // enemies appear well off-screen
   const CASTLE_MAX_H = 208;
   const CASTLE_MIN_H = 16;
   const JUMP_H = 56;            // donjon height at/below which jumping onto the platform becomes possible — see jumpChance, it stays rare even then
@@ -509,6 +525,7 @@
     // grace keeps the hug visually lingering a moment after release
     calin: { held: false, grace: 0, hugging: false },
     siegeEngines: [],
+    particles: [], // short-lived death effects (smoke/sparkle), purely visual
     siegeTimer: SIEGE_CHECK_INTERVAL,
     wave: 1,
     waveState: 'prep', // prep | active | gameover
@@ -601,7 +618,7 @@
     state.enemies.push({
       angle: Math.random() * Math.PI * 2,
       r: SPAWN_R,
-      speed: 24 + state.wave * 1.5,
+      speed: (24 + state.wave * 1.5) * (SPAWN_R / SPAWN_R_BASE),
       hp: 2,
       maxHp: 2,
       wt: Math.random() * 10,      // phase accumulator, drives the lateral wander
@@ -669,6 +686,26 @@
     return best;
   }
 
+  // firing no longer has a flat world-distance cap — anything actually
+  // visible on screen right now is fair game, however far away, and
+  // conversely something geometrically close but off to the side (out of
+  // frame) isn't a valid target even if it's technically nearer than
+  // ATTACK_RANGE. Picks whichever visible candidate is nearest the wall.
+  function nearestVisibleTarget() {
+    const rot = state.theta - Math.PI / 4;
+    let best = null, bestR = Infinity;
+    const consider = (obj) => {
+      const x = obj.r * Math.cos(obj.angle), z = obj.r * Math.sin(obj.angle);
+      const y = obj.state === 'onTop' ? platformTopY() : 0;
+      const p = project(x, y, z, rot);
+      if (p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) return;
+      if (obj.r < bestR) { bestR = obj.r; best = obj; }
+    };
+    for (const e of state.enemies) { if (e.state !== 'jumping') consider(e); }
+    for (const s of state.siegeEngines) consider(s);
+    return best;
+  }
+
   // whoever's actively menacing the princess (same proximity check as her
   // own damage tick) gets absolute targeting priority from the lord and
   // every turret, regardless of range — protecting her matters more than
@@ -712,6 +749,26 @@
     e.dead = true;
     state.gold += 1;
     document.getElementById('goldNum').textContent = state.gold;
+    const ex = e.r * Math.cos(e.angle), ez = e.r * Math.sin(e.angle);
+    const ey = e.state === 'onTop' ? platformTopY() : 0;
+    spawnBurst(ex, ey, ez, e.tierIdx !== undefined ? 'sparkle' : 'smoke');
+  }
+
+  // a small death effect: a puff of smoke for a regular enemy, a burst of
+  // sparkles for a siege engine — purely decorative, no gameplay weight
+  function spawnBurst(x, y, z, kind) {
+    const n = kind === 'sparkle' ? 8 : 6;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = kind === 'sparkle' ? 40 + Math.random() * 30 : 12 + Math.random() * 8;
+      state.particles.push({
+        x, y: y + (kind === 'smoke' ? 4 : 0), z,
+        vx: Math.cos(a) * speed, vz: Math.sin(a) * speed,
+        vy: kind === 'smoke' ? 18 + Math.random() * 10 : (Math.random() - 0.3) * 30,
+        life: 0, maxLife: kind === 'sparkle' ? 0.35 : 0.6,
+        kind
+      });
+    }
   }
 
   // the donjon never actually loses on its own — castleH clamps at
@@ -1156,6 +1213,8 @@
               state.siegeEngines = state.siegeEngines.filter(s => s !== sortieTarget);
               state.gold += 5;
               goldNum.textContent = state.gold;
+              spawnBurst(sortieTarget.r * Math.cos(sortieTarget.angle), 0,
+                sortieTarget.r * Math.sin(sortieTarget.angle), 'sparkle');
             } else {
               killEnemy(sortieTarget);
             }
@@ -1460,7 +1519,7 @@
       p.atkTimer -= dt;
       if (p.atkTimer <= 0) {
         const from = worldPos(p.r, p.angle, platformTopY());
-        const target = princessDecoyTarget || nearestEnemyTo(from, ATTACK_RANGE);
+        const target = princessDecoyTarget || nearestVisibleTarget();
         if (target) {
           // facing it dead-on hits much harder; drifting off to the side
           // falls back toward normal — rewards actually turning to track
@@ -1477,7 +1536,7 @@
       t.atkTimer -= dt;
       if (t.atkTimer <= 0) {
         const from = worldPos(TURRET_R, t.angle, platformTopY());
-        const target = princessDecoyTarget || nearestEnemyTo(from, ATTACK_RANGE);
+        const target = princessDecoyTarget || nearestVisibleTarget();
         if (target) {
           const dmg = state.princessDead ? PRINCESS_DEATH_TURRET_MUL : 1;
           fire(from, target, dmg);
@@ -1500,6 +1559,16 @@
       }
     }
     state.projectiles = state.projectiles.filter(pr => pr.t < 1.05);
+
+    // particles (death effects)
+    for (const pt of state.particles) {
+      pt.life += dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.z += pt.vz * dt;
+      if (pt.kind === 'smoke') pt.vy *= (1 - 0.7 * dt); // rise, then ease off
+    }
+    state.particles = state.particles.filter(pt => pt.life < pt.maxLife);
   }
 
   // ---- rendering ----
@@ -1959,6 +2028,23 @@
     ctx.fill();
   }
 
+  function drawParticle(pt, rot) {
+    const f = 1 - pt.life / pt.maxLife; // 1 -> 0 fade
+    const pos = project(pt.x, pt.y, pt.z, rot);
+    if (pt.kind === 'smoke') {
+      ctx.fillStyle = `rgba(90,85,78,${0.5 * f})`;
+      const rad = (4 + (1 - f) * 6) * scale;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = `rgba(255,225,120,${f})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 2.5 * scale * Math.max(0.15, f), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function render() {
     ctx.fillStyle = '#e9dfc7';
     ctx.fillRect(0, 0, W, H);
@@ -2057,6 +2143,7 @@
     for (const o of onPlatform) o.draw();
 
     for (const pr of state.projectiles) drawProjectile(pr, rot);
+    for (const pt of state.particles) drawParticle(pt, rot);
 
     drawFightBanner();
   }
