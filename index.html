@@ -202,10 +202,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.29</button>
+  <button id="versionBtn">v0.30</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.30</b> — neige d'ambiance (3 plans de profondeur, vent latéral)</div>
   <div><b>v0.29</b> — musique de fond (bouton ON/OFF), spawn ennemis quasi à l'écran, sortie à vitesse de marche, bug bouton princesse</div>
   <div><b>v0.28</b> — porte/fenêtres foreshortening, pont de fortune sur les douves</div>
   <div><b>v0.27</b> — seigneur erre sorti sans cible, entrée/sortie forcée par la porte, câlin vise la vraie position</div>
@@ -285,6 +286,7 @@
     const x0 = (W / 2 + MARGIN) / 1.2247;
     const y0 = (H / 2 + MARGIN) / 0.7071;
     SPAWN_R = Math.max(480, Math.hypot(x0, y0) / scale);
+    initSnow(); // re-seed screen-space flakes to the new W/H (function is hoisted, safe to call here)
   }
   // spawning genuinely off-screen (above) is still correct — a wave should
   // never pop an enemy in mid-frame — but on a tall phone that radius is far
@@ -1216,6 +1218,8 @@
   let last = performance.now();
   function update(dt) {
     const p = state.player;
+
+    updateSnow(dt);
 
     if (state.fightBanner > 0) state.fightBanner = Math.max(0, state.fightBanner - dt);
 
@@ -2241,6 +2245,49 @@
     }
   }
 
+  // ---- ambient snow ----
+  // pure screen-space weather overlay, not tied to the iso world at all —
+  // three depth layers (back/mid/front) give the "air/volume" feeling asked
+  // for: far flakes small, slow, faint; near ones big, fast, bolder. A slow
+  // sine drives the lateral wind so it drifts rather than falling dead
+  // straight, alternating gently left/right rather than committing one way.
+  const SNOW_LAYERS = [
+    { size: 2.2, speed: 16, count: 34, alpha: 0.30, sway: 10 },
+    { size: 4.2, speed: 32, count: 20, alpha: 0.50, sway: 22 },
+    { size: 7.5, speed: 55, count: 11, alpha: 0.78, sway: 38 }
+  ];
+  let snowflakes = [];
+  function initSnow() {
+    snowflakes = [];
+    SNOW_LAYERS.forEach((layer, li) => {
+      for (let i = 0; i < layer.count; i++) {
+        snowflakes.push({
+          li,
+          x: Math.random() * W,
+          y: Math.random() * H,
+          phase: Math.random() * Math.PI * 2,
+          windSeed: 1 + Math.random() * 3
+        });
+      }
+    });
+  }
+  function updateSnow(dt) {
+    for (const f of snowflakes) {
+      const layer = SNOW_LAYERS[f.li];
+      f.phase += dt;
+      f.y += layer.speed * scale * dt;
+      f.x += Math.sin(f.phase * 0.6 + f.windSeed) * layer.sway * scale * dt;
+      if (f.y > H + 20) { f.y = -20; f.x = Math.random() * W; }
+      if (f.x < -20) f.x = W + 20; else if (f.x > W + 20) f.x = -20;
+    }
+  }
+  function drawSnow() {
+    for (const f of snowflakes) {
+      const layer = SNOW_LAYERS[f.li];
+      drawBallSprite(`snow${f.li}`, layer.size * scale, `rgba(255,255,255,${layer.alpha})`, 'rgba(255,255,255,0)', f);
+    }
+  }
+
   function render() {
     ctx.fillStyle = '#e9dfc7';
     ctx.fillRect(0, 0, W, H);
@@ -2346,6 +2393,7 @@
     for (const pt of state.particles) drawParticle(pt, rot);
 
     drawFightBanner();
+    drawSnow();
   }
 
   // screen-space HUD banner (not world-space — no rot involved), in the

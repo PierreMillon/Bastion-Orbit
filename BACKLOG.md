@@ -239,12 +239,14 @@ vagues suivantes continuent de s'en servir.
 
 ## Effets de mort → fait en v0.26
 
-## Neige / effet de profondeur en particules
+## Neige / effet de profondeur en particules → fait en v0.30
 
 Des flocons (gros, façon boules de neige stylisées) qui tombent avec un
 léger effet de vent latéral, sur plusieurs plans de profondeur — gros et
 rapides près de la caméra, petits et lents loin — pour un sentiment d'air/
-de volume. Idée à l'essai, pas encore de mécanique.
+de volume. Fait en pur espace écran (indépendant de la caméra iso), 3
+plans (34/20/11 flocons, tailles et vitesses croissantes), vent latéral en
+sinus par flocon.
 
 ## Fausse pub à la défaite
 
