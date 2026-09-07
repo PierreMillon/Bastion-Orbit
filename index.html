@@ -202,10 +202,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.24</button>
+  <button id="versionBtn">v0.25</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.25</b> — princesse dans le jardin, tourelles décalées, douves décalées, ligne plus droite, sortie sur cible de repli</div>
   <div><b>v0.24</b> — princesse vivante en haut (déplacement, aide réparation, decoy)</div>
   <div><b>v0.23</b> — câlin roi/reine (régén), princesse vulnérable en haut aussi, régén de fin de vague</div>
   <div><b>v0.22</b> — bouton vague manuelle, bouclier très résistant (plus invincible)</div>
@@ -348,6 +349,12 @@
   const PLATFORM_R = R * 1.4;   // wide walkway on top of the donjon — player and turrets actually stand here, not on the bare donjon rim
   const PLATFORM_H = 7;         // platform thickness
   const PLAYER_R = PLATFORM_R * 0.8; // stand a bit inside the platform's edge, not hanging off it
+  // turrets sit one notch further out than the lord's own ring — previously
+  // both were at the exact same radius, so a fast camera spin (his angle
+  // catching up to state.theta at a limited turn rate) could put him and a
+  // turret at momentarily near-identical depth, popping him behind it for
+  // a frame. Genuine radial separation removes the ambiguity outright.
+  const TURRET_R = PLAYER_R * 1.12;
   const TURRET_HEAL = 4;        // hp/s while player repairs a turret
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
@@ -457,9 +464,15 @@
   // garden: sparse, irregularly placed bush clumps enemies steer around.
   // Each clump precomputes up to 5 sphere offsets; only the first
   // 1+gardenLevel are ever drawn, so it visibly fills in as it levels up.
+  // Radii sorted ascending (innermost first) and pushed past MOAT_TIERS[0]
+  // (100) and [1] (122) entirely: liveBushes = BUSHES.slice(flooded)
+  // always drops the innermost ones first, and at every moat level the
+  // remaining visible bushes now sit strictly beyond that level's water
+  // radius — the moat used to visually touch/overlap the garden even at
+  // level 1, when nothing should be flooded yet.
   const BUSHES = [
-    { a: 0.2, r: 90 }, { a: 0.9, r: 105 }, { a: 1.7, r: 92 }, { a: 2.6, r: 114 },
-    { a: 3.3, r: 88 }, { a: 4.1, r: 108 }, { a: 5.0, r: 95 }, { a: 5.7, r: 118 }
+    { a: 3.3, r: 135 }, { a: 1.7, r: 142 }, { a: 5.0, r: 149 }, { a: 0.2, r: 156 },
+    { a: 4.1, r: 163 }, { a: 2.6, r: 170 }, { a: 0.9, r: 177 }, { a: 5.7, r: 184 }
   ].map(b => {
     const x = b.r * Math.cos(b.a), z = b.r * Math.sin(b.a);
     const offs = [];
@@ -545,19 +558,34 @@
     return best;
   }
 
+  // sortie priority: a siege engine (or one being built/carrying a ladder,
+  // once those exist) first — the only thing ranged fire truly struggles
+  // against; failing that, whoever's nearest the wall (or, failing that,
+  // approaching), so holding Sortie always has something to do instead of
+  // just idling outside the door
+  function nearestSortieTarget(fromAngle) {
+    const siege = nearestSiegeEngine(fromAngle);
+    if (siege) return siege;
+    let best = null, bestD = Infinity;
+    for (const e of state.enemies) {
+      if (e.state !== 'attackBase' && e.state !== 'approach') continue;
+      const d = Math.abs(angDiff(fromAngle, e.angle));
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
   // interpolated straight through the door: platform (up) to garden (down),
   // driven by the eased state.princess.pos scalar — see update()
   function princessWorld() {
     const pr = state.princess;
-    const t = pr.pos;
     const upY = platformTopY();
-    // radius blends from her current up-top spot (wandered, dynamic) to
-    // the fixed garden spot; angle blends from wherever she is up top to
-    // the door — while fully up (t~0) her own angle/r drive it directly
-    const r = pr.r + (PRINCESS_DOWN_R - pr.r) * t;
-    const y = upY + (0 - upY) * t;
-    const a = pr.angle + angDiff(pr.angle, DOOR_ANGLE) * t;
-    return { x: r * Math.cos(a), y, z: r * Math.sin(a), r };
+    // pr.angle/pr.r are the single source of truth now (eased toward
+    // whichever target update() picks — wander, approach, or the door
+    // during a transit); only the height still blends off pos, since
+    // that's what actually carries her up/down through the donjon
+    const y = upY + (0 - upY) * pr.pos;
+    return { x: pr.r * Math.cos(pr.angle), y, z: pr.r * Math.sin(pr.angle), r: pr.r };
   }
 
   // how much extra damage the lord does depending on how squarely he's
@@ -673,7 +701,7 @@
     let best = { type: 'player' };
     let bestD = Math.hypot(landedX - pw.x, landedZ - pw.z);
     for (const t of state.towers) {
-      const tx = PLAYER_R * Math.cos(t.angle), tz = PLAYER_R * Math.sin(t.angle);
+      const tx = TURRET_R * Math.cos(t.angle), tz = TURRET_R * Math.sin(t.angle);
       const d = Math.hypot(landedX - tx, landedZ - tz);
       if (d < bestD) { bestD = d; best = { type: 'tower', ref: t }; }
     }
@@ -1039,7 +1067,7 @@
     const guardPos = worldPos(PLAYER_R, state.theta, platformTopY());
     const threat = nearestEnemyTo(guardPos, ATTACK_RANGE);
     const damagedTurret = threat ? null : nearestDamagedTurret(p.angle);
-    const sortieTarget = state.sortieHeld ? nearestSiegeEngine(p.angle) : null;
+    const sortieTarget = state.sortieHeld ? nearestSortieTarget(p.angle) : null;
 
     // calin only ever triggers if she's already down there — holding the
     // button while she's still up (or dead) does nothing extra, it's just
@@ -1124,9 +1152,13 @@
           playHammer();
           p.sortieTimer = SORTIE_TICK;
           if (sortieTarget.hp <= 0) {
-            state.siegeEngines = state.siegeEngines.filter(s => s !== sortieTarget);
-            state.gold += 5;
-            goldNum.textContent = state.gold;
+            if (sortieTarget.tierIdx !== undefined) {
+              state.siegeEngines = state.siegeEngines.filter(s => s !== sortieTarget);
+              state.gold += 5;
+              goldNum.textContent = state.gold;
+            } else {
+              killEnemy(sortieTarget);
+            }
           }
         }
       } else {
@@ -1165,11 +1197,14 @@
       if (Math.abs(prDelta) < 0.01) pr.pos = pr.target;
       else pr.pos += prDelta * (1 - Math.exp(-PRINCESS_EASE_RATE * dt));
 
-      // up top and settled (not currently transiting): she wanders the
-      // whole platform on her own, but heads straight for the lord's side
-      // once there's real pressure — otherwise she just eases back toward
-      // the door angle, ready for the transit down/up to carry her through
-      let prAngleTarget = DOOR_ANGLE, prRTarget = pr.r;
+      // three phases: settled up top (wander, or beeline for the lord's
+      // side under real pressure), settled down in the garden (wander a
+      // smaller patch, no threat-approach logic there), or actually
+      // transiting between the two (always head straight for the door
+      // angle, radius easing toward whichever end she's headed to) — this
+      // is what keeps the crossing itself happening at the doorway rather
+      // than at wherever she happened to wander off to
+      let prAngleTarget, prRTarget;
       if (pr.pos < 0.15 && pr.target === 0) {
         prRTarget = PLAYER_R;
         pr.wanderTimer -= dt;
@@ -1184,6 +1219,20 @@
           if (Math.hypot(guardPos.x - ex, guardPos.z - ez) < ATTACK_RANGE) nearby++;
         }
         prAngleTarget = nearby >= PRINCESS_THREAT_COUNT ? p.angle : pr.wanderTarget;
+      } else if (pr.pos > 0.85 && pr.target === 1) {
+        prRTarget = PRINCESS_DOWN_R;
+        pr.wanderTimer -= dt;
+        if (pr.wanderTimer <= 0) {
+          // a modest patch around the door, not the whole garden ring
+          pr.wanderTarget = DOOR_ANGLE + (Math.random() - 0.5) * 1.4;
+          pr.wanderTimer = 3 + Math.random() * 4;
+        }
+        prAngleTarget = pr.wanderTarget;
+      } else {
+        // in transit: converge on the door, ease toward whichever radius
+        // she's headed for
+        prAngleTarget = DOOR_ANGLE;
+        prRTarget = pr.target === 1 ? PRINCESS_DOWN_R : PLAYER_R;
       }
       const paDelta = angDiff(pr.angle, prAngleTarget);
       const paStep = PRINCESS_ANGLE_SPEED * dt;
@@ -1314,7 +1363,7 @@
 
         // a gentle side-to-side sway so the approach doesn't read as a laser-
         // straight line — skipped while fleeing (that one walks straight out)
-        if (!e.fleeing) e.angle += Math.sin(e.wt * 0.4 + e.wanderSeed) * 0.35 * dt;
+        if (!e.fleeing) e.angle += Math.sin(e.wt * 0.4 + e.wanderSeed) * 0.175 * dt;
 
         if (state.moatLevel > 0 && e.r <= MOAT_TIERS[state.moatLevel - 1].r) {
           // deeper water (higher level) slows more, and from level 3 the
@@ -1427,7 +1476,7 @@
     for (const t of state.towers) {
       t.atkTimer -= dt;
       if (t.atkTimer <= 0) {
-        const from = worldPos(PLAYER_R, t.angle, platformTopY());
+        const from = worldPos(TURRET_R, t.angle, platformTopY());
         const target = princessDecoyTarget || nearestEnemyTo(from, ATTACK_RANGE);
         if (target) {
           const dmg = state.princessDead ? PRINCESS_DEATH_TURRET_MUL : 1;
@@ -1746,7 +1795,7 @@
     for (const o of state.towers) {
       if (o === t) continue;
       const dAngle = Math.abs(angDiff(t.angle, o.angle));
-      const dist = 2 * PLAYER_R * Math.sin(dAngle / 2);
+      const dist = 2 * TURRET_R * Math.sin(dAngle / 2);
       if (dist < TURRET_INFLUENCE_R) c += 1 - dist / TURRET_INFLUENCE_R;
     }
     return c;
@@ -1758,7 +1807,7 @@
   // the two signals never fight over the same channel
   function drawTurret(t, rot) {
     const y0 = platformTopY(), y1 = y0 + 20, half = 8;
-    const px = PLAYER_R * Math.cos(t.angle), pz = PLAYER_R * Math.sin(t.angle);
+    const px = TURRET_R * Math.cos(t.angle), pz = TURRET_R * Math.sin(t.angle);
     const tops = SQUARE_PTS.map(c => project(px + half * c.cx, y1, pz + half * c.cz, rot));
     const bots = SQUARE_PTS.map(c => project(px + half * c.cx, y0, pz + half * c.cz, rot));
 
@@ -1882,6 +1931,17 @@
       ctx.font = `${Math.round(14 * scale)}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText('❤', pos.x, pos.y - rad - 20);
+    } else if (pr.pos > 0.92) {
+      // down in the garden: show what she's actually earning, so the
+      // bonus reads as a real number instead of a hidden percentage
+      const effGarden = Math.max(0, state.gardenLevel - state.moatLevel);
+      if (effGarden > 0) {
+        const amount = Math.round(GARDEN_TIERS[effGarden - 1].rate * PRINCESS_GOLD_BONUS);
+        ctx.font = `${Math.round(10 * scale)}px "IBM Plex Mono", ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#d9b98a';
+        ctx.fillText('+' + amount + '🪙/' + GARDEN_TICK + 's', pos.x, pos.y - rad - 18);
+      }
     }
   }
 
@@ -1944,8 +2004,8 @@
     const princessVisible = !state.princessDead;
     const princessGrounded = princessVisible && state.princess.pos >= 0.5;
     const princessOnPlatform = princessVisible && state.princess.pos < 0.5;
-    const princessFar = princessGrounded && Math.cos(DOOR_ANGLE - rot) < 0;
-    const princessNear = princessGrounded && Math.cos(DOOR_ANGLE - rot) >= 0;
+    const princessFar = princessGrounded && Math.cos(state.princess.angle - rot) < 0;
+    const princessNear = princessGrounded && Math.cos(state.princess.angle - rot) >= 0;
 
     // same split for the lord himself once he's sortied out through the
     // door — otherwise (up on the platform) he stays in the onPlatform pass
@@ -1973,7 +2033,7 @@
     // the platform's own top surface, so it's always drawn after drawCastle,
     // just depth-sorted among itself so these still occlude each other
     const onPlatform = state.towers.map(t => ({
-      depth: project(PLAYER_R * Math.cos(t.angle), platformTopY(), PLAYER_R * Math.sin(t.angle), rot).depth,
+      depth: project(TURRET_R * Math.cos(t.angle), platformTopY(), TURRET_R * Math.sin(t.angle), rot).depth,
       draw: () => drawTurret(t, rot)
     }));
     if (princessOnPlatform) {
