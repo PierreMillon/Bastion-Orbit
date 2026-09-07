@@ -202,10 +202,11 @@
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
-  <button id="versionBtn">v0.28</button>
+  <button id="versionBtn">v0.29</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.29</b> — musique de fond (bouton ON/OFF), spawn ennemis quasi à l'écran, sortie à vitesse de marche, bug bouton princesse</div>
   <div><b>v0.28</b> — porte/fenêtres foreshortening, pont de fortune sur les douves</div>
   <div><b>v0.27</b> — seigneur erre sorti sans cible, entrée/sortie forcée par la porte, câlin vise la vraie position</div>
   <div><b>v0.26</b> — apparition toujours hors écran, tir sans limite si visible, effets de mort</div>
@@ -245,9 +246,11 @@
   <a href="https://pierremillon.github.io/Forge-Line/">→ Forge Line</a>
   <a href="https://pierremillon.github.io/knight-wars/">→ Knight Wars</a>
   <button id="menuRestartBtn">Recommencer depuis le début</button>
+  <button id="musicBtn">Musique : ON</button>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
+<audio id="bgMusic" src="music.wav" loop preload="auto"></audio>
 
 <div id="overlay" hidden>
   <div id="overlayText"></div>
@@ -283,6 +286,16 @@
     const y0 = (H / 2 + MARGIN) / 0.7071;
     SPAWN_R = Math.max(480, Math.hypot(x0, y0) / scale);
   }
+  // spawning genuinely off-screen (above) is still correct — a wave should
+  // never pop an enemy in mid-frame — but on a tall phone that radius is far
+  // past the visible edge, and enemies used to cross that whole invisible
+  // stretch at wave-pace: minutes of "existing" before you could see or
+  // target them, especially the very first one of the game. This multiplier
+  // only applies while an enemy's projected position is actually outside
+  // the screen rect (see the 'approach' state below) — it closes that gap
+  // fast, then drops straight back to the normal wave-paced speed the
+  // instant it's on screen, so pacing inside the visible fight is untouched.
+  const OFFSCREEN_APPROACH_MUL = 2.2;
   addEventListener('resize', resize);
   resize();
 
@@ -324,6 +337,29 @@
   addEventListener('touchstart', ensureAudio, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureAudio(); });
 
+  // ---- background music: a real audio loop this time, not synthesized —
+  // starts on the same first-gesture unlock as the sfx, on by default, with
+  // an ON/OFF toggle in the menu (remembered across sessions)
+  const bgMusic = document.getElementById('bgMusic');
+  const musicBtn = document.getElementById('musicBtn');
+  bgMusic.volume = 0.35;
+  let musicOn = true;
+  try { musicOn = localStorage.getItem('bo_musicOn') !== 'off'; } catch (e) { /* ignore */ }
+  function updateMusicBtn() { musicBtn.textContent = 'Musique : ' + (musicOn ? 'ON' : 'OFF'); }
+  updateMusicBtn();
+  function tryPlayMusic() {
+    if (!musicOn) return;
+    bgMusic.play().catch(() => { /* still blocked, next gesture retries via ensureAudio */ });
+  }
+  addEventListener('pointerdown', tryPlayMusic, { capture: true });
+  addEventListener('touchstart', tryPlayMusic, { capture: true, passive: true });
+  musicBtn.addEventListener('click', () => {
+    musicOn = !musicOn;
+    try { localStorage.setItem('bo_musicOn', musicOn ? 'on' : 'off'); } catch (e) { /* ignore */ }
+    updateMusicBtn();
+    if (musicOn) tryPlayMusic(); else bgMusic.pause();
+  });
+
   // iOS still shows its double-tap-to-zoom magnifier here and there even
   // with touch-action:none + user-scalable=no on the viewport — this is the
   // standard extra kill switch: swallow the second tap of any fast double
@@ -364,6 +400,13 @@
   const ATTACK_RANGE = 260;
   const ANGLE_SPEED = 1.6;      // rad/s, player catching up to camera
   const RADIAL_EASE_RATE = 5.5; // how fast the in/out ease converges (higher = snappier)
+  // the ease above scales with distance, so a long trek (sortie out to a
+  // siege engine near the moat, well past a turret repair's few pixels)
+  // covered most of its ground in a couple of frames — read as a teleport
+  // instead of a walk. Capping the per-frame radial step to a real walking
+  // speed keeps short moves snappy (ease finishes under the cap anyway)
+  // while long ones actually take visible time.
+  const PLAYER_WALK_SPEED = 70; // world units/s, lord's own two feet
   const PLATFORM_R = R * 1.4;   // wide walkway on top of the donjon — player and turrets actually stand here, not on the bare donjon rim
   const PLATFORM_H = 7;         // platform thickness
   const PLAYER_R = PLATFORM_R * 0.8; // stand a bit inside the platform's edge, not hanging off it
@@ -637,13 +680,32 @@
     return 1;
   }
 
+  // SPAWN_R (see resize()) is sized for the WORST-CASE spawn angle — the one
+  // direction, relative to the current camera rotation, where the iso
+  // ellipse is narrowest on screen. Most angles need far less distance to
+  // already be off-screen. Picking the radius per-spawn, tailored to the
+  // angle actually rolled, keeps every enemy genuinely unseen at the moment
+  // it appears while cutting the average "walking in from nowhere" leg way
+  // down — which is what actually matters for feel, not the ceiling.
+  function tightSpawnR(angle) {
+    const rot = state.theta - Math.PI / 4;
+    const phi = angle - rot;
+    const sxu = cosIso * (Math.cos(phi) - Math.sin(phi));
+    const syu = sinIso * (Math.cos(phi) + Math.sin(phi));
+    const MARGIN = 30;
+    const rx = Math.abs(sxu) > 1e-3 ? (W / 2 + MARGIN) / (scale * Math.abs(sxu)) : Infinity;
+    const ry = Math.abs(syu) > 1e-3 ? (H / 2 + MARGIN) / (scale * Math.abs(syu)) : Infinity;
+    return Math.min(SPAWN_R, Math.max(220, Math.min(rx, ry)));
+  }
+
   function spawnEnemy() {
     const builder = state.buildersToSpawn > 0;
     if (builder) state.buildersToSpawn--;
+    const angle = Math.random() * Math.PI * 2;
     state.enemies.push({
-      angle: Math.random() * Math.PI * 2,
-      r: SPAWN_R,
-      speed: (24 + state.wave * 1.5) * (SPAWN_R / SPAWN_R_BASE),
+      angle,
+      r: tightSpawnR(angle),
+      speed: 24 + state.wave * 1.5, // wave-paced approach speed once actually on screen — see OFFSCREEN_APPROACH_MUL for the unseen leg
       hp: 2,
       maxHp: 2,
       wt: Math.random() * 10,      // phase accumulator, drives the lateral wander
@@ -1027,6 +1089,14 @@
   let princessHoldTimer = null, princessIsHolding = false;
   princessBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    // pointer capture: on a small mobile button, the finger easily drifts
+    // outside the element's bounds during a tap, which used to fire
+    // pointerleave (toggling target) *and then* pointerup (toggling it
+    // right back) — two toggles cancelling out looked like the button
+    // silently doing nothing. Capturing the pointer keeps every event
+    // routed to this element until release, so only one fires.
+    try { princessBtn.setPointerCapture(e.pointerId); } catch (err) {}
+    princessBtnReleased = false;
     princessIsHolding = false;
     clearTimeout(princessHoldTimer);
     princessHoldTimer = setTimeout(() => {
@@ -1036,7 +1106,10 @@
       princessBtn.classList.add('active');
     }, PRINCESS_TAP_MS);
   });
+  let princessBtnReleased = true;
   const releasePrincessBtn = () => {
+    if (princessBtnReleased) return; // belt-and-braces: never act twice on one press
+    princessBtnReleased = true;
     clearTimeout(princessHoldTimer);
     if (princessIsHolding) {
       state.calin.held = false;
@@ -1238,7 +1311,11 @@
     // target gives exactly that, organically, with no keyframed curve.
     const rDelta = targetR - p.r;
     if (Math.abs(rDelta) < 0.4) p.r = targetR;
-    else p.r += rDelta * (1 - Math.exp(-RADIAL_EASE_RATE * dt));
+    else {
+      const eased = rDelta * (1 - Math.exp(-RADIAL_EASE_RATE * dt));
+      const cap = PLAYER_WALK_SPEED * dt;
+      p.r += Math.abs(eased) > cap ? Math.sign(eased) * cap : eased;
+    }
 
     // ground position (0 = up on the platform, 1 = down through the door,
     // sortied out) eases the same organic way
@@ -1504,6 +1581,10 @@
             if (e.hp <= 0) killEnemy(e);
           }
         }
+        const rotNow = state.theta - Math.PI / 4;
+        const sp0 = project(ex0, 0, ez0, rotNow);
+        const onScreen0 = sp0.x > -20 && sp0.x < W + 20 && sp0.y > -20 && sp0.y < H + 20;
+        if (!onScreen0) speedMul *= OFFSCREEN_APPROACH_MUL;
         e.r = Math.min(SPAWN_R, e.r - e.speed * speedMul * dt);
         avoidBushes(e);
         // spooked and walked all the way back out — vanishes, no gold (the
