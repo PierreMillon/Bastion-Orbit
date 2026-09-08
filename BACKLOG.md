@@ -757,7 +757,7 @@ reste à revoir mécanique par mécanique, *pas fait*.
    Idéalement, plus tard, un test automatique vérifiant que chaque
    constante de gameplay est référencée dans les textes — pas fait non
    plus.
-4. **Lisibilité des mécaniques** — moitié faite en v0.58.
+4. **Lisibilité des mécaniques** — fait en v0.58/v0.59.
    - **Nombre flottant au-dessus de la tête pour tout gain d'or** → fait.
      `spawnFloatingGold(x, y, z, amount, highlight)` + `state.floatingTexts`
      (même schéma que `state.particles` : vieillit via `dt`, purgé à la
@@ -777,9 +777,50 @@ reste à revoir mécanique par mécanique, *pas fait*.
      après un clic sur "Vague +") : le "+2" se lit clairement au-dessus
      du seigneur, aucune erreur console.
    - **Jauge/horloge circulaire au-dessus du personnage pour toute
-     attente qui déclenche un effet** — toujours *pas fait*, chantier
-     séparé (identifier tous les "temps d'attente" du jeu — huile,
-     construction de pont, etc. — puis un composant de jauge réutilisable).
+     attente qui déclenche un effet** → fait en v0.59, sur les attentes
+     "antagonistes" (celles que le joueur doit pouvoir anticiper — le
+     camp du seigneur a déjà un retour visible par nature : animation
+     d'attaque, projectile qui part). `drawWaitGauge(pos, rad, frac,
+     color)` : un simple arc (PAS un anneau complet + arc par-dessus,
+     voir plus bas pourquoi) tracé autour du personnage/de l'engin,
+     jamais au-dessus (pour ne pas entrer en collision avec la barre de
+     vie déjà affichée là). `frac` va de 0 (attente qui commence) à 1
+     (effet sur le point de se déclencher). Appliqué à :
+     - un ennemi qui pose un pont (`buildTimer`/`BRIDGE_BUILD_TIME`) ;
+     - un ennemi au pied du mur, qu'il grignote la pierre ou plante une
+       échelle (`timer`/1.2 ou `LADDER_SETUP_TIME`, couleur différente
+       pour l'échelle — déjà prioritaire par sa couleur de corps, main-
+       tenant aussi par sa jauge) ;
+     - un ennemi juché sur la plateforme avant de frapper (`timer`/1.4) ;
+     - un engin de siège (arbalète/trébuchet, ou tour une fois assez
+       haute pour frapper) avant son prochain tir (`atkTimer`/
+       `tier.cooldown`) — pas sur un bouclier (ne tire jamais) ni une
+       tour encore en train de grandir (son fût qui pousse à vue est déjà
+       son propre retour visuel, une jauge en plus aurait fait doublon).
+
+     **Bug trouvé en testant, pas en relisant le code** : la première
+     version dessinait une piste de fond (cercle complet, blanc très
+     transparent) puis l'arc de progression par-dessus, dans sa couleur
+     propre — en Couleur ça aurait marché, mais en Phosphore/Filaire (le
+     seul style qu'on garde, v0.56) `wrapPhosphor` force TOUJOURS
+     `stroke()` à la couleur pleine `phosphorLine()`, alpha ignoré : la
+     piste de fond ressortait donc aussi opaque et de la MÊME couleur
+     que l'arc de progression dessiné dessus, qui devenait invisible —
+     un anneau complet et fixe, aucune information de progression
+     lisible. Repéré sur capture (Playwright, ennemis forcés dans chaque
+     état via `window.__DEBUG_STATE`, retiré depuis) : deux "cercles"
+     qui semblaient pleins alors que leurs `frac` différaient nettement
+     (58% vs 27%). Fix : plus de piste de fond du tout — l'arc seul
+     suffit, il grandit visiblement depuis rien jusqu'au cercle complet.
+     Revérifié après coup : les deux arcs se lisent bien à des longueurs
+     différentes, plus de couleur codée en Phosphore/Filaire (comme le
+     reste du jeu dans ces styles) mais la progression est claire.
+     Limite assumée, symétrique à celle des maisons-cachettes plus haut :
+     les attentes côté joueur (huile, réparation, sortie, tir des
+     tourelles/du seigneur) n'ont pas de jauge — déjà un retour visuel
+     par nature (animation, projectile qui part, bouton actif), moins
+     "silencieuses" que les attentes ennemies qui, avant cette version,
+     ne montraient RIEN avant que l'effet ne tombe.
 
 ### Partie 3 — difficulté (priorité n°1 de Pierre, sur les 3 jeux)
 
