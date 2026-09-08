@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.57</button>
+  <button id="versionBtn">v0.58</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.58</b> — nombres d'or flottants : chaque gain (kill, engin de siège détruit, vague écourtée, revenu du jardin) s'affiche maintenant au-dessus de sa source, avec un highlight quand le bonus princesse ×1.5 s'applique</div>
   <div><b>v0.57</b> — chaque maison (et la grange/l'église) a maintenant sa propre orientation au lieu d'être toutes parallèles entre elles</div>
   <div><b>v0.56</b> — style Couleur mis en pause (Phosphore/Filaire seulement dans le menu, le code reste en réserve) ; la neige redevient de simples particules pleines au lieu de petits cercles creux qu'on confondait avec des ennemis lointains</div>
   <div><b>v0.55</b> — village étendu : 5 maisons de plus (dont plusieurs bien plus loin), et un vrai cœur de village avec une grange, une église (clocher + croix) et une fontaine qui scintille</div>
@@ -1640,6 +1641,7 @@
     calin: { held: false, grace: 0, hugging: false },
     siegeEngines: [],
     particles: [], // short-lived death effects (smoke/sparkle), purely visual
+    floatingTexts: [], // nombres d'or flottants (Partie 2.4 : "rien ne se passe en silence") — voir spawnFloatingGold
     bridges: [], // { angle, hp, maxHp } — planks laid across the moat
     moatSlowedThisWave: false, // did the moat actually slow anyone this wave
     buildersToSpawn: 0, // how many of the next spawns should be flagged as bridge builders
@@ -1887,8 +1889,11 @@
   function callNextWaveEarly() {
     if (state.waveState === 'gameover') return;
     const supersededSize = 3 + state.wave * 2;
-    state.gold += Math.floor(supersededSize / 2);
+    const bonus = Math.floor(supersededSize / 2);
+    state.gold += bonus;
     goldNum.textContent = state.gold;
+    const pw = playerWorld();
+    spawnFloatingGold(pw.x, pw.y, pw.z, bonus);
     state.wave++;
     document.getElementById('waveNum').textContent = state.wave;
     state.toSpawn += 3 + state.wave * 2;
@@ -2018,6 +2023,7 @@
     const ex = e.r * Math.cos(e.angle), ez = e.r * Math.sin(e.angle);
     const ey = e.state === 'onTop' ? platformTopY() : 0;
     spawnBurst(ex, ey, ez, e.tierIdx !== undefined ? 'sparkle' : 'smoke');
+    spawnFloatingGold(ex, ey, ez, 1);
   }
 
   // a small death effect: a puff of smoke for a regular enemy, a burst of
@@ -2052,6 +2058,24 @@
         kind
       });
     }
+  }
+
+  // nombres d'or flottants (Partie 2.4 de la grosse consigne du
+  // 2026-09-08 : "nombre flottant au-dessus de la tête pour tout gain
+  // d'or" — "rien ne se passe en silence"). Un seul point d'appel pour
+  // les 4 endroits qui touchent state.gold, pour ne pas en oublier un
+  // futur : monte doucement, s'estompe, jamais posé sur le sol comme une
+  // particule — highlight (plus grand, doré plus vif) pour un gain
+  // notablement au-dessus de la normale (le bonus princesse au jardin,
+  // demandé explicitement en Partie 1.C).
+  function spawnFloatingGold(x, y, z, amount, highlight) {
+    if (amount === 0) return;
+    state.floatingTexts.push({
+      x, y: y + 14, z,
+      text: (amount > 0 ? '+' : '') + amount,
+      t: 0, life: 1.1,
+      highlight: !!highlight
+    });
   }
 
   // gag à la défaite : la fausse pub s'affiche d'abord, "Continuer quand
@@ -2859,8 +2883,9 @@
               state.siegeEngines = state.siegeEngines.filter(s => s !== sortieTarget);
               state.gold += 5;
               goldNum.textContent = state.gold;
-              spawnBurst(sortieTarget.r * Math.cos(sortieTarget.angle), 0,
-                sortieTarget.r * Math.sin(sortieTarget.angle), 'sparkle');
+              const sx = sortieTarget.r * Math.cos(sortieTarget.angle), sz = sortieTarget.r * Math.sin(sortieTarget.angle);
+              spawnBurst(sx, 0, sz, 'sparkle');
+              spawnFloatingGold(sx, 0, sz, 5);
             }
           } else {
             sortieTarget.hp -= SORTIE_DMG * horseMul(state.horseLevel);
@@ -3010,10 +3035,17 @@
       state.gardenTimer -= dt;
       if (state.gardenTimer <= 0) {
         let amount = gardenRate(effGarden);
-        if (!state.princessDead && state.princess.pos > 0.92) amount *= PRINCESS_GOLD_BONUS;
+        const princessBonus = !state.princessDead && state.princess.pos > 0.92;
+        if (princessBonus) amount *= PRINCESS_GOLD_BONUS;
         amount = Math.round(amount);
         state.gold += amount;
         goldNum.textContent = state.gold;
+        // au pied de la princesse si elle est en bas à en profiter (le
+        // bonus doit visiblement lui appartenir), sinon au centre du
+        // jardin — highlight quand son bonus ×1.5 s'applique (demandé
+        // explicitement : "un gain visiblement supérieur")
+        const gw = princessBonus ? princessWorld() : { x: PRINCESS_DOWN_R * Math.cos(DOOR_ANGLE), y: 0, z: PRINCESS_DOWN_R * Math.sin(DOOR_ANGLE) };
+        spawnFloatingGold(gw.x, gw.y, gw.z, amount, princessBonus);
         state.gardenTimer = GARDEN_TICK;
       }
     } else {
@@ -3313,6 +3345,11 @@
       if (pt.kind === 'smoke') pt.vy *= (1 - 0.7 * dt); // rise, then ease off
     }
     state.particles = state.particles.filter(pt => pt.life < pt.maxLife);
+
+    // nombres d'or flottants — juste vieillir/purger ici, la position
+    // (montée + fondu) se calcule au dessin (voir drawFloatingText)
+    for (const f of state.floatingTexts) f.t += dt;
+    state.floatingTexts = state.floatingTexts.filter(f => f.t < f.life);
   }
 
   // ---- rendering ----
@@ -4456,6 +4493,25 @@
     }
   }
 
+  // nombres d'or flottants (Partie 2.4) : monte doucement et s'estompe —
+  // même limite déjà acceptée par drawParticle plus haut, l'alpha de
+  // fillStyle est ignoré par wrapPhosphor en Phosphore/Filaire (fillText
+  // y est toujours tracé plein, voir wrapPhosphor), donc le fondu ne se
+  // voit vraiment qu'en Couleur ; en Phosphore/Filaire le nombre monte
+  // puis disparaît net à la fin de sa vie plutôt que de s'estomper —
+  // acceptable, pas pire que le comportement déjà en place ailleurs.
+  function drawFloatingText(f, rot) {
+    const k = f.t / f.life; // 0 -> 1
+    const alpha = 1 - k;
+    const rise = 26 * k;
+    const pos = project(f.x, f.y, f.z, rot);
+    const size = f.highlight ? 13 : 11;
+    ctx.font = `bold ${Math.round(size * scale)}px "IBM Plex Mono", ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = f.highlight ? `rgba(255,214,110,${alpha})` : `rgba(244,211,94,${alpha})`;
+    ctx.fillText(f.text, pos.x, pos.y - rise);
+  }
+
   // ---- ambient snow ---- (SNOW_LAYERS/snowflakes declared up near W/H/
   // scale, for the same "resize() runs first" TDZ reason)
   function initSnow() {
@@ -4638,6 +4694,7 @@
 
     for (const pr of state.projectiles) drawProjectile(pr, rot);
     for (const pt of state.particles) drawParticle(pt, rot);
+    for (const f of state.floatingTexts) drawFloatingText(f, rot);
 
     drawFightBanner();
     drawSnow();

@@ -708,11 +708,10 @@ déjà noté ailleurs dans ce fichier comme jamais fait : des vrais groupes
 visibles, des équipages autour des engins, du mouvement partout — pas
 juste 2-3 silhouettes isolées.
 
-**C. Princesse et mécaniques utiles** — *pas fait*. Chaque mécanique
-doit être réellement rentable, l'avantage doit se voir. La princesse au
-jardin doit rapporter un gain visiblement supérieur, affiché en chiffres
-flottants au-dessus d'elle (comme la mécanique de nombres flottants
-demandée plus largement en partie 2.4).
+**C. Princesse et mécaniques utiles** — le volet "nombres flottants" fait
+en v0.58 (voir Partie 2.4 ci-dessous pour le détail technique, commun
+aux deux). Le reste ("chaque mécanique doit être réellement rentable")
+reste à revoir mécanique par mécanique, *pas fait*.
 
 ### Partie 2 — uniformisation des 3 jeux (même consigne envoyée à Knight Wars et Forge Line — ces deux-là ne sont pas dans ce dépôt/cette session)
 
@@ -758,11 +757,29 @@ demandée plus largement en partie 2.4).
    Idéalement, plus tard, un test automatique vérifiant que chaque
    constante de gameplay est référencée dans les textes — pas fait non
    plus.
-4. **Lisibilité des mécaniques** — *pas fait*. Chaque mécanique
-   concrète a un retour visuel explicite : jauge/horloge circulaire au-
-   dessus du personnage pour toute attente qui déclenche un effet ;
-   nombre flottant au-dessus de la tête pour tout gain d'or. Règle :
-   rien ne se passe en silence.
+4. **Lisibilité des mécaniques** — moitié faite en v0.58.
+   - **Nombre flottant au-dessus de la tête pour tout gain d'or** → fait.
+     `spawnFloatingGold(x, y, z, amount, highlight)` + `state.floatingTexts`
+     (même schéma que `state.particles` : vieillit via `dt`, purgé à la
+     fin de sa vie). UN seul point d'appel utilisé aux 4 endroits qui
+     touchent `state.gold` : `killEnemy` (+1, à la position de l'ennemi),
+     destruction d'un engin de siège par sortie (+5, à sa position),
+     `callNextWaveEarly` (bonus de la vague écourtée, à la position du
+     seigneur), et le tick de revenu du jardin (au pied de la princesse
+     si elle est en bas à en profiter, sinon au centre du jardin —
+     `highlight` quand son bonus ×1.5 s'applique, demandé explicitement
+     en Partie 1.C : "gain visiblement supérieur"). Limite assumée : le
+     fondu (alpha) ne se voit vraiment qu'en style Couleur (en pause,
+     v0.56) — `wrapPhosphor` ignore l'alpha de `fillText` en Phosphore/
+     Filaire, exactement comme `drawParticle` déjà en place l'acceptait ;
+     en Phosphore/Filaire le nombre monte puis disparaît net en fin de
+     vie plutôt que de s'estomper. Vérifié en Playwright (capture juste
+     après un clic sur "Vague +") : le "+2" se lit clairement au-dessus
+     du seigneur, aucune erreur console.
+   - **Jauge/horloge circulaire au-dessus du personnage pour toute
+     attente qui déclenche un effet** — toujours *pas fait*, chantier
+     séparé (identifier tous les "temps d'attente" du jeu — huile,
+     construction de pont, etc. — puis un composant de jauge réutilisable).
 
 ### Partie 3 — difficulté (priorité n°1 de Pierre, sur les 3 jeux)
 
