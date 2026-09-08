@@ -681,3 +681,83 @@ de faire bientôt" du rapport ont été appliqués :
 générique pour le split far/near répété ~8 fois dans `render()`, fusion
 de `drawRoadRun`/`drawStreamRun` (quasi identiques). Rien d'urgent tant
 qu'aucune nouvelle feature ne vient justement toucher ces zones.
+
+## Grosse consigne du 2026-09-08 (dictée vocale, routine programmée) — en cours
+
+Consigne complète reçue via une routine programmée, retranscrite et
+structurée par Pierre. Notée intégralement ici avant tout travail (règle
+habituelle : rien ne se perd), statut de chaque point à jour au fil de
+l'avancement.
+
+### Partie 1 — corrections Bastion Orbit
+
+**A. Engins de siège à distance** — *pas fait*. Aujourd'hui les ennemis
+attendent d'être trop près du donjon pour lancer les engins (voir
+`SIEGE_GROUP_RADIUS`/`clusterSiegeEngines`). Il faut qu'ils se
+FABRIQUENT au loin (visibles à l'écran, mais loin du donjon), puis
+agissent selon leur nature : le trébuchet tire à distance depuis là où
+il est construit (aujourd'hui `SIEGE_TIERS` n'a pas de portée — tous les
+tiers restent stationnaires au pied du mur une fois formés). Un nouveau
+type, le **bélier** (n'existe pas encore) : s'approche très lentement
+mais frappe très fort. **Validation Pierre en attente** avant
+d'implémenter le bélier précisément (stats, comportement exact) — ne pas
+deviner ses chiffres sans confirmation.
+
+**B. Ça doit grouiller de vie** — *pas fait*. Le "rendu multi-soldats"
+déjà noté ailleurs dans ce fichier comme jamais fait : des vrais groupes
+visibles, des équipages autour des engins, du mouvement partout — pas
+juste 2-3 silhouettes isolées.
+
+**C. Princesse et mécaniques utiles** — *pas fait*. Chaque mécanique
+doit être réellement rentable, l'avantage doit se voir. La princesse au
+jardin doit rapporter un gain visiblement supérieur, affiché en chiffres
+flottants au-dessus d'elle (comme la mécanique de nombres flottants
+demandée plus largement en partie 2.4).
+
+### Partie 2 — uniformisation des 3 jeux (même consigne envoyée à Knight Wars et Forge Line — ces deux-là ne sont pas dans ce dépôt/cette session)
+
+1. **Audio** — *pas fait*. Musique ET bruitages fonctionnels (déjà le
+   cas ici) + curseurs de volume séparés (musique / bruitages) dans le
+   menu, 0 à 100%.
+2. **Langue** — *pas fait*. Anglais + français minimum, jeu ouvert PAR
+   DÉFAUT en anglais (menu Réglages compris), français choisi dans les
+   options. Point en attente de confirmation Pierre : anglais fixe par
+   défaut, ou auto-détection navigateur avec repli anglais — préparer
+   l'infra pour les deux, défaut = anglais en attendant sa réponse.
+3. **Section explicative (Astuces/FAQ/Conseils)** — *pas fait*. Explique
+   sans mystère TOUTES les mécaniques, avec exemples chiffrés (forces,
+   gains, seuils, timings). Règle à respecter dès maintenant, notée ici
+   formellement : **tout commit qui touche une mécanique de gameplay met
+   à jour la section explicative correspondante dans le même commit.**
+   Idéalement, plus tard, un test automatique vérifiant que chaque
+   constante de gameplay est référencée dans les textes — pas fait non
+   plus.
+4. **Lisibilité des mécaniques** — *pas fait*. Chaque mécanique
+   concrète a un retour visuel explicite : jauge/horloge circulaire au-
+   dessus du personnage pour toute attente qui déclenche un effet ;
+   nombre flottant au-dessus de la tête pour tout gain d'or. Règle :
+   rien ne se passe en silence.
+
+### Partie 3 — difficulté (priorité n°1 de Pierre, sur les 3 jeux)
+
+Objectif : courbe de difficulté digne des meilleurs jeux du marché — on
+croit comprendre, ça se corse, on se sent à la limite, on trouve l'action
+qui sauve, on est fier de gagner. Ni ennui (trop facile) ni frustration
+d'être visé (trop dur).
+
+- a) Recherche courte sur les modèles publiés (flow de Csikszentmihalyi/
+  Jenova Chen, GDC talks, analyses Kingdom Rush/Bloons TD/PvZ/Slay the
+  Spire/Hades/Celeste) — *statut : voir plus bas dès que fait*.
+- b) Simulateur headless (sans rendu) dans le dépôt, 2-3 politiques de
+  joueur (naïf / correct / bon) — *statut : voir plus bas*.
+- c) Cibles proposées par Pierre, **en attente de sa validation** :
+  palier normal — correct gagne ~55-65%, naïf perd, bon gagne presque
+  toujours ; facile ~85% pour le correct ; difficile ~30-40% ; vagues
+  infinies mesurées sur les 100 premières.
+- d) Réglage des constantes jusqu'à tenir ces cibles, en gardant TOUTES
+  les mécaniques existantes utiles et rentables.
+- e) Garder le simulateur comme test de régression pour toute feature
+  future.
+
+*(Cette sous-section sera mise à jour avec le modèle retenu, les
+résultats avant/après et les constantes modifiées au fur et à mesure.)*
