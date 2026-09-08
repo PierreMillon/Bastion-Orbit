@@ -1324,3 +1324,41 @@ style par défaut du jeu, tout nouveau test Playwright de cette session
 (sans manipulation explicite du style) l'utilisera automatiquement —
 répond directement à la demande de cohérence entre les captures de
 vérification et le vrai rendu par défaut.
+
+## Fontaine animée, ruisseau qui coule vraiment, nombres flottants ×3 → fait en v0.61
+
+Trois demandes dictées à la suite du style par défaut (v0.60).
+
+1. **Jets de la fontaine** : "un petit tuyau central qui gicle de l'eau
+   autour de manière circulaire, réparti équitablement, et qui tombe
+   dans la fontaine". `FOUNTAIN_JET_COUNT = 6` jets espacés également
+   autour du petit pilier central, chacun avec 2 gouttes qui parcourent
+   une arche fixe (sommet du pilier → point d'atterrissage sur le
+   bassin) en boucle, décalées d'un demi-cycle l'une par rapport à
+   l'autre. Purement procédural (fonction de `state.time`, comme les
+   reflets déjà en place) — aucun état à gérer, aucun particle system.
+2. **Ruisseau qui coule vraiment** — trois volets :
+   - Des particules qui voyagent réellement le long du chemin ("qu'on
+     peut suivre du début à la fin"), pas juste un scintillement sur
+     place comme les reflets existants (gardés, c'est un effet
+     différent). `streamFlowSeeds` (16 particules, `d` avancé chaque
+     frame dans `update()`, boucle en sortant par l'autre bout) +
+     `drawStreamFlow`.
+   - Les traits perpendiculaires au chemin de l'eau (`SHIMMER_GAP`,
+     l'ancien scintillement de `drawStreamExtras`) retirés — remplacés
+     par les particules ci-dessus.
+   - Contour des berges lissé : `drawStreamRun` traçait une polyligne
+     droite (`lineTo`) d'un point à l'autre, visiblement anguleuse à
+     chaque jonction — remplacée par une courbe de Bézier quadratique
+     passant par le milieu de chaque paire de points consécutifs (les
+     points d'origine ne bougent pas, seule la façon de les relier
+     change).
+3. **Nombres flottants trois fois plus gros** — `drawFloatingText` (or,
+   v0.58) : taille 11/13 → 33/39. Distance de montée aussi augmentée
+   (26 → 40) pour laisser la place au texte, désormais bien plus gros.
+
+Vérifié en Playwright (style Filaire pur, celui par défaut depuis
+v0.60) : jets visibles autour du pilier de la fontaine, particules du
+ruisseau qui avancent le long du chemin, banks visiblement lissées,
+plus aucun trait perpendiculaire, "+2" nettement plus gros et lisible
+sans avoir besoin de zoomer. Aucune erreur console.

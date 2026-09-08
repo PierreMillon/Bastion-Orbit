@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.60</button>
+  <button id="versionBtn">v0.61</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.61</b> — la fontaine a de vrais jets d'eau qui giclent du pilier central ; le ruisseau a des particules qui coulent vraiment le long du chemin (plus de traits perpendiculaires) et des berges bien plus souples ; les nombres flottants (or) sont trois fois plus gros</div>
   <div><b>v0.60</b> — style par défaut : Filaire pur (vert) au lieu de Phosphore pour un nouveau chargement — les réglages déjà sauvegardés ne changent pas</div>
   <div><b>v0.59</b> — jauge circulaire au-dessus de tout ennemi/engin de siège en pleine action (pose de pont, échelle, grignotage du mur, coup depuis la plateforme, rechargement) : on voit maintenant venir l'effet au lieu qu'il tombe sans prévenir</div>
   <div><b>v0.58</b> — nombres d'or flottants : chaque gain (kill, engin de siège détruit, vague écourtée, revenu du jardin) s'affiche maintenant au-dessus de sa source, avec un highlight quand le bonus princesse ×1.5 s'applique</div>
@@ -1570,6 +1571,27 @@
         speed: 0.6 + Math.random() * 1.2
       }))
     };
+  }
+
+  // particules qui coulent le long du ruisseau (demandé en session, à la
+  // place des traits perpendiculaires retirés — "des particules qu'on
+  // peut suivre du début à la fin du chemin") : contrairement aux
+  // reflets ci-dessus (scintillent SUR PLACE), celles-ci avancent
+  // vraiment le long de `d` chaque frame, avec un léger décalage latéral
+  // fixe chacune pour ne pas toutes voyager sur la ligne centrale.
+  // Même portée fixe que glintSeeds.stream (±400, pas streamHalfLen()) —
+  // pas besoin de suivre SPAWN_R, une particule hors de la portion
+  // visible ne coûte rien, elle est juste hors-écran.
+  const STREAM_FLOW_COUNT = 16;
+  const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
+  const STREAM_FLOW_RANGE = 400;
+  let streamFlowSeeds = null;
+  function ensureStreamFlowSeeds() {
+    if (streamFlowSeeds) return;
+    streamFlowSeeds = Array.from({ length: STREAM_FLOW_COUNT }, () => ({
+      d: (Math.random() * 2 - 1) * STREAM_FLOW_RANGE,
+      lat: (Math.random() * 2 - 1) * STREAM_HALF_WIDTH * 0.7
+    }));
   }
   function streamHalfLen() { return roadMaxR(); }
   function streamGeometry() {
@@ -2691,6 +2713,14 @@
     const p = state.player;
 
     state.time += dt; // horloge simple, réutilisée par l'animation de l'eau (voir drawWaterGlints)
+
+    // écoulement du ruisseau : avance chaque particule le long de d,
+    // boucle en ressortant par l'autre bout (voir drawStreamFlow)
+    ensureStreamFlowSeeds();
+    for (const fl of streamFlowSeeds) {
+      fl.d += STREAM_FLOW_SPEED * dt;
+      if (fl.d > STREAM_FLOW_RANGE) fl.d -= 2 * STREAM_FLOW_RANGE;
+    }
 
     updateSnow(dt);
 
@@ -4056,6 +4086,17 @@
     { dx: -7, dz: 3, phase: 3.1, speed: 1.1 },
     { dx: 2, dz: 8, phase: 5.7, speed: 0.75 }
   ];
+  // jets d'eau (demandé en session : "un petit tuyau central qui gicle
+  // de l'eau autour de manière circulaire, réparti équitablement...  et
+  // qui tombe dans la fontaine") — répartis à intervalles réguliers
+  // autour du petit pilier central. Purement procédural comme les
+  // reflets ci-dessus (fonction de state.time, aucun état à gérer) :
+  // chaque jet est une trajectoire fixe du sommet du pilier vers un
+  // point d'atterrissage sur le bassin, avec deux gouttes qui la
+  // parcourent en boucle pour lire un vrai mouvement plutôt qu'un jet figé.
+  const FOUNTAIN_JET_COUNT = 6;
+  const FOUNTAIN_JET_R = 14;    // rayon d'atterrissage depuis le pilier
+  const FOUNTAIN_JET_SPEED = 1.1; // boucles/seconde le long du jet
   function drawFontaine(b, rot) {
     const list = [];
     const baseC = [], topC = [];
@@ -4084,6 +4125,27 @@
     }
     ctx.fillStyle = '#4d7d99';
     buildQuad(waterC);
+    // jets d'eau : voir FOUNTAIN_JET_* plus haut pour le contexte
+    const pipeTop = FOUNTAIN_WALL_H + 10; // sommet du petit pilier central
+    for (let i = 0; i < FOUNTAIN_JET_COUNT; i++) {
+      const a = (i / FOUNTAIN_JET_COUNT) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      for (let k = 0; k < 2; k++) {
+        // deux gouttes par jet, décalées de moitié de cycle l'une par
+        // rapport à l'autre — jamais superposées, un flux continu plutôt
+        // que des à-coups
+        const jt = (state.time * FOUNTAIN_JET_SPEED + i * 0.13 + k * 0.5) % 1;
+        const jx = b.x + dx * FOUNTAIN_JET_R * jt, jz = b.z + dz * FOUNTAIN_JET_R * jt;
+        // monte depuis le sommet du pilier puis retombe dans le bassin —
+        // une simple arche en sinus, pas besoin de vraie physique ici
+        const jy = pipeTop + Math.sin(jt * Math.PI) * 12 - (pipeTop - FOUNTAIN_WALL_H) * jt;
+        const pos = project(jx, jy, jz, rot);
+        ctx.fillStyle = `rgba(225,242,255,${(0.75 * (1 - jt * 0.35)).toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 1.5 * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     // reflets scintillants — calcul direct par frame (pas de cache dédié
     // comme glintSeeds : seulement 3 points fixes, pas besoin de la même
     // infrastructure que douves/ruisseau)
@@ -4131,29 +4193,29 @@
     leftPts.push(project(last.p1.x - g.rx * STREAM_HALF_WIDTH, 0.3, last.p1.z - g.rz * STREAM_HALF_WIDTH, rot));
     rightPts.push(project(last.p1.x + g.rx * STREAM_HALF_WIDTH, 0.3, last.p1.z + g.rz * STREAM_HALF_WIDTH, rot));
     ctx.lineWidth = Math.max(1, 1.2 * scale);
+    // signalé en session : le contour doit être "très souple" — une
+    // polyligne droite point à point restait visiblement anguleuse à
+    // chaque jonction de segment. Courbe de Bézier quadratique passant
+    // par le milieu de chaque paire de points consécutifs (technique
+    // standard pour lisser une polyligne sans changer les points
+    // d'origine) au lieu d'un simple lineTo.
     for (const pts of [leftPts, rightPts]) {
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
       ctx.stroke();
     }
   }
   function drawStreamExtras(rot) {
     const g = streamGeometry();
     const { cx, cz, tx, tz, rx, rz } = g;
-    const halfLen = streamHalfLen();
-    // pale streaks for a hint of current/shimmer, spread along the whole
-    // length (fixed spacing, not a fixed count), following the same wiggle
-    // as the water itself so they stay inside its banks
-    ctx.strokeStyle = 'rgba(230,245,255,0.5)';
-    ctx.lineWidth = Math.max(1, scale);
-    const SHIMMER_GAP = 55;
-    for (let d = -halfLen; d <= halfLen; d += SHIMMER_GAP) {
-      const c = streamPointAt(g, d);
-      const a = project(c.x - rx * STREAM_HALF_WIDTH * 0.7, 0.35, c.z - rz * STREAM_HALF_WIDTH * 0.7, rot);
-      const b = project(c.x + rx * STREAM_HALF_WIDTH * 0.7, 0.35, c.z + rz * STREAM_HALF_WIDTH * 0.7, rot);
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    }
+    // les traits perpendiculaires au chemin de l'eau ont été retirés
+    // (demandé en session) — remplacés par des particules qui coulent
+    // vraiment le long du ruisseau, voir drawStreamFlow.
     // the little bridge itself, spanning the water along the road — sits at
     // d=0 where the wiggle is zero, so it's still square with the crossing
     const bridgePts = [
@@ -4186,6 +4248,29 @@
       ctx.fillStyle = `rgba(230,245,255,${(alpha * 0.85).toFixed(2)})`;
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, (1.4 + alpha * 1.6) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // particules qui coulent réellement le long du ruisseau (demandé en
+  // session, à la place des traits perpendiculaires retirés plus haut) —
+  // contrairement à drawStreamGlints (scintillent SUR PLACE), celles-ci
+  // avancent le long de `d` chaque frame (voir l'avance dans update()) :
+  // opacité constante, pas de flicker, pour bien lire le mouvement plutôt
+  // que le clignotement.
+  function drawStreamFlow(rot, wantFar) {
+    ensureStreamFlowSeeds();
+    const g = streamGeometry();
+    for (const fl of streamFlowSeeds) {
+      const p = streamPointAt(g, fl.d);
+      const angle = Math.atan2(p.z, p.x);
+      const isFar = Math.cos(angle - rot) < 0;
+      if (isFar !== wantFar) continue;
+      const x = p.x + g.rx * fl.lat, z = p.z + g.rz * fl.lat;
+      const pos = project(x, 0.4, z, rot);
+      ctx.fillStyle = 'rgba(225,242,255,0.6)';
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 1.6 * scale, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -4550,9 +4635,11 @@
   function drawFloatingText(f, rot) {
     const k = f.t / f.life; // 0 -> 1
     const alpha = 1 - k;
-    const rise = 26 * k;
+    const rise = 40 * k;
     const pos = project(f.x, f.y, f.z, rot);
-    const size = f.highlight ? 13 : 11;
+    // demandé en session : "trois fois plus gros à l'affichage" — 11/13
+    // -> 33/39
+    const size = f.highlight ? 39 : 33;
     ctx.font = `bold ${Math.round(size * scale)}px "IBM Plex Mono", ui-monospace, monospace`;
     ctx.textAlign = 'center';
     ctx.fillStyle = f.highlight ? `rgba(255,214,110,${alpha})` : `rgba(244,211,94,${alpha})`;
@@ -4682,6 +4769,7 @@
     for (const run of streamRunsAll.far) drawStreamRun(run, rot);
     if (streamExtrasFar) drawStreamExtras(rot);
     drawStreamGlints(rot, true);
+    drawStreamFlow(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
     for (const b of farVillageExtras) drawVillageExtra(b, rot);
     for (const b of farBushes) drawBush(b, rot);
@@ -4697,6 +4785,7 @@
     for (const run of streamRunsAll.near) drawStreamRun(run, rot);
     if (!streamExtrasFar) drawStreamExtras(rot);
     drawStreamGlints(rot, false);
+    drawStreamFlow(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
     for (const b of nearVillageExtras) drawVillageExtra(b, rot);
     for (const e of near) drawEnemy(e, rot);
