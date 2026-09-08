@@ -1569,3 +1569,23 @@ correctif, aucune erreur console.
   entre sessions, comportement souris/desktop en plus du tactile) — à
   clarifier avant de s'y attaquer, chantier séparé (nouvelle gestion
   multi-touch par-dessus le drag-to-rotate existant, à ne pas casser).
+
+## Ruisseau : portée pleine hors-écran, particules ÷3, ondulation "poisson" → fait en v0.64
+
+Ajustement après v0.63 : "le cours d'eau commence hors de l'écran et
+finit hors de l'écran, divise les particules par trois et rajoute un
+côté aléatoire pour que ça bouge un peu droite/gauche comme si c'était
+un brochet qui nage".
+
+- `STREAM_FLOW_RANGE` 400 → 640 (même valeur que `glintSeeds.stream`,
+  déjà choisie pour rester hors-écran quel que soit `SPAWN_R`) — 400
+  pouvait tomber court sur un écran large.
+- `STREAM_FLOW_COUNT` 2200 → 733 (÷3).
+- Chaque particule ondule maintenant latéralement au fil du temps
+  (`latPhase`/`latSpeed` par particule, amplitude `STREAM_FLOW_WOBBLE`)
+  plutôt que de garder un décalage latéral figé — lit comme un léger
+  slalom individuel, pas une ligne parfaitement droite.
+
+Vérifié en Playwright (Filaire pur, plusieurs angles) : le ruisseau
+reste visible jusqu'aux deux bords de l'écran, densité de particules
+nettement plus légère, aucune erreur console.
