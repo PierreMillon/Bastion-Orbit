@@ -724,11 +724,32 @@ demandée plus largement en partie 2.4).
    l'appel si bruitages=0 (une rampe exponentielle Web Audio vers 0 lève
    une `RangeError` — testé, un achat de tourelle bruitages=0 ne plante
    pas).
-2. **Langue** — *pas fait*. Anglais + français minimum, jeu ouvert PAR
-   DÉFAUT en anglais (menu Réglages compris), français choisi dans les
-   options. Point en attente de confirmation Pierre : anglais fixe par
-   défaut, ou auto-détection navigateur avec repli anglais — préparer
-   l'infra pour les deux, défaut = anglais en attendant sa réponse.
+2. **Langue** → fait en v0.54. Anglais + français, auto-détection de
+   `navigator.language` (fr* → français, tout le reste → anglais par
+   défaut, décision de Pierre — voir "Réponses de Pierre" plus bas),
+   avec un bouton "Langue" dans le menu pour forcer l'autre langue
+   manuellement (le choix manuel est mémorisé en `localStorage` et prime
+   ensuite sur l'auto-détection). Dictionnaire `I18N` (`fr`/`en`) +
+   fonction `t(clé)` avec repli sur l'anglais si une clé manque.
+   `applyI18nStatic()` couvre tous les textes fixes (boutons du bas,
+   menu, écran "cosy", fausse pub, écran de fin) ; les boutons dont le
+   texte dépend de l'état du jeu (Difficulté/Style/Teinte/Neige/Caméra/
+   Douves/Jardin/Cheval/Descendre-Remonter) ont chacun leur propre
+   `update*Btn()` déjà existant, désormais alimenté par `t()` — tous
+   regroupés dans `refreshDynamicLangUI()`, rappelée par le bouton
+   Langue pour que le changement soit immédiat, sans recharger la page.
+   Vérifié (Playwright, contexte navigateur `locale: 'en-US'` et
+   `locale: 'fr-FR'` séparément) : auto-détection correcte dans les deux
+   cas, bascule manuelle FR↔EN immédiate, `<html lang>` mis à jour,
+   aucune erreur console.
+
+   **Limite assumée, notée honnêtement** : seule l'interface vivante est
+   traduite. Le changelog (`#changelog`) reste en français uniquement —
+   c'est un journal de développement à destination de Pierre, pas une
+   mécanique de jeu, et le traduire aurait doublé ~40 lignes d'historique
+   pour un bénéfice quasi nul. La future section "Astuces" (point 3
+   ci-dessous, pas encore fait) devra en revanche être bilingue dès sa
+   création — c'est elle qui compte comme interface de jeu.
 3. **Section explicative (Astuces/FAQ/Conseils)** — *pas fait*. Explique
    sans mystère TOUTES les mécaniques, avec exemples chiffrés (forces,
    gains, seuils, timings). Règle à respecter dès maintenant, notée ici

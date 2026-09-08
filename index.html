@@ -455,15 +455,16 @@
 
 <div id="topbar">
   <button id="menuBtn" aria-label="Menu">☰</button>
-  <div class="stat">Vague <span id="waveNum">1</span></div>
+  <div class="stat"><span id="waveLabel">Vague</span> <span id="waveNum">1</span></div>
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.53</button>
+  <button id="versionBtn">v0.54</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.54</b> — le jeu parle anglais et français : détecté automatiquement selon l'appareil (anglais par défaut sinon), bouton "Langue" dans le menu pour forcer l'autre — interface, menu, écrans de fin traduits (le changelog reste en français, c'est un journal de développement)</div>
   <div><b>v0.53</b> — les maisons du village sont enfin de vraies cachettes : un ennemi qui approche peut s'y réfugier (intouchable au tir à distance/tourelles), seule une sortie chargée peut l'en déloger — corrige un bug de déclenchement quasi jamais atteint (voir BACKLOG.md)</div>
   <div><b>v0.52</b> — cheval du seigneur : en sortie, ×2 vitesse/dégâts au palier 1 (débloqué par paliers sans plafond, bouton dédié), monture dessinée sous le seigneur</div>
   <div><b>v0.51</b> — curseurs de volume séparés pour la musique et les bruitages (0-100%, menu), remplacent l'ancien bouton ON/OFF</div>
@@ -535,17 +536,18 @@
   <button id="hueBtn">Teinte : Vert</button>
   <button id="snowBtn">Neige : ON</button>
   <button id="cameraBtn">Caméra : Axonométrique</button>
+  <button id="langBtn">Langue : Français</button>
   <div class="volumeRow">
-    <label for="musicVolumeInput">Musique</label>
+    <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
     <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
     <span class="volumeVal" id="musicVolumeVal">35%</span>
   </div>
   <div class="volumeRow">
-    <label for="sfxVolumeInput">Bruitages</label>
+    <label for="sfxVolumeInput" id="sfxVolumeLabel">Bruitages</label>
     <input type="range" id="sfxVolumeInput" min="0" max="100" value="100">
     <span class="volumeVal" id="sfxVolumeVal">100%</span>
   </div>
-  <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
+  <div id="fpsLine"><span id="fpsLabel">FPS : </span><span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
 <!-- preload="none" : audité en session — la lecture est de toute façon
@@ -582,6 +584,135 @@
 <script>
 (() => {
   const canvas = document.getElementById('game');
+
+  // ---- langue (demandé en session, Partie 2 de la grosse consigne du
+  // 2026-09-08) : auto-détection de la langue de l'appareil (fr → français,
+  // tout le reste → anglais par défaut — décision explicite de Pierre, pas
+  // d'anglais fixe), avec un bouton dans le menu pour forcer l'autre langue
+  // (mémorisé ensuite, prime sur l'auto-détection). Ne couvre QUE l'interface
+  // vivante (boutons, menu, écrans de fin) — le changelog reste en français,
+  // c'est un journal de développement, pas une mécanique de jeu ; noté
+  // honnêtement comme limite connue dans BACKLOG.md.
+  const I18N = {
+    fr: {
+      menu_aria: 'Menu', wave_label: 'Vague',
+      nextwave_btn: 'Vague +',
+      nextwave_aria: "Appeler la vague suivante par-dessus l'actuelle",
+      cosy_aria: "Voir l'intérieur du donjon",
+      repair_btn: 'Réparer', princess_down: 'Descendre', princess_up: 'Remonter',
+      sortie_btn: 'Sortie', oil_btn: 'Huile',
+      tower_btn: 'Tourelle', garden_btn: 'Jardin', moat_btn: 'Douves',
+      moat_max: 'Douves max', horse_btn: 'Cheval',
+      restart_full: 'Recommencer depuis le début',
+      difficulty_prefix: 'Difficulté : ',
+      diff_facile: 'Facile', diff_normal: 'Normal', diff_difficile: 'Difficile',
+      diff_tresDifficile: 'Très difficile',
+      style_prefix: 'Style : ', style_couleur: 'Couleur', style_phosphore: 'Phosphore',
+      style_filaire: 'Filaire pur',
+      hue_prefix: 'Teinte : ', hue_vert: 'Vert', hue_ambre: 'Ambre',
+      snow_prefix: 'Neige : ', on: 'ON', off: 'OFF',
+      camera_prefix: 'Caméra : ', camera_axo: 'Axonométrique', camera_persp: 'Perspective',
+      vol_music: 'Musique', vol_sfx: 'Bruitages', fps_label: 'FPS : ',
+      close_menu: 'Fermer', lang_prefix: 'Langue : ', lang_fr: 'Français', lang_en: 'English',
+      cosy_caption: 'Un instant de calme au coin du feu — dehors, la bataille continue.',
+      cosy_return: 'Retour au mur',
+      ad_siren: '⚠️ ALERTE SÉCURITÉ ⚠️', ad_title: 'VOTRE CHÂTEAU EST EN DANGER !!!',
+      ad_body: '1 (UN) ennemi a été détecté dans votre système de défense. Téléchargez Antivirus Royal PRO maintenant pour continuer à régner !',
+      ad_small: 'Scan en cours... 99% — ne fermez pas cette fenêtre',
+      ad_continue: 'Continuer quand même →', restart_btn: 'Recommencer',
+      gameover_castle: 'Votre château a été détruit, Seigneur. Vous avez perdu.',
+      gameover_fell: 'Tu es tombé à la vague '
+    },
+    en: {
+      menu_aria: 'Menu', wave_label: 'Wave',
+      nextwave_btn: 'Wave +',
+      nextwave_aria: 'Call the next wave on top of the current one',
+      cosy_aria: "View the keep's interior",
+      repair_btn: 'Repair', princess_down: 'Go down', princess_up: 'Go up',
+      sortie_btn: 'Sally', oil_btn: 'Oil',
+      tower_btn: 'Turret', garden_btn: 'Garden', moat_btn: 'Moat',
+      moat_max: 'Moat max', horse_btn: 'Horse',
+      restart_full: 'Restart from the beginning',
+      difficulty_prefix: 'Difficulty: ',
+      diff_facile: 'Easy', diff_normal: 'Normal', diff_difficile: 'Hard',
+      diff_tresDifficile: 'Very hard',
+      style_prefix: 'Style: ', style_couleur: 'Color', style_phosphore: 'Phosphor',
+      style_filaire: 'Pure wireframe',
+      hue_prefix: 'Tint: ', hue_vert: 'Green', hue_ambre: 'Amber',
+      snow_prefix: 'Snow: ', on: 'ON', off: 'OFF',
+      camera_prefix: 'Camera: ', camera_axo: 'Axonometric', camera_persp: 'Perspective',
+      vol_music: 'Music', vol_sfx: 'Sound effects', fps_label: 'FPS: ',
+      close_menu: 'Close', lang_prefix: 'Language: ', lang_fr: 'Français', lang_en: 'English',
+      cosy_caption: 'A quiet moment by the fire — outside, the battle rages on.',
+      cosy_return: 'Back to the wall',
+      ad_siren: '⚠️ SECURITY ALERT ⚠️', ad_title: 'YOUR CASTLE IS IN DANGER !!!',
+      ad_body: '1 (ONE) enemy has been detected in your defense system. Download Royal Antivirus PRO now to keep reigning!',
+      ad_small: 'Scanning... 99% — do not close this window',
+      ad_continue: 'Continue anyway →', restart_btn: 'Restart',
+      gameover_castle: 'Your castle has been destroyed, my lord. You have lost.',
+      gameover_fell: 'You fell at wave '
+    }
+  };
+  function detectLang() {
+    const nav = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+    return nav.startsWith('fr') ? 'fr' : 'en';
+  }
+  let lang = detectLang();
+  try {
+    const storedLang = localStorage.getItem('bo_lang');
+    if (storedLang === 'fr' || storedLang === 'en') lang = storedLang;
+  } catch (e) { /* ignore */ }
+  function t(key) { return (I18N[lang] && I18N[lang][key]) ?? I18N.en[key] ?? key; }
+
+  // textes statiques (jamais recalculés selon l'état du jeu, contrairement
+  // aux boutons Difficulté/Style/Teinte/Neige/Caméra/Douves/Jardin/
+  // Cheval/Descendre-Remonter qui ont chacun leur propre updateXBtn() plus
+  // bas, appelé par refreshDynamicLangUI ci-dessous) — appelé une fois au
+  // chargement, et à nouveau à chaque bascule de langue.
+  function applyI18nStatic() {
+    document.documentElement.lang = lang;
+    document.getElementById('menuBtn').setAttribute('aria-label', t('menu_aria'));
+    document.getElementById('waveLabel').textContent = t('wave_label');
+    document.getElementById('nextWaveBtn').textContent = t('nextwave_btn');
+    document.getElementById('nextWaveBtn').setAttribute('aria-label', t('nextwave_aria'));
+    document.getElementById('cosyBtn').setAttribute('aria-label', t('cosy_aria'));
+    document.getElementById('repairBtn').textContent = t('repair_btn');
+    document.getElementById('sortieBtn').textContent = t('sortie_btn');
+    document.getElementById('towerBtn').textContent = t('tower_btn');
+    document.getElementById('menuRestartBtn').textContent = t('restart_full');
+    document.getElementById('musicVolumeLabel').textContent = t('vol_music');
+    document.getElementById('sfxVolumeLabel').textContent = t('vol_sfx');
+    document.getElementById('fpsLabel').textContent = t('fps_label');
+    document.getElementById('closeMenu').textContent = t('close_menu');
+    document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
+    document.getElementById('cosyClose').textContent = t('cosy_return');
+    document.querySelector('.cosyCaption').textContent = t('cosy_caption');
+    document.querySelector('.fakeAdSiren').textContent = t('ad_siren');
+    document.querySelector('.fakeAdTitle').textContent = t('ad_title');
+    document.querySelector('.fakeAdBody').textContent = t('ad_body');
+    document.querySelector('.fakeAdSmall').textContent = t('ad_small');
+    document.getElementById('fakeAdContinue').textContent = t('ad_continue');
+    document.getElementById('restartBtn').textContent = t('restart_btn');
+    // oilBtn dépend aussi de son état débloqué/pas (voir updateOilBtn plus
+    // bas), mais le libellé "Huile" lui-même est statique
+    const oilBtn = document.getElementById('oilBtn');
+    if (oilBtn) oilBtn.textContent = t('oil_btn');
+  }
+  applyI18nStatic();
+
+  // rappelé par le bouton Langue une fois toutes les fonctions
+  // update*Btn() ci-dessous déclarées (déclarations `function`, donc
+  // hissées — sûr à référencer ici malgré l'ordre du fichier)
+  function refreshDynamicLangUI() {
+    applyPhosphorStyle();
+    updateDifficultyBtn();
+    updateSnowBtn();
+    updateCameraBtn();
+    updateMoatBtn();
+    updateGardenBtn();
+    updateHorseBtn();
+    updatePrincessBtn();
+  }
 
   // ---- mode phosphore: 'couleur' (rendu d'origine) / 'phosphore' (silhouette
   // noire + contour) / 'filaire' (aucun remplissage, tous les traits) ----
@@ -877,17 +1008,15 @@
   // itself, and its persistence, is declared up near the canvas/ctx setup) --
   const styleBtn = document.getElementById('styleBtn');
   const hueBtn = document.getElementById('hueBtn');
-  const STYLE_LABELS = { couleur: 'Couleur', phosphore: 'Phosphore', filaire: 'Filaire pur' };
   const STYLE_NEXT = { couleur: 'phosphore', phosphore: 'filaire', filaire: 'couleur' };
-  const HUE_LABELS = { vert: 'Vert', ambre: 'Ambre' };
   const HUE_NEXT = { vert: 'ambre', ambre: 'vert' };
   const HUE_CSS = {
     vert: { line: '#46ffa0', text: '#8ffcc4', dim: 'rgba(70,255,160,0.4)', fill: '#0a1f16' },
     ambre: { line: '#ffb347', text: '#ffd9a0', dim: 'rgba(255,176,71,0.4)', fill: '#241708' }
   };
   function applyPhosphorStyle() {
-    styleBtn.textContent = 'Style : ' + STYLE_LABELS[phosphorStyle];
-    hueBtn.textContent = 'Teinte : ' + HUE_LABELS[phosphorHue];
+    styleBtn.textContent = t('style_prefix') + t('style_' + phosphorStyle);
+    hueBtn.textContent = t('hue_prefix') + t('hue_' + phosphorHue);
     document.body.classList.toggle('phosphor', phosphorStyle !== 'couleur');
     const c = HUE_CSS[phosphorHue];
     const root = document.body.style;
@@ -910,32 +1039,45 @@
     spriteCache.clear(); // cached sprites were baked in the old hue
   });
   const difficultyBtn = document.getElementById('difficultyBtn');
-  difficultyBtn.textContent = 'Difficulté : ' + DIFFICULTY_TIERS[difficultyIdx].label;
+  function updateDifficultyBtn() { difficultyBtn.textContent = t('difficulty_prefix') + t('diff_' + DIFFICULTY_TIERS[difficultyIdx].key); }
+  updateDifficultyBtn();
   difficultyBtn.addEventListener('click', () => {
     difficultyIdx = (difficultyIdx + 1) % DIFFICULTY_TIERS.length;
-    difficultyBtn.textContent = 'Difficulté : ' + DIFFICULTY_TIERS[difficultyIdx].label;
+    updateDifficultyBtn();
     try { localStorage.setItem('bo_difficulty', DIFFICULTY_TIERS[difficultyIdx].key); } catch (e) { /* ignore */ }
     // s'applique à partir du prochain ennemi qui apparaît — pas de reset
     // nécessaire, seul enemyHp(wave) en dépend
   });
   const snowBtn = document.getElementById('snowBtn');
-  snowBtn.textContent = 'Neige : ' + (snowOn ? 'ON' : 'OFF');
+  function updateSnowBtn() { snowBtn.textContent = t('snow_prefix') + (snowOn ? t('on') : t('off')); }
+  updateSnowBtn();
   snowBtn.addEventListener('click', () => {
     snowOn = !snowOn;
     try { localStorage.setItem('bo_snowOn', snowOn ? 'on' : 'off'); } catch (e) { /* ignore */ }
-    snowBtn.textContent = 'Neige : ' + (snowOn ? 'ON' : 'OFF');
+    updateSnowBtn();
   });
 
   // caméra en perspective réelle (essai validé séparément, intégré ici en
   // session) : bascule project() lui-même, donc tout le placement à
   // l'écran suit sans qu'aucune autre fonction n'ait eu besoin de changer
   const cameraBtn = document.getElementById('cameraBtn');
-  function updateCameraBtn() { cameraBtn.textContent = 'Caméra : ' + (perspectiveMode ? 'Perspective' : 'Axonométrique'); }
+  function updateCameraBtn() { cameraBtn.textContent = t('camera_prefix') + (perspectiveMode ? t('camera_persp') : t('camera_axo')); }
   updateCameraBtn();
   cameraBtn.addEventListener('click', () => {
     perspectiveMode = !perspectiveMode;
     try { localStorage.setItem('bo_perspective', perspectiveMode ? 'on' : 'off'); } catch (e) { /* ignore */ }
     updateCameraBtn();
+  });
+
+  // langue : auto-détectée au chargement (voir tout en haut du script),
+  // ce bouton force explicitement l'autre — le choix manuel prime ensuite
+  // sur l'auto-détection (mémorisé en localStorage)
+  const langBtn = document.getElementById('langBtn');
+  langBtn.addEventListener('click', () => {
+    lang = lang === 'fr' ? 'en' : 'fr';
+    try { localStorage.setItem('bo_lang', lang); } catch (e) { /* ignore */ }
+    applyI18nStatic();
+    refreshDynamicLangUI();
   });
 
   // iOS still shows its double-tap-to-zoom magnifier here and there even
@@ -1874,13 +2016,13 @@
   // game. This is the missing loss condition, called wherever castleH is
   // reduced (attackBase chipping, siege-engine bombardment).
   function castleDestroyed() {
-    showGameOver('Votre château a été détruit, Seigneur. Vous avez perdu.');
+    showGameOver(t('gameover_castle'));
   }
 
   function hurtPlayer(n) {
     const p = state.player;
     p.hp -= n;
-    if (p.hp <= 0) showGameOver('Tu es tombé à la vague ' + state.wave);
+    if (p.hp <= 0) showGameOver(t('gameover_fell') + state.wave);
   }
 
   // stalled enemies (state === 'attackBase') close enough to each other stop
@@ -2072,8 +2214,8 @@
   });
 
   function updateMoatBtn() {
-    if (state.moatLevel >= MOAT_TIERS.length) { moatBtn.textContent = 'Douves max'; moatBtn.disabled = true; }
-    else moatBtn.textContent = 'Douves';
+    if (state.moatLevel >= MOAT_TIERS.length) { moatBtn.textContent = t('moat_max'); moatBtn.disabled = true; }
+    else moatBtn.textContent = t('moat_btn');
   }
   moatBtn.addEventListener('click', () => {
     if (state.moatLevel >= MOAT_TIERS.length) return;
@@ -2087,7 +2229,7 @@
   });
   updateMoatBtn();
 
-  function updateGardenBtn() { gardenBtn.textContent = 'Jardin'; } // no cap any more, always buyable (funds permitting)
+  function updateGardenBtn() { gardenBtn.textContent = t('garden_btn'); } // no cap any more, always buyable (funds permitting)
   gardenBtn.addEventListener('click', () => {
     const cost = gardenCost(state.gardenLevel + 1);
     if (state.gold < cost) return;
@@ -2102,7 +2244,7 @@
   // explicitement) — "Cheval" avant tout achat, "Cheval N" une fois
   // débloqué, retour visuel immédiat sur l'état débloqué/pas débloqué
   function updateHorseBtn() {
-    horseBtn.textContent = state.horseLevel > 0 ? 'Cheval ' + state.horseLevel : 'Cheval';
+    horseBtn.textContent = state.horseLevel > 0 ? t('horse_btn') + ' ' + state.horseLevel : t('horse_btn');
     horseBtn.classList.toggle('active', state.horseLevel > 0);
   }
   horseBtn.addEventListener('click', () => {
@@ -2118,7 +2260,7 @@
 
   function updatePrincessBtn() {
     if (state.princessDead) { princessBtn.textContent = '†'; princessBtn.disabled = true; return; }
-    princessBtn.textContent = state.princess.target === 0 ? 'Descendre' : 'Remonter';
+    princessBtn.textContent = state.princess.target === 0 ? t('princess_down') : t('princess_up');
   }
   // a quick tap toggles Descendre/Remonter as before; holding past a short
   // threshold instead calls the lord over for a hug (calin) — only takes
@@ -3005,7 +3147,7 @@
           const def = nearestDefender(lx, lz);
           if (def.type === 'player') {
             p.hp -= 1;
-            if (p.hp <= 0) showGameOver('Tu es tombé à la vague ' + state.wave);
+            if (p.hp <= 0) showGameOver(t('gameover_fell') + state.wave);
           } else {
             def.ref.hp -= 2;
           }
