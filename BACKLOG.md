@@ -906,15 +906,23 @@ paliers, pas qu'un seul). Prochaine étape du chantier difficulté.
 l'uniformisation. Le simulateur de difficulté devra être mis à jour pour
 tenir compte des maisons-cachettes et du cheval une fois codés.
 
-1. **Donjon : 24 facettes → 12** (diviser `WALL_SEG` par deux, probablement
-   `N_SEG` aussi selon si la silhouette doit suivre). *Pas fait.*
-2. **Tir du seigneur "dans l'axe" ×2** — précisé par Pierre : c'est le TIR
-   du seigneur DEPUIS LES REMPARTS (aligné sur l'ennemi visé, la
-   mécanique `facingMultiplier`/`VISION_TIGHT` existante), PAS la charge
-   en sortie. Donc ×2 vient s'appliquer par-dessus le ×2 déjà existant à
-   `VISION_TIGHT` (bonus de précision actuel) — à clarifier au codage si
-   ça veut dire un ×4 total dans l'axe serré, ou si ça REMPLACE l'échelle
-   actuelle (1x/1.5x/2x) par quelque chose de plus généreux. *Pas fait.*
+1. **Donjon : 24 facettes → 12** → fait en v0.47. C'était `N_SEG` (pas
+   `WALL_SEG`, qui à 8 gère seulement le nombre de facettes d'OMBRAGE,
+   pas le nombre de côtés du polygone géométrique — celui qui donne
+   "24 facettes" à l'œil est bien `N_SEG`, utilisé par tous les
+   contours ronds : corps du donjon, plateforme, trou d'escalier).
+2. **Tir du seigneur "dans l'axe" ×2** → fait en v0.47. Confirmé par
+   Pierre : le tir DEPUIS LES REMPARTS, pas la sortie. Choix retenu :
+   ×2 en plus de l'échelle `facingMultiplier` existante (1x/1.5x/2x
+   selon l'angle) — donc ×4 dans l'axe serré, ×3 dans l'axe large, ×2
+   hors axe (nouvelle constante `PLAYER_RAMPART_ATK_MUL = 2`). Le DPS du
+   seigneur double partout, pas seulement dans l'axe serré — ça garde le
+   principe existant "viser récompense" intact plutôt que de le
+   remplacer par une autre échelle inventée. Rejoué au simulateur de
+   difficulté (le doublement de DPS avait fait sauter la cible ~55-65%
+   à la vague 28 à 89%) — `enemyHp(wave)` retendu de `2+⌊w/7⌋` à
+   `2+⌊w/4.5⌋` pour retomber dans la cible (68% à v28, 57% à v30). Voir
+   aussi la section difficulté plus haut.
 3. **Routes → centre-ville (maisons) → chemin → donjon** : réseau en
    deux temps au lieu d'un accès direct route→donjon. Refonte de la
    génération de routes/maisons actuelle (`HOUSES`, `ROAD_ANGLES`).
@@ -935,18 +943,20 @@ tenir compte des maisons-cachettes et du cheval une fois codés.
    le palier courant, retour visuel clair (cheval dessiné + état
    débloqué/pas débloqué). *Pas fait.*
 
-## Écran de défaite / fausse pub hors thème → pas fait
+## Écran de défaite / fausse pub hors thème → fait en v0.47
 
 Signalé par Pierre (capture à l'appui, v0.45, vague 6) : l'écran
 "ALERTE SÉCURITÉ" à la défaite (fond jaune, bordure rouge, bouton
 "Continuer quand même") n'est PAS dans le thème du jeu (phosphore vert
 sur noir, filaire, monochrome, comme tout le chrome depuis v0.32 — voir
-plus haut). Le gag textuel (fausse alerte, faux scan à 99%, "Antivirus
-Royal PRO") peut rester tel quel, seul l'HABILLAGE VISUEL doit changer :
-bordure fine verte, fond noir, typographie du jeu, scanlines/glow si
-c'est le style en place — plus de jaune/rouge criard. Vérifier aussi
-l'écran de défaite réel qui suit (`showGameOver`/`#overlay`), au cas où
-lui non plus ne serait pas dans le thème. *Pas fait.*
+plus haut). Corrigé : la fausse pub reprend maintenant les tokens
+`--ph-*` déjà en place (fond `--ph-fill`, bordure/texte `--ph-line`/
+`--ph-text`, glow léger, police du jeu) — même traitement que le reste
+du chrome en `body.phosphor`. Le gag textuel n'a pas changé (fausse
+alerte, faux scan à 99%, "Antivirus Royal PRO", bouton "Continuer quand
+même"), vérifié en capture. L'écran de défaite réel (`#overlay`) était
+déjà dans le thème (règle `body.phosphor #overlay` déjà présente depuis
+v0.32) — rien à faire de ce côté.
 
 ## Exploration : animation de l'eau (douves/ruisseau) — maquette de comparaison, pas encore intégrée
 
@@ -954,6 +964,16 @@ Demandé en session : tester une animation de l'eau dans l'esprit du
 style actuel (phosphore/filaire), 5 variations différentes, dans un
 artefact de comparaison côte à côte (même principe que la maquette de
 teintes faite plus tôt) — Pierre choisit avant toute intégration au jeu
-réel. *Statut : voir la réponse de ce tour pour le lien de l'artefact
-une fois publié — rien à intégrer dans index.html tant que Pierre n'a
-pas choisi.*
+réel.
+
+**Fait → maquette publiée** : https://claude.ai/code/artifact/6b37a187-3a8b-4c4c-a3a7-b490372677ec
+("Eau Vivante"). Cinq pistes, toutes bâties sur une technique déjà
+présente dans le jeu (pas d'invention de toutes pièces) : A —
+scintillement dérivant (évolution directe de SHIMMER_GAP) ; B —
+vaguelettes transversales défilant vers l'aval ; C — bandes de teinte en
+marche ("marching ants"), lisibles même en vert phosphore pur ; D —
+reflets scintillants façon particules (même vocabulaire que les gouttes
+d'huile/la neige) ; E — le méandre lui-même qui avance dans le temps
+(phase de STREAM_WIND_FREQ animée). Toggle Phosphore/Filaire/Couleur
+dans la maquette pour comparer dans les 3 styles. Rien à intégrer dans
+index.html tant que Pierre n'a pas choisi.

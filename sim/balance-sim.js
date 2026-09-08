@@ -76,7 +76,7 @@ const K = {
   // vague 28-30, bon quasiment toujours jusque-là) puis reporté dans
   // index.html:enemyHp() — GARDER LES DEUX SYNCHRONISÉS.
   ENEMY_HP: 2,
-  enemyHp: (wave) => 2 + Math.floor(wave / 7), // == index.html enemyHp()
+  enemyHp: (wave) => 2 + Math.floor(wave / 4.5), // == index.html enemyHp() — retendu après PLAYER_RAMPART_ATK_MUL (était /7)
   ENEMY_WALL_DMG: 6,           // attackBase: castleH -= 6
   ENEMY_WALL_TICK: 1.2,        // attackBase: e.timer = 1.2
   ONTOP_TICK: 1.4,             // onTop: attaque toutes les 1.4s
@@ -109,6 +109,7 @@ const K = {
   TOWER_DMG: 1,                // dmg de base d'une tourelle
   TOWER_COST: 5,               // towerBtn: state.gold < 5
   FACING_MUL: { naive: 1, correct: 1.5, good: 2 }, // facingMultiplier() réel : 1x/1.5x/2x
+  PLAYER_RAMPART_ATK_MUL: 2, // == index.html PLAYER_RAMPART_ATK_MUL ("attaque dans l'axe" +100%, demandé le 2026-09-08)
 
   // princesse
   PRINCESS_GOLD_BONUS: 1.5,        // ×1.5 revenu jardin quand elle est en bas
@@ -437,7 +438,7 @@ function simulateRun(policyName, seed, maxWaves) {
     if (!deathCause) {
       const facingMul = K.FACING_MUL[pol.facing];
       let princessAtkMul = princessAlive ? K.PRINCESS_ATK_BONUS : K.PRINCESS_DEATH_ATK_MUL;
-      let playerDps = (facingMul * princessAtkMul) / K.PLAYER_ATK_COOLDOWN;
+      let playerDps = (facingMul * K.PLAYER_RAMPART_ATK_MUL * princessAtkMul) / K.PLAYER_ATK_COOLDOWN;
       let turretDpsEach = (princessAlive ? 1 : K.PRINCESS_DEATH_TURRET_MUL) * K.TOWER_DMG / K.TOWER_ATK_COOLDOWN;
       let totalDps = playerDps + turretCount * turretDpsEach;
       if (pol.usesOil && wallQueue.length > 0) totalDps += K.OIL_DMG / K.OIL_TICK;

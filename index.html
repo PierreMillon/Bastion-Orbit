@@ -416,6 +416,39 @@
     color: #fff;
   }
   body.phosphor #bottomStack button:disabled { opacity: 0.3; }
+
+  /* signalé en session (capture à l'appui) : la fausse pub à la défaite
+     restait dans ses couleurs criardes d'origine (jaune/rouge) même en
+     phosphore/filaire, détonnant avec tout le reste du chrome depuis
+     v0.32. Le gag textuel reste identique (fausse alerte, faux scan à
+     99%, "Antivirus Royal PRO") — seul l'habillage change, même langage
+     visuel que le reste (bordure fine verte, fond noir, monospace,
+     glow léger). */
+  body.phosphor #fakeAdBox {
+    background: var(--ph-fill);
+    border: 1px solid var(--ph-line);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6), 0 0 24px var(--ph-dim);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    color: var(--ph-text);
+  }
+  body.phosphor #fakeAdClose {
+    background: transparent;
+    border: 1px solid var(--ph-dim);
+    color: var(--ph-text);
+  }
+  body.phosphor .fakeAdSiren { color: var(--ph-line); text-shadow: none; }
+  body.phosphor .fakeAdTitle { color: var(--ph-line); text-shadow: 0 0 10px var(--ph-dim); }
+  body.phosphor .fakeAdBody { color: var(--ph-text); }
+  body.phosphor .fakeAdMeter { background: #04100a; border-color: var(--ph-dim); }
+  body.phosphor .fakeAdMeterFill {
+    background: repeating-linear-gradient(45deg, var(--ph-line), var(--ph-line) 8px, #04100a 8px, #04100a 16px);
+  }
+  body.phosphor .fakeAdSmall { color: var(--ph-text); }
+  body.phosphor #fakeAdContinue {
+    background: var(--ph-fill);
+    color: var(--ph-text);
+    border: 1px solid var(--ph-dim);
+  }
 </style>
 </head>
 <body>
@@ -429,10 +462,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.46</button>
+  <button id="versionBtn">v0.47</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.47</b> — donjon à 12 facettes (au lieu de 24) ; tir du seigneur depuis les remparts ×2 ("dans l'axe", pas la sortie) — difficulté rééquilibrée en conséquence ; écran de fin (fausse alerte + défaite) enfin dans le thème phosphore, plus de jaune/rouge criard</div>
   <div><b>v0.46</b> — courbe de difficulté retravaillée (simulateur headless à l'appui, voir sim/) : les ennemis gagnent des PV avec les vagues au lieu de rester à 2 PV plat pour toujours, une vague sur cinq est allégée (répit avant chaque poussée)</div>
   <div><b>v0.45</b> — correctifs suite à un audit qualité : tri en profondeur correct en mode Perspective pour le seigneur/les ennemis en haut, cache de sprites plus robuste, musique (2 Mo) ne se télécharge plus avant le premier geste, géométrie des routes/du ruisseau mise en cache au lieu d'être reconstruite chaque frame</div>
   <div><b>v0.44</b> — routes bien plus droites, le ruisseau serpente pour de vrai ; cœur du câlin en pixel-art fidèle à l'image fournie ; chaque tourelle tournée depuis son propre centre (plus toutes parallèles) et vise l'ennemi le plus en face d'elle ; le seigneur patrouille de tourelle en tourelle quand la caméra reste longtemps immobile</div>
@@ -931,7 +965,7 @@
   const TURRET_HEAL = 4;        // hp/s while player repairs a turret
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
-  const N_SEG = 24;
+  const N_SEG = 12; // demandé en session : divise par deux le nombre de facettes du donjon (24→12) — un polygone plus visiblement anguleux
   const WALL_SEG = 8;    // the wall is still a smooth N_SEG-gon (nothing about
                           // vertex positions/eave/platform connections changes),
                           // but its shading is quantized to this many flat
@@ -1325,6 +1359,13 @@
     return { x: pr.r * Math.cos(pr.angle), y, z: pr.r * Math.sin(pr.angle), r: pr.r };
   }
 
+  // demandé en session : +100% de puissance d'attaque pour "l'attaque
+  // dans l'axe" du seigneur — précisé par Pierre : le tir depuis les
+  // remparts (facingMultiplier ci-dessous), pas la charge en sortie.
+  // Rejoué au simulateur de difficulté après ce changement — voir
+  // BACKLOG.md, section difficulté, pour le nouveau réglage.
+  const PLAYER_RAMPART_ATK_MUL = 2;
+
   // how much extra damage the lord does depending on how squarely he's
   // facing the target — see VISION_TIGHT/VISION_WIDE
   function facingMultiplier(targetAngle) {
@@ -1359,12 +1400,15 @@
   // suffisait pour toujours (le taux de kill par tourelle ne dépend que
   // du nombre de tourelles, jamais battu par un ennemi à PV fixe), soit
   // elle ne suffisait jamais — aucun entre-deux, pas de vraie courbe. Un
-  // point de PV tous les 7 vagues change ça sans neutraliser aucune
+  // point de PV toutes les ~4.5 vagues change ça sans neutraliser aucune
   // mécanique existante (tourelles/jardin/douves/princesse restent tous
   // utiles, juste plus nécessaires ensemble avec le temps). Calibré au
   // simulateur pour que le joueur "correct" tienne ~55-65% du temps
-  // autour de la vague 28-30, le "bon" quasiment toujours jusque-là.
-  function enemyHp(wave) { return 2 + Math.floor(wave / 7); }
+  // autour de la vague 28-30, le "bon" quasiment toujours jusque-là —
+  // retendu (était /7) après PLAYER_RAMPART_ATK_MUL qui a doublé le DPS
+  // du seigneur et cassait la cible du premier réglage (89% au lieu de
+  // 55-65% à la vague 28).
+  function enemyHp(wave) { return 2 + Math.floor(wave / 4.5); }
 
   function spawnEnemy() {
     const builder = state.buildersToSpawn > 0;
@@ -2587,7 +2631,10 @@
           // facing it dead-on hits much harder; drifting off to the side
           // falls back toward normal — rewards actually turning to track
           // the fight instead of leaving the camera parked
-          let dmg = facingMultiplier(target.angle);
+          // demandé en session : +100% de puissance sur ce tir précis (le
+          // tir du seigneur depuis les remparts, "dans l'axe" — PAS la
+          // charge en sortie, précisée à part) — voir PLAYER_RAMPART_ATK_MUL
+          let dmg = facingMultiplier(target.angle) * PLAYER_RAMPART_ATK_MUL;
           if (state.princessDead) dmg *= PRINCESS_DEATH_ATK_MUL;
           else if (state.princess.pos < 0.08) dmg *= PRINCESS_ATK_BONUS;
           fire(from, target, dmg);
