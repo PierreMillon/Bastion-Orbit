@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.59</button>
+  <button id="versionBtn">v0.60</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.60</b> — style par défaut : Filaire pur (vert) au lieu de Phosphore pour un nouveau chargement — les réglages déjà sauvegardés ne changent pas</div>
   <div><b>v0.59</b> — jauge circulaire au-dessus de tout ennemi/engin de siège en pleine action (pose de pont, échelle, grignotage du mur, coup depuis la plateforme, rechargement) : on voit maintenant venir l'effet au lieu qu'il tombe sans prévenir</div>
   <div><b>v0.58</b> — nombres d'or flottants : chaque gain (kill, engin de siège détruit, vague écourtée, revenu du jardin) s'affiche maintenant au-dessus de sa source, avec un highlight quand le bonus princesse ×1.5 s'applique</div>
   <div><b>v0.57</b> — chaque maison (et la grange/l'église) a maintenant sa propre orientation au lieu d'être toutes parallèles entre elles</div>
@@ -719,16 +720,20 @@
     updatePrincessBtn();
   }
 
-  // ---- mode phosphore: 'couleur' (rendu d'origine) / 'phosphore' (silhouette
-  // noire + contour) / 'filaire' (aucun remplissage, tous les traits) ----
-  // Cycle par défaut sur 'phosphore' — décidé en session. Le rendu du donjon
-  // lui-même (drawCastleSilhouette, plus bas) est spécifique au mode
-  // 'phosphore' ; tout le reste (ennemis, tourelles, princesse, engins de
-  // siège, ponts, particules, barres de vie...) passe par le même wrapper
-  // générique ci-dessous dans les deux modes phosphore/filaire — chaque
-  // fill() existant du jeu redevient un remplissage noir + contour vert
-  // ('phosphore') ou juste un contour sans remplissage ('filaire'), sans
-  // toucher à la cinquantaine de fonctions de dessin elles-mêmes.
+  // ---- mode phosphore: 'couleur' (rendu d'origine, en pause depuis v0.56)
+  // / 'phosphore' (silhouette noire + contour) / 'filaire' (aucun
+  // remplissage, tous les traits) ----
+  // Défaut sur 'filaire' vert (demandé en session, 2026-09-08 : "Pure
+  // wireframe green... c'est le vrai style jeu que moi j'utilise qu'on
+  // doit mettre par défaut quand on joue" — c'était 'phosphore' avant).
+  // Le rendu du donjon lui-même (drawCastleSilhouette, plus bas) est
+  // spécifique au mode 'phosphore' ; tout le reste (ennemis, tourelles,
+  // princesse, engins de siège, ponts, particules, barres de vie...)
+  // passe par le même wrapper générique ci-dessous dans les deux modes
+  // phosphore/filaire — chaque fill() existant du jeu redevient un
+  // remplissage noir + contour vert ('phosphore') ou juste un contour
+  // sans remplissage ('filaire'), sans toucher à la cinquantaine de
+  // fonctions de dessin elles-mêmes.
   // deux teintes retenues (la troisième option du comparateur, cyan, a été
   // écartée) — vert par défaut, bascule via le bouton "Teinte" du menu
   const PHOSPHOR_HUES = {
@@ -736,7 +741,7 @@
     ambre: '255, 176, 71'
   };
   const PHOSPHOR_BG = '#04070a';
-  let phosphorStyle = 'phosphore';
+  let phosphorStyle = 'filaire';
   let phosphorHue = 'vert';
   try {
     const stored = localStorage.getItem('bo_phosphorStyle');

@@ -1299,3 +1299,28 @@ Vérifié en Playwright (plusieurs angles de caméra) : les maisons
 pointent maintenant dans des directions clairement différentes,
 l'église garde son clocher bien accroché sous rotation, aucune erreur
 console.
+
+## Style par défaut : Filaire pur (vert), plus Phosphore → fait en v0.60
+
+Demandé en session : "Pure wireframe green [...] c'est le vrai style
+jeu que moi j'utilise qu'on doit mettre par défaut quand on joue" —
+demande aussi que tous les rendus de vérification faits pendant cette
+session (captures Playwright) utilisent ce même style, pour comparer
+directement avec ce que Pierre voit en jeu.
+
+`phosphorStyle` par défaut passe de `'phosphore'` à `'filaire'`
+(`phosphorHue` restait déjà `'vert'` par défaut, rien à changer là).
+Un joueur qui a déjà un `bo_phosphorStyle` en localStorage garde son
+choix (pas de réinitialisation forcée d'un réglage déjà sauvegardé,
+même logique que pour la langue/difficulté/audio) — seuls les nouveaux
+chargements sans réglage sauvegardé partent maintenant en Filaire pur.
+Vérifié en Playwright (contexte neuf, sans localStorage) : le menu
+affiche bien "Style : Filaire pur" / "Teinte : Vert" au premier
+chargement, donjon rendu en fil de fer complet (toutes les facettes,
+pas la silhouette du mode Phosphore), aucune erreur console.
+
+Effet de bord utile, pas juste accessoire : comme c'est maintenant le
+style par défaut du jeu, tout nouveau test Playwright de cette session
+(sans manipulation explicite du style) l'utilisera automatiquement —
+répond directement à la demande de cohérence entre les captures de
+vérification et le vrai rendu par défaut.
