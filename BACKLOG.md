@@ -759,5 +759,115 @@ d'être visé (trop dur).
 - e) Garder le simulateur comme test de régression pour toute feature
   future.
 
-*(Cette sous-section sera mise à jour avec le modèle retenu, les
-résultats avant/après et les constantes modifiées au fur et à mesure.)*
+**a) Modèle retenu (recherche web courte, sources ci-dessous)** :
+
+- **Canal de flow** (Csíkszentmihályi ; thèse "Flow in Games" de Jenova
+  Chen) : le "fun" est l'équilibre entre le défi et la compétence — trop
+  de défi = anxiété, trop peu = ennui. C'est la métrique optimisée par
+  le simulateur : faire tomber le joueur "correct" dans cette zone, pas
+  le faire gagner ni perdre systématiquement.
+  [Flow in Games (thèse Jenova Chen)](https://www.jenovachen.com/flowingames/Flow_in_games_final.pdf) ·
+  [Flow theory — game design (Medium)](https://medium.com/@icodewithben/mihaly-csikszentmihalyis-flow-theory-game-design-ideas-9a06306b0fb8)
+- **"Tension sawtooth"** (dents de scie) : une difficulté qui ne fait que
+  monter en ligne droite épuise le joueur — les pics ne se ressentent
+  comme des pics que s'il y a eu un vrai répit avant. Repris de l'AI
+  Director de Left 4 Dead (Michael Booth, GDC 2009 : suit une "intensité"
+  par joueur, la laisse retomber après un combat difficile avant le
+  prochain pic) et des analyses de Kingdom Rush (une seule nouvelle
+  mécanique/ennemi à la fois, jamais de pic sans prévenir).
+  [Doing Difficulty Right: Fractal Curves (Game Developer)](https://www.gamedeveloper.com/design/doing-difficulty-right-fractal-curves) ·
+  [The AI Systems of Left 4 Dead (Valve, GDC 2009, PDF)](https://steamcdn-a.akamaihd.net/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf) ·
+  [Kingdom Rush vs Bloons TD 6 (TowerWard)](https://towerward.com/blog/kingdom-rush-vs-bloons-td-6)
+
+**b) Simulateur** → fait, `sim/balance-sim.js` (+ `sim/README.md`).
+Headless, sans dépendance, 3 politiques (naïf/correct/bon — chacune
+diffère sur les vrais leviers du joueur : suivi caméra, achats
+tourelles/jardin/douves, usage princesse/sortie/huile ; la réparation
+reste automatique pour toutes, comme dans le vrai jeu). Simplifications
+assumées et documentées en tête du fichier (pas de géométrie 2D réelle,
+combat résumé en DPS moyen, formation des engins de siège résumée en
+seuil d'accumulation plutôt qu'en proximité spatiale exacte) — objectif
+de signal directionnel fiable, pas de réplique pixel-perfect.
+
+**Constat le plus important, avant tout réglage** : les PV d'un ennemi
+étaient un littéral plat `2` dans `spawnEnemy()` — **jamais mis à
+l'échelle par la vague**. Seuls le nombre d'ennemis, la cadence
+d'apparition et leur vitesse montaient. Conséquence mesurée au
+simulateur : le jeu était **bimodal**, pas progressif — soit le joueur
+achetait assez de tourelles tôt et le débit de kill (qui ne dépend que
+du nombre de tourelles) écrasait des PV fixes pour toujours (100% de
+survie jusqu'à la vague 100 dans les runs "correct"/"bon" avant
+réglage), soit il n'en achetait pas assez et perdait presque tout de
+suite — aucun entre-deux, donc aucune vraie "courbe" à ressentir.
+
+**Deuxième constat, tout aussi important** : un engin de siège ne peut
+JAMAIS être achevé par le tir à distance seul (PV plafonnés à 1 tant que
+l'équipage est vivant, qui se régénère — "équipage vivant", déjà noté
+plus haut dans ce fichier) — seule une Sortie tue l'équipage
+directement. Un joueur qui ne découvre/n'utilise jamais la Sortie reste
+donc **bloqué indéfiniment** sur la première vague où un attroupement se
+forme (dès 2 attaquants stagnant au même endroit) : pas d'écran de
+défaite, juste plus aucune progression. Dans le simulateur, la politique
+"naïve" (qui n'utilise pas la Sortie) échoue quasi systématiquement de
+cette façon, dès la vague 1. **Ce n'est pas un bug du réglage des
+constantes** (la mécanique "équipage vivant" est un choix de design
+assumé, déjà documenté ailleurs dans ce fichier) — c'est un problème de
+**découverte** : rien à l'écran n'indique "ceci a besoin d'une Sortie".
+Directement lié à la Partie 2.4 (retour visuel explicite) et 2.3 (FAQ
+sans mystère) de la grosse consigne — pas résolu ici, juste consigné
+pour que ce ne soit pas reperdu.
+
+**c) Cibles** : adaptées à Bastion Orbit, qui n'a **aucun palier de
+difficulté** (facile/normal/difficile) contrairement à ce que la
+consigne envisageait pour les 3 jeux en général — un seul mode à vagues
+infinies. Faute de paliers, la cible "normale" de Pierre (correct
+~55-65%, bon quasiment toujours, naïf perd) a été mesurée à un point de
+contrôle choisi (vague ~28-30, une session complète normale) plutôt qu'à
+un tier de difficulté séparé. Ajouter de vrais paliers (multiplicateurs
+de constantes sélectionnables) resterait un chantier séparé, pas fait
+ici — noté comme piste si Pierre le souhaite.
+
+**d) Constantes modifiées** (voir aussi le changelog en jeu) :
+- `enemyHp(wave) = 2 + floor(wave/7)` (nouvelle fonction, remplace le
+  littéral plat `2` dans `spawnEnemy()`) — LE levier qui casse la
+  bimodalité : au-delà d'un certain nombre de tourelles fixes, les PV
+  montants finissent toujours par rattraper le débit de kill.
+- `waveSpawnCount(wave)` (nouvelle fonction, remplace `3 + wave*2`
+  directement dans `startWave()`) : une vague sur cinq (`wave % 5 === 0`)
+  a son effectif réduit de 30% — la "dent de scie" du modèle retenu, un
+  vrai palier de répit avant chaque poussée plutôt qu'une pente continue.
+
+**Résultats mesurés** (`node sim/balance-sim.js --runs=80 --waves=40`,
+avant/après) :
+
+| | avant | après |
+|---|---|---|
+| naïf, survie ≥v10 | 0% (bloqué en boucle infinie côté sim, jamais compté comme mort propre) | 0% (perd proprement, cause identifiée : jamais de Sortie) |
+| correct, survie ≥v20 | 100% | 96-100% |
+| correct, survie ≥v28 | 100% | **63-74%** (cible : 55-65%, dans la marge) |
+| correct, survie ≥v30 | 100% | **53-63%** (cible : 55-65%, dans la marge) |
+| correct, survie ≥v50 | 100% | 0% |
+| bon, survie ≥v30 | 100% | 100% |
+| bon, survie ≥v50 | 100% | 57% |
+| bon, survie ≥v75 | 100% | 0% |
+
+Toutes les mécaniques existantes restent utiles et rentables : tourelles
+(seul levier de DPS soutenu), jardin (seule façon de financer plus de
+tourelles/douves sans compter uniquement sur les kills), douves
+(ralentit l'arrivée, laisse plus de temps pour tuer avant l'accumulation
+au mur), princesse (le bonus jardin ×1.5 reste le levier économique le
+plus fort si on la gère — mais ×0.1 dégâts joueur si elle meurt reste la
+sanction la plus sévère du jeu), sortie/huile (seul moyen réel de
+limiter la casse une fois des engins de siège formés).
+
+**e) Test de régression** → fait, `node sim/balance-sim.js --check`
+(80 parties/politique, sort avec un code non-zéro si une cible est
+ratée). Règle notée pour la suite : toute constante touchant au rythme
+des vagues/PV/dégâts/coûts doit relancer cette commande avant de
+pousser.
+
+**Pas fait dans cette passe** : paliers de difficulté (facile/normal/
+difficile) sélectionnables — le jeu n'en a pas, cf. plus haut ; vérifier
+en jeu réel (Playwright/partie manuelle longue) que le ressenti confirme
+les chiffres du simulateur au-delà d'une vérification syntaxique/fumée
+courte déjà faite ce tour-ci.

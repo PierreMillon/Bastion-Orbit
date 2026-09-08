@@ -429,10 +429,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.45</button>
+  <button id="versionBtn">v0.46</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.46</b> — courbe de difficulté retravaillée (simulateur headless à l'appui, voir sim/) : les ennemis gagnent des PV avec les vagues au lieu de rester à 2 PV plat pour toujours, une vague sur cinq est allégée (répit avant chaque poussée)</div>
   <div><b>v0.45</b> — correctifs suite à un audit qualité : tri en profondeur correct en mode Perspective pour le seigneur/les ennemis en haut, cache de sprites plus robuste, musique (2 Mo) ne se télécharge plus avant le premier geste, géométrie des routes/du ruisseau mise en cache au lieu d'être reconstruite chaque frame</div>
   <div><b>v0.44</b> — routes bien plus droites, le ruisseau serpente pour de vrai ; cœur du câlin en pixel-art fidèle à l'image fournie ; chaque tourelle tournée depuis son propre centre (plus toutes parallèles) et vise l'ennemi le plus en face d'elle ; le seigneur patrouille de tourelle en tourelle quand la caméra reste longtemps immobile</div>
   <div><b>v0.43</b> — petit village de maisons décoratives, le ruisseau traverse toute la carte avec un pont, gouttes d'huile bouillante animées, bannière FIGHT! agrandie</div>
@@ -1351,6 +1352,20 @@
     return Math.min(SPAWN_R, Math.max(220, Math.min(rx, ry)));
   }
 
+  // audit difficulté (session du 2026-09-08, priorité n°1 de Pierre) :
+  // avant, l'ennemi restait à 2 PV plat quelle que soit la vague — seuls
+  // le nombre, la cadence et la vitesse montaient. Résultat mesuré au
+  // simulateur (voir sim/balance-sim.js) : soit la défense achetée tôt
+  // suffisait pour toujours (le taux de kill par tourelle ne dépend que
+  // du nombre de tourelles, jamais battu par un ennemi à PV fixe), soit
+  // elle ne suffisait jamais — aucun entre-deux, pas de vraie courbe. Un
+  // point de PV tous les 7 vagues change ça sans neutraliser aucune
+  // mécanique existante (tourelles/jardin/douves/princesse restent tous
+  // utiles, juste plus nécessaires ensemble avec le temps). Calibré au
+  // simulateur pour que le joueur "correct" tienne ~55-65% du temps
+  // autour de la vague 28-30, le "bon" quasiment toujours jusque-là.
+  function enemyHp(wave) { return 2 + Math.floor(wave / 7); }
+
   function spawnEnemy() {
     const builder = state.buildersToSpawn > 0;
     if (builder) state.buildersToSpawn--;
@@ -1368,8 +1383,8 @@
       angle,
       r: tightSpawnR(angle),
       speed: 24 + state.wave * 1.5, // wave-paced approach speed once actually on screen — see OFFSCREEN_APPROACH_MUL for the unseen leg
-      hp: 2,
-      maxHp: 2,
+      hp: enemyHp(state.wave),
+      maxHp: enemyHp(state.wave),
       wt: Math.random() * 10,      // phase accumulator, drives the lateral wander
       wanderSeed: Math.random() * 10,
       hopping: false,              // rare short jump-for-joy, not a constant bob
@@ -1388,9 +1403,19 @@
     });
   }
 
+  // audit difficulté : "dents de scie" plutôt qu'une ligne droite — sans
+  // ça, la pression ne fait que monter, jamais de palier de répit pour
+  // "recalibrer" avant le pic suivant (cf. AI Director de Left 4 Dead,
+  // analyses Kingdom Rush — voir BACKLOG.md, section difficulté). Une
+  // vague sur cinq est une vague de répit à effectif réduit.
+  function waveSpawnCount(wave) {
+    const base = 3 + wave * 2;
+    return Math.max(1, Math.round(wave % 5 === 0 ? base * 0.7 : base));
+  }
+
   function startWave() {
     state.waveState = 'active';
-    state.toSpawn = 3 + state.wave * 2;
+    state.toSpawn = waveSpawnCount(state.wave);
     // a quick "FIGHT!" banner up top, then the first enemy arrives just as
     // it's fading — instead of enemies spawning the instant the wave starts
     state.fightBanner = FIGHT_BANNER_DUR;
