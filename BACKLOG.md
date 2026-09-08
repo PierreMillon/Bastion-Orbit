@@ -1721,15 +1721,6 @@ liée à la difficulté.
   n'a pas tout couvert. En cours de diagnostic (même méthode que la
   fois précédente : comparer avec/sans chaque système suspect plutôt
   que deviner) au moment de cette note.
-- **Économie du moulin** — toucher/cliquer le moulin fait apparaître un
-  bouton flottant ancré au-dessus de lui à l'écran (suit sa position
-  projetée même si la caméra tourne, comme un marqueur UI). Ce bouton
-  affiche un tarif (dit "équilibré", à choisir raisonnablement, pas
-  arbitraire) et achète un palier : au niveau 0 le moulin ne rapporte
-  rien (juste de la farine, narratif) ; le premier palier (~30 or)
-  débloque un revenu passif (~1 or/seconde) ; paliers suivants coûtent
-  plus cher et rapportent plus, même logique que le jardin existant
-  (GARDEN_TICK/gardenLevel) à réutiliser comme modèle.
 - **Zone sacrée autour de l'église** — même principe de bouton flottant
   au toucher de l'église ; achète des paliers qui agrandissent une
   ellipse au sol centrée sur l'église (même vocabulaire visuel que les
@@ -1785,7 +1776,7 @@ combien de temps ça reste affiché).
   de simples on/off ; il faut deux vraies glissières précises, une pour
   la musique et une pour les bruitages, séparément.
 
-## Le moulin — bâtiment + roue (2e des 6 gros chantiers) → fait en v0.67 ; l'économie (bouton/tarifs) reste à faire
+## Le moulin — bâtiment + roue (2e des 6 gros chantiers) → fait en v0.67 ; économie (bouton/tarifs) → fait en v0.69
 
 Recherché avant d'implémenter (demandé explicitement : "un vrai
 mécanisme de moulin à eau à rechercher, pas inventé au hasard") :
@@ -1814,9 +1805,25 @@ Vérifié en Playwright : roue visible et animée (rayons à des angles
 différents d'une capture à l'autre), aucune erreur console sur ~50s de
 jeu en continu avec rotations de caméra régulières.
 
-Pas fait : le volet "économie" demandé séparément (bouton flottant au
-toucher, tarifs par palier, revenu passif) — voir la section
-"Nouvelles demandes" plus haut, toujours en attente.
+**Économie (v0.69)** : toucher/cliquer le moulin (nouvelle distinction
+tap-vs-glissé sur le canvas : peu de mouvement + peu de temps depuis le
+`pointerdown` = tap) fait apparaître `#moulinBtn`, un vrai bouton DOM
+flottant (`position: fixed`, repositionné chaque frame dans `render()`
+via `project()` sur la position du moulin, donc reste ancré au-dessus
+de lui même en tournant la caméra). Paliers géométriques, même moteur
+que le jardin (`gardenCost`/`gardenRate`) réutilisé comme modèle :
+`moulinCost`/`moulinRate`, `MOULIN_GROWTH=1.35` (identique au jardin).
+"Un tarif équilibré" pris au sens propre plutôt que littéral : même
+ratio coût/revenu que le jardin (30 or pour 0.4 or/s, même rapport que
+15 or pour 0.2 or/s) — plus raisonnable que le "1 or/s" donné en
+exemple par Pierre, qui aurait été ~2.5x plus généreux que le jardin à
+coût comparable. 6 paliers max.
+
+Vérifié en Playwright : tap détecté correctement (bouton apparaît),
+tarif exact ("30" puis "41" = round(30×1.35) au palier suivant), achat
+déduit bien l'or et incrémente le niveau, le bouton suit la caméra
+pendant une rotation (position CSS mesurée différente avant/après),
+revenu passif observé après ~5s d'attente. Aucune erreur console.
 
 ## Eau du ruisseau qui s'arrêtait avant le bord de l'écran sur rotation → fait en v0.67
 

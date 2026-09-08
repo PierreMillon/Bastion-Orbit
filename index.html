@@ -110,6 +110,26 @@
     font-family: inherit;
   }
 
+  /* bouton flottant ancré à un bâtiment du monde (moulin, église...) —
+     position (left/top) pilotée en JS chaque frame, translate() le
+     recentre horizontalement et le pose juste au-dessus du point ancré */
+  .worldBtn {
+    position: fixed;
+    transform: translate(-50%, -100%);
+    z-index: 9;
+    background: #3b3222;
+    border: 1px solid rgba(242,234,217,0.4);
+    border-radius: 6px;
+    color: #f2ead9;
+    font-size: 11px;
+    padding: 4px 9px;
+    font-family: inherit;
+    white-space: nowrap;
+    pointer-events: auto;
+  }
+  .worldBtn[hidden] { display: none; }
+  .worldBtn.unaffordable { opacity: 0.45; }
+
   #changelog {
     position: fixed;
     top: calc(46px + env(safe-area-inset-top));
@@ -458,16 +478,24 @@
 
 <canvas id="game"></canvas>
 
+<!-- boutons flottants ancrés à un bâtiment du monde (demandé en session :
+     "si on touche le moulin, ça fait apparaître un bouton juste au-dessus
+     qui reste à la verticale du moulin, même si on tourne") — position
+     (left/top) recalculée chaque frame dans render() tant que visible,
+     via project(). Même idée pour l'église (zone sacrée). -->
+<button id="moulinBtn" class="worldBtn" hidden></button>
+
 <div id="topbar">
   <button id="menuBtn" aria-label="Menu">☰</button>
   <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle"><span id="waveLabel">Vague</span> <span id="waveNum">1</span> → <span id="waveNextNum">2</span> <span id="waveBonus">+3</span></button>
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.68</button>
+  <button id="versionBtn">v0.69</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.69</b> — économie du moulin : le toucher fait apparaître un bouton d'achat par palier (bouton flottant qui suit la rotation de la caméra), revenu passif ensuite</div>
   <div><b>v0.68</b> — le ruisseau est enfin infranchissable ("très important") : ennemis bloqués par une berge invisible, obligés de longer l'eau jusqu'au pont pour passer</div>
   <div><b>v0.67</b> — le moulin (2e des 6 gros chantiers) : une maison avec une vraie roue à aubes posée sur l'eau, qui tourne dans le bon sens par rapport au courant (recherché, pas inventé) ; corrige aussi l'eau du ruisseau qui pouvait s'arrêter avant le bord de l'écran à certaines rotations sur un écran large</div>
   <div><b>v0.66</b> — mécanique des paysans : le village vit (danse sur la place, notes de musique) tant qu'aucun ennemi n'est apparu, puis se met à l'abri dès la première attaque ; vague après vague, certains partent se battre, d'autres se réfugient à l'église ou au château (visibles près du feu dans la vue intérieure)</div>
@@ -621,6 +649,8 @@
       sortie_btn: 'Sortie', oil_btn: 'Huile',
       tower_btn: 'Tourelle', garden_btn: 'Jardin', moat_btn: 'Douves',
       moat_max: 'Douves max', horse_btn: 'Cheval',
+      moulin_btn_start: 'Faire tourner le moulin', moulin_btn_upgrade: 'Améliorer le moulin',
+      moulin_max: 'Moulin au maximum',
       restart_full: 'Recommencer depuis le début',
       difficulty_prefix: 'Difficulté : ',
       diff_facile: 'Facile', diff_normal: 'Normal', diff_difficile: 'Difficile',
@@ -650,6 +680,8 @@
       sortie_btn: 'Sally', oil_btn: 'Oil',
       tower_btn: 'Turret', garden_btn: 'Garden', moat_btn: 'Moat',
       moat_max: 'Moat max', horse_btn: 'Horse',
+      moulin_btn_start: 'Start the mill', moulin_btn_upgrade: 'Upgrade the mill',
+      moulin_max: 'Mill maxed out',
       restart_full: 'Restart from the beginning',
       difficulty_prefix: 'Difficulty: ',
       diff_facile: 'Easy', diff_normal: 'Normal', diff_difficile: 'Hard',
@@ -1460,6 +1492,23 @@
   function gardenRate(n) { return GARDEN_BASE_RATE * Math.pow(GARDEN_GROWTH, n - 1); }
   const GARDEN_TICK = 5; // seconds between passive income payouts
 
+  // économie du moulin (demandé en session : "un tarif équilibré... au
+  // début ça génère pas d'argent... si je dépense 30 pièces d'or, il va
+  // générer une pièce d'or par seconde... des paliers, je dépense plus,
+  // je gagne plus") — même mécanique par paliers géométriques que le
+  // jardin juste au-dessus, réutilisée comme modèle plutôt que réinventée.
+  // "un tarif équilibré" pris au sens propre : même ratio coût/revenu que
+  // le jardin (15 or pour 1/GARDEN_TICK=0.2 or/s, soit 75 or par or/s) —
+  // 30 or de départ pour 0.4 or/s, pas le 1 or/s littéral de l'exemple
+  // (qui aurait été ~2.5x plus généreux que le jardin à coût comparable).
+  const MOULIN_BASE_COST = 30;
+  const MOULIN_BASE_RATE = 2; // or par MOULIN_TICK, au niveau 1
+  const MOULIN_GROWTH = 1.35;
+  const MOULIN_TICK = 5;
+  function moulinCost(n) { return Math.round(MOULIN_BASE_COST * Math.pow(MOULIN_GROWTH, n - 1)); }
+  function moulinRate(n) { return MOULIN_BASE_RATE * Math.pow(MOULIN_GROWTH, n - 1); }
+  const MOULIN_MAX_LEVEL = 6;
+
   const circlePts = [];
   for (let i = 0; i <= N_SEG; i++) {
     const a = (i / N_SEG) * Math.PI * 2;
@@ -2011,6 +2060,11 @@
     villagePanic: false,       // devient vrai à la toute première apparition d'un ennemi
     villagersHiddenChurch: 0,  // comptage seulement — ils disparaissent de l'écran en entrant
     villagersHiddenCastle: 0,  // idem, mais repris dans la vue cosy (même nombre près du feu)
+    // économie du moulin (demandé en session : toucher le moulin fait
+    // apparaître un bouton d'achat par palier, revenu passif ensuite) —
+    // niveau 0 = pas encore acheté, "juste de la farine" (narratif)
+    moulinLevel: 0,
+    moulinTimer: 0,
     toSpawn: 0,
     spawnTimer: 0,
     spawnInterval: 0.9,
@@ -2678,12 +2732,18 @@
 
   // ---- input: drag to orbit, with inertia after a fast flick ----
   let dragging = false, lastX = 0, lastT = 0;
+  // tap-vs-drag (demandé en session : "si on touche le moulin" — un vrai
+  // tap sur le bâtiment, pas juste n'importe quel pointerdown/up) : un
+  // relâchement avec peu de mouvement et peu de temps écoulé depuis le
+  // pointerdown compte comme un tap plutôt qu'un glissé de rotation
+  let downX = 0, downY = 0, downT = 0;
   canvas.addEventListener('pointerdown', e => {
     ensureAudio();
     dragging = true;
     state.omega = 0;
     lastX = e.clientX;
     lastT = performance.now();
+    downX = e.clientX; downY = e.clientY; downT = lastT;
   });
   canvas.addEventListener('pointermove', e => {
     if (!dragging) return;
@@ -2697,8 +2757,54 @@
     lastX = e.clientX;
     lastT = now;
   });
-  canvas.addEventListener('pointerup', () => dragging = false);
+  canvas.addEventListener('pointerup', e => {
+    dragging = false;
+    const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+    if (moved < 8 && performance.now() - downT < 400) handleCanvasTap(e.clientX, e.clientY);
+  });
   canvas.addEventListener('pointercancel', () => dragging = false);
+
+  // boutons flottants ancrés à un bâtiment du monde (voir #moulinBtn dans
+  // le HTML) — un vrai tap sur le bâtiment bascule sa visibilité ; la
+  // position (left/top) est recalculée chaque frame dans render() tant
+  // qu'il est visible, pour suivre la rotation de la caméra.
+  const moulinBtn = document.getElementById('moulinBtn');
+  let moulinBtnVisible = false;
+  const WORLD_TAP_RADIUS = 42; // rayon de détection du tap sur un bâtiment, en pixels écran
+  function handleCanvasTap(clientX, clientY) {
+    const rot = state.theta - Math.PI / 4;
+    const m = moulinGeometry();
+    const pos = project(m.houseX, 10, m.houseZ, rot);
+    if (Math.hypot(clientX - pos.x, clientY - pos.y) < WORLD_TAP_RADIUS) {
+      moulinBtnVisible = !moulinBtnVisible;
+      updateMoulinBtn();
+    }
+  }
+  function updateMoulinBtn() {
+    if (!moulinBtnVisible) { moulinBtn.hidden = true; return; }
+    moulinBtn.hidden = false;
+    if (state.moulinLevel >= MOULIN_MAX_LEVEL) {
+      moulinBtn.textContent = t('moulin_max');
+      moulinBtn.classList.remove('unaffordable');
+      moulinBtn.disabled = true;
+    } else {
+      const cost = moulinCost(state.moulinLevel + 1);
+      moulinBtn.textContent = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
+      moulinBtn.classList.toggle('unaffordable', state.gold < cost);
+      moulinBtn.disabled = false;
+    }
+  }
+  moulinBtn.addEventListener('click', () => {
+    if (state.moulinLevel >= MOULIN_MAX_LEVEL) return;
+    const cost = moulinCost(state.moulinLevel + 1);
+    if (state.gold < cost) return;
+    state.gold -= cost;
+    goldNum.textContent = state.gold;
+    state.moulinLevel++;
+    state.moulinTimer = MOULIN_TICK;
+    playHammer();
+    updateMoulinBtn();
+  });
 
   // ---- UI ----
   const towerBtn = document.getElementById('towerBtn');
@@ -2804,6 +2910,7 @@
     updateGardenBtn();
     updateHorseBtn();
     updateNextWaveBonus(); // dégressif au fil de la vague, voir nextWaveBonus()
+    updateMoulinBtn(); // no-op si pas visible (voir moulinBtnVisible)
   }
 
   function updatePrincessBtn() {
@@ -3545,6 +3652,22 @@
       }
     } else {
       state.gardenTimer = GARDEN_TICK;
+    }
+
+    // revenu du moulin — même mécanique que le jardin juste au-dessus,
+    // payé au moulin lui-même plutôt qu'au jardin/à la princesse
+    if (state.moulinLevel > 0) {
+      state.moulinTimer -= dt;
+      if (state.moulinTimer <= 0) {
+        const amount = Math.round(moulinRate(state.moulinLevel));
+        state.gold += amount;
+        goldNum.textContent = state.gold;
+        const m = moulinGeometry();
+        spawnFloatingGold(m.houseX, 10, m.houseZ, amount);
+        state.moulinTimer = MOULIN_TICK;
+      }
+    } else {
+      state.moulinTimer = MOULIN_TICK;
     }
 
     // spawning
@@ -5599,6 +5722,17 @@
     // -45°: aligns "world angle == camera theta" with the nearest point of
     // the ellipse (the iso basis itself is rotated 45° from rx/rz)
     const rot = state.theta - Math.PI / 4;
+
+    // bouton flottant du moulin : reste ancré au-dessus de lui à l'écran
+    // même quand la caméra tourne (demandé en session) — recalculé ici,
+    // une fois par frame, plutôt que dans updateMoulinBtn() (appelée par
+    // refreshBuyButtons(), pas par frame de rendu)
+    if (moulinBtnVisible) {
+      const m = moulinGeometry();
+      const pos = project(m.houseX, 26, m.houseZ, rot);
+      moulinBtn.style.left = pos.x + 'px';
+      moulinBtn.style.top = pos.y + 'px';
+    }
 
     // active moat: real water filling the whole slowed zone, once at least
     // one tier is bought — darkens/deepens with level (also stronger slow
