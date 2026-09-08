@@ -635,3 +635,49 @@ Quatre demandes groupées :
   construction. Le "recul d'un cran au sol en tournant" de l'idée
   d'origine est fait aussi : le seigneur réduit son rayon pendant une
   rotation rapide de la caméra.
+
+## Audit qualité (bugs + refactor + perf) → correctifs rapides faits en v0.45
+
+Audit demandé en session (routine programmée), lecture seule d'abord —
+rapport livré, feu vert reçu ("Fait"), puis les correctifs "vaut le coup
+de faire bientôt" du rapport ont été appliqués :
+
+- **`SQUARE_PTS` mort** → supprimé (resté inutilisé depuis le passage à
+  `squareCornersAt(t.angle)` par tourelle en v0.44).
+- **Tri en profondeur faux en mode Perspective pour ce qui est "sur la
+  plateforme"** → corrigé : le seigneur et un ennemi monté en haut
+  utilisaient `y=0` pour leur profondeur au lieu de leur vraie hauteur
+  (`platformTopY()`/`playerWorld().y`), sans effet en axonométrie
+  (`depth = rx+rz`, indépendant de `y`) mais faussant l'ordre d'occlusion
+  en Perspective (`depth = -z2`, qui dépend de `y` via l'inclinaison
+  caméra). Utilisent maintenant leur vraie hauteur comme les tourelles et
+  la princesse.
+- **Clé du cache de sprites fragile** → `getSprite`/`drawBallSprite`
+  cachaient par `key` seul (+ style), sans le rayon ni les couleurs comme
+  le prétendait le commentaire — sans bug actif (chaque `key` avait un
+  seul (rayon, couleurs) associé dans tous les appels existants) mais
+  risque silencieux pour un futur appel qui réutiliserait une `key` avec
+  un rayon/couleur différent. `drawBallSprite` construit maintenant une
+  clé complète (`key:rad:colorA:colorB`).
+- **`music.wav` (2 Mo) en `preload="auto"`** → passé à `preload="none"` :
+  la lecture est de toute façon bloquée jusqu'au premier geste (mobile),
+  inutile de le télécharger dès le chargement de la page pour un joueur
+  qui coupera peut-être la musique ou n'ira jamais jusqu'au geste.
+  `bgMusic.play()` déclenche le chargement réel au bon moment.
+- **Géométrie des routes/du ruisseau reconstruite à chaque frame** →
+  mise en cache : `roadSegs(idx)` et `streamSegs()` ne dépendent que de
+  constantes et de `SPAWN_R` (qui ne change qu'au resize), donc n'ont
+  plus besoin d'être reconstruites (40+48 points trigonométriques, deux
+  routes) 60 fois par seconde — seul le classement far/near, qui dépend
+  vraiment de la rotation caméra, reste recalculé à chaque frame. Cache
+  invalidé dans `resize()`. Attention en y retouchant : les variables de
+  cache (`_roadSegsCache`, `_streamSegsCache`) sont déclarées tout en
+  haut du script, près de `SPAWN_R`, pas à côté de leurs fonctions — même
+  piège de TDZ que celui qui avait cassé le jeu en v0.30 (resize() tourne
+  avant que le script atteigne une déclaration `let`/`const` plus bas).
+
+**Pas fait** (le rapport le classait "peut attendre") : découpage de
+`update()` (~600 lignes, une seule fonction), extraction d'un helper
+générique pour le split far/near répété ~8 fois dans `render()`, fusion
+de `drawRoadRun`/`drawStreamRun` (quasi identiques). Rien d'urgent tant
+qu'aucune nouvelle feature ne vient justement toucher ces zones.

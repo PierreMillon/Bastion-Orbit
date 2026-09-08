@@ -429,10 +429,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.44</button>
+  <button id="versionBtn">v0.45</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.45</b> — correctifs suite à un audit qualité : tri en profondeur correct en mode Perspective pour le seigneur/les ennemis en haut, cache de sprites plus robuste, musique (2 Mo) ne se télécharge plus avant le premier geste, géométrie des routes/du ruisseau mise en cache au lieu d'être reconstruite chaque frame</div>
   <div><b>v0.44</b> — routes bien plus droites, le ruisseau serpente pour de vrai ; cœur du câlin en pixel-art fidèle à l'image fournie ; chaque tourelle tournée depuis son propre centre (plus toutes parallèles) et vise l'ennemi le plus en face d'elle ; le seigneur patrouille de tourelle en tourelle quand la caméra reste longtemps immobile</div>
   <div><b>v0.43</b> — petit village de maisons décoratives, le ruisseau traverse toute la carte avec un pont, gouttes d'huile bouillante animées, bannière FIGHT! agrandie</div>
   <div><b>v0.42</b> — corrige le débordement de la barre du haut sur petit écran, le changelog se ferme en tapant à côté</div>
@@ -497,7 +498,12 @@
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
-<audio id="bgMusic" src="music.wav" loop preload="auto"></audio>
+<!-- preload="none" : audité en session — la lecture est de toute façon
+     bloquée jusqu'au premier geste (déblocage audio mobile), inutile de
+     télécharger ces 2 Mo dès le chargement pour un joueur qui coupera
+     peut-être la musique ou n'ira jamais jusqu'au geste. tryPlayMusic()
+     déclenche le chargement réel au moment du premier geste. -->
+<audio id="bgMusic" src="music.wav" loop preload="none"></audio>
 
 <div id="cosyOverlay" hidden>
   <div id="cosyRoom">
@@ -643,6 +649,12 @@
   let snowOn = true;
   try { snowOn = localStorage.getItem('bo_snowOn') !== 'off'; } catch (e) { /* ignore */ }
   const SPAWN_R_BASE = 480; // the old flat radius — speed is scaled by SPAWN_R/this so a taller spawn distance doesn't change how long the walk actually takes
+  // road/stream segment geometry cache (see roadSegs()/streamSegs() further
+  // down) — declared up here for the exact same TDZ reason as SNOW_LAYERS
+  // above: resize() clears them below, and resize() runs before the script
+  // reaches those functions' own section further down the file.
+  const _roadSegsCache = [null, null];
+  let _streamSegsCache = null;
 
   function resize() {
     W = canvas.width = innerWidth;
@@ -666,6 +678,12 @@
     const y0 = (H / 2 + MARGIN) / 0.7071;
     SPAWN_R = Math.max(480, Math.hypot(x0, y0) / scale);
     initSnow(); // re-seed screen-space flakes to the new W/H (function is hoisted, safe to call here)
+    // roadMaxR()/streamHalfLen() both track SPAWN_R — the cached segment
+    // geometry (see roadSegs()/streamSegs()) is only valid for the SPAWN_R
+    // it was built with, so a resize must invalidate it
+    _roadSegsCache[0] = null;
+    _roadSegsCache[1] = null;
+    _streamSegsCache = null;
   }
   // spawning genuinely off-screen (above) is still correct — a wave should
   // never pop an enemy in mid-frame — but on a tall phone that radius is far
@@ -1073,19 +1091,18 @@
   // a turret is a small cube, built from the same depth-sorted-quad recipe
   // as the donjon wall, just with 4 sides instead of N_SEG. Corners are
   // generated per-turret at squareCornersAt(t.angle) — signalé en session :
-  // avant, chaque tour utilisait ce même jeu de coins fixe (SQUARE_PTS),
-  // donc toutes les arêtes de tous les cubes restaient parallèles entre
-  // elles quelle que soit leur position sur le cercle. Chaque tour doit se
-  // voir comme copiée-collée puis tournée depuis le centre du cercle de la
-  // tour — donc un cube dont les coins sont tournés de son propre angle
-  // autour du donjon, une paire d'arêtes radiale, l'autre tangentielle.
+  // avant, chaque tour utilisait ce même jeu de coins fixe, donc toutes les
+  // arêtes de tous les cubes restaient parallèles entre elles quelle que
+  // soit leur position sur le cercle. Chaque tour doit se voir comme
+  // copiée-collée puis tournée depuis le centre du cercle de la tour —
+  // donc un cube dont les coins sont tournés de son propre angle autour du
+  // donjon, une paire d'arêtes radiale, l'autre tangentielle.
   function squareCornersAt(angle) {
     return [0.25, 0.75, 1.25, 1.75, 2.25].map(t => {
       const a = t * Math.PI + angle;
       return { a, cx: Math.cos(a), cz: Math.sin(a) };
     });
   }
-  const SQUARE_PTS = squareCornersAt(0);
 
   // garden: sparse, irregularly placed bush clumps enemies steer around.
   // Each clump precomputes up to 5 sphere offsets; only the first
@@ -1151,7 +1168,13 @@
     const off = Math.sin(d * STREAM_WIND_FREQ) * STREAM_WIND_AMP;
     return { x: g.cx + g.tx * d + g.rx * off, z: g.cz + g.tz * d + g.rz * off };
   }
+  // audité en session : même chose que _roadSegsCache — cette géométrie ne
+  // dépend que de constantes et de streamHalfLen() (=roadMaxR()=SPAWN_R,
+  // ne change qu'au resize), inutile de la reconstruire 60 fois/seconde.
+  // Invalidée dans resize() (_streamSegsCache/_roadSegsCache déclarés là-
+  // haut, près de SPAWN_R, pour la même raison de TDZ que SNOW_LAYERS).
   function streamSegs() {
+    if (_streamSegsCache) return _streamSegsCache;
     const g = streamGeometry();
     const halfLen = streamHalfLen();
     const segs = [];
@@ -1161,6 +1184,7 @@
       const p0 = streamPointAt(g, d0), p1 = streamPointAt(g, d1);
       segs.push({ p0, p1, angle: Math.atan2(p0.z + p1.z, p0.x + p1.x) });
     }
+    _streamSegsCache = segs;
     return segs;
   }
   // same far/near contiguous-run grouping as roadRuns — the stream now
@@ -2618,6 +2642,14 @@
   // if `scale` changes (window resize / rotation), since the cached size
   // was baked in at the old scale.
   const spriteCache = new Map();
+  // audité en session : `key` seul (+ style) était utilisé comme clé de
+  // cache, sans le rayon ni les couleurs, alors que le commentaire
+  // promettait les trois — sans conséquence tant que chaque `key` de
+  // drawBallSprite reste associé à un (rayon, couleurs) fixe dans tous ses
+  // appels (le cas aujourd'hui), mais fragile : le jour où un futur appel
+  // réutilise une `key` existante avec un rayon/couleur différent, le
+  // sprite en cache serait silencieusement faux, sans erreur JS. Le
+  // L'appelant (drawBallSprite) construit maintenant une clé complète.
   function getSprite(key, sizePx, draw) {
     const cacheKey = key + ':' + phosphorStyle; // appearance depends on the mode too now
     const entry = spriteCache.get(cacheKey);
@@ -2633,7 +2665,8 @@
   function drawBallSprite(key, rad, colorA, colorB, pos) {
     const pad = 2;
     const size = rad * 2 + pad * 2;
-    const sprite = getSprite(key, size, (octx, s) => {
+    const cacheKey = `${key}:${rad}:${colorA}:${colorB}`;
+    const sprite = getSprite(cacheKey, size, (octx, s) => {
       const c = s / 2;
       const g = octx.createRadialGradient(c - rad * 0.3, c - rad * 0.3, 1, c, c, rad);
       g.addColorStop(0, colorA);
@@ -3256,7 +3289,14 @@
   // one long shape — cheap, and each segment can be depth-sorted far/near
   // against the donjon on its own, same as everything else at ground level
   const ROAD_SEG_COUNT = 40; // roadMaxR() now tracks SPAWN_R (often well past the old fixed 420 on tall screens) — more samples keeps the winding curve smooth over the longer length
+  // audité en session : cette géométrie ne dépend que de constantes et de
+  // SPAWN_R (qui ne change qu'au resize) — elle n'a donc pas besoin d'être
+  // reconstruite à chaque frame (40 points trigonométriques × 2 routes,
+  // 60 fois par seconde pour rien). Mise en cache par idx (_roadSegsCache
+  // déclaré près de SPAWN_R, pour la même raison de TDZ que SNOW_LAYERS —
+  // resize() l'invalide et resize() tourne avant d'arriver ici).
   function roadSegs(idx) {
+    if (_roadSegsCache[idx]) return _roadSegsCache[idx];
     const segs = [];
     for (let i = 0; i < ROAD_SEG_COUNT; i++) {
       const r0 = BASE_R + (roadMaxR() - BASE_R) * (i / ROAD_SEG_COUNT);
@@ -3264,6 +3304,7 @@
       const a0 = roadAngleAt(idx, r0), a1 = roadAngleAt(idx, r1);
       segs.push({ angle: (a0 + a1) / 2, r0, r1, a0, a1 });
     }
+    _roadSegsCache[idx] = segs;
     return segs;
   }
   function drawRoadSeg(seg, rot) {
@@ -3640,15 +3681,20 @@
       onPlatform.push({ depth: project(w.x, w.y, w.z, rot).depth, draw: () => drawPrincess(rot) });
     }
     if (playerOnPlatform) {
+      // audité en session : utilisait y=0 au lieu de la vraie hauteur —
+      // sans effet en axonométrie (depth = rx+rz, indépendant de y) mais
+      // faussait l'ordre d'occlusion en mode Perspective (depth = -z2,
+      // qui dépend bien de y via l'inclinaison caméra)
+      const w = playerWorld();
       onPlatform.push({
-        depth: project(playerWorld().x, 0, playerWorld().z, rot).depth,
+        depth: project(w.x, w.y, w.z, rot).depth,
         draw: () => drawPlayer(rot)
       });
     }
     for (const e of state.enemies) {
       if (e.state !== 'onTop') continue;
       onPlatform.push({
-        depth: project(e.r * Math.cos(e.angle), 0, e.r * Math.sin(e.angle), rot).depth,
+        depth: project(e.r * Math.cos(e.angle), platformTopY(), e.r * Math.sin(e.angle), rot).depth,
         draw: () => drawEnemy(e, rot)
       });
     }
