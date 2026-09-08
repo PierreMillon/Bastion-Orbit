@@ -422,10 +422,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.39</button>
+  <button id="versionBtn">v0.40</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.40</b> — routes : contour seul en phosphore/filaire (plus d'échelle), portée jusqu'à l'écran quel que soit l'angle</div>
   <div><b>v0.39</b> — vraie caméra en perspective (bouton menu), base du donjon elliptique en phosphore</div>
   <div><b>v0.38</b> — vue "cosy" (bouton 🔥) : roi/princesse au coin du feu, purement visuel</div>
   <div><b>v0.37</b> — deux routes serpentantes : ennemis plus rapides mais prévisibles dessus, ou lents en tout-terrain pour encercler</div>
@@ -893,19 +894,26 @@
   // several angles at once (encercler). Fixed world angles, well clear of
   // the door itself so they don't visually compete with it.
   const ROAD_ANGLES = [DOOR_ANGLE + 2.1, DOOR_ANGLE - 2.3];
-  const ROAD_MAX_R = 420;             // how far out the drawn road reaches
   const ROAD_WIDTH = 0.11;            // angular half-width of the lane
   const ROAD_WIND_AMP = 0.55;         // how far the road snakes off its base angle at its widest
   const ROAD_WIND_FREQ = 0.011;       // how tightly it winds per world unit of radius
   const ROAD_CHANCE = 0.4;            // fraction of new spawns that pick a road
   const ROAD_SPEED_MUL = 1.45;        // speed bonus while actually on the road
   const ROAD_SNAP_RATE = 2.2;         // how fast a road-walker's angle eases onto the lane
+  // a fixed far radius (420) reached different apparent screen distances
+  // depending on camera angle, since the iso ellipse isn't a circle — on a
+  // tall phone at some rotations the road visibly stopped short of the
+  // screen edge, "peu importe combien on retourne" (signalé en session).
+  // SPAWN_R is already the guaranteed-off-screen radius (computed in
+  // resize() precisely to survive every angle) — reusing it here means the
+  // road always visibly runs off-screen too, at any rotation.
+  function roadMaxR() { return SPAWN_R; }
   // the wind straightens out on final approach — a road has to actually
   // meet the wall at one clean point, not arrive wherever its last wiggle
   // left it
   function roadAngleAt(idx, r) {
     const base = ROAD_ANGLES[idx];
-    const t = Math.max(0, Math.min(1, (r - BASE_R) / (ROAD_MAX_R - BASE_R)));
+    const t = Math.max(0, Math.min(1, (r - BASE_R) / (roadMaxR() - BASE_R)));
     return base + Math.sin(r * ROAD_WIND_FREQ + idx * 7) * ROAD_WIND_AMP * t;
   }
   const PRINCESS_EASE_RATE = 3.2;
@@ -1188,7 +1196,7 @@
     // spawning right where its road already is, rather than a fully random
     // angle then snapping over, reads as "arriving via that road" from the
     // first frame it's visible instead of a late course correction
-    const angle = onRoad ? roadAngleAt(roadIdx, ROAD_MAX_R) + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2;
+    const angle = onRoad ? roadAngleAt(roadIdx, roadMaxR()) + (Math.random() - 0.5) * 0.3 : Math.random() * Math.PI * 2;
     state.enemies.push({
       angle,
       r: tightSpawnR(angle),
@@ -2862,12 +2870,12 @@
   // a road is drawn as a chain of short quads following roadAngleAt(), not
   // one long shape — cheap, and each segment can be depth-sorted far/near
   // against the donjon on its own, same as everything else at ground level
-  const ROAD_SEG_COUNT = 22;
+  const ROAD_SEG_COUNT = 40; // roadMaxR() now tracks SPAWN_R (often well past the old fixed 420 on tall screens) — more samples keeps the winding curve smooth over the longer length
   function roadSegs(idx) {
     const segs = [];
     for (let i = 0; i < ROAD_SEG_COUNT; i++) {
-      const r0 = BASE_R + (ROAD_MAX_R - BASE_R) * (i / ROAD_SEG_COUNT);
-      const r1 = BASE_R + (ROAD_MAX_R - BASE_R) * ((i + 1) / ROAD_SEG_COUNT);
+      const r0 = BASE_R + (roadMaxR() - BASE_R) * (i / ROAD_SEG_COUNT);
+      const r1 = BASE_R + (roadMaxR() - BASE_R) * ((i + 1) / ROAD_SEG_COUNT);
       const a0 = roadAngleAt(idx, r0), a1 = roadAngleAt(idx, r1);
       segs.push({ angle: (a0 + a1) / 2, r0, r1, a0, a1 });
     }
@@ -2883,6 +2891,44 @@
     ].map(([x, z]) => project(x, 0.5, z, rot));
     ctx.fillStyle = '#9c8360';
     buildQuad(pts);
+  }
+
+  // groups a road's segments into contiguous far/near runs against the
+  // current camera angle — a winding road can cross behind/in front of the
+  // donjon more than once, so this isn't just one far half and one near half
+  function roadRuns(idx, rot) {
+    const segs = roadSegs(idx);
+    const far = [], near = [];
+    let current = null, currentSide = null;
+    for (const s of segs) {
+      const side = Math.cos(s.angle - rot) < 0 ? 'far' : 'near';
+      if (side !== currentSide) { current = []; (side === 'far' ? far : near).push(current); currentSide = side; }
+      current.push(s);
+    }
+    return { far, near };
+  }
+  // signalé en session : en phosphore/filaire, un aplat plein par segment
+  // (comme en Couleur) dessinait aussi le contour de chaque petit segment —
+  // ça donnait une route "en échelle" (barreaux perpendiculaires), pas une
+  // route. Juste les deux bords, en continu sur tout le run, sans remplir.
+  function drawRoadRun(run, rot) {
+    if (phosphorStyle === 'couleur') { for (const seg of run) drawRoadSeg(seg, rot); return; }
+    const hw = ROAD_WIDTH;
+    const leftPts = [], rightPts = [];
+    for (const seg of run) {
+      leftPts.push(project(seg.r0 * Math.cos(seg.a0 - hw), 0.5, seg.r0 * Math.sin(seg.a0 - hw), rot));
+      rightPts.push(project(seg.r0 * Math.cos(seg.a0 + hw), 0.5, seg.r0 * Math.sin(seg.a0 + hw), rot));
+    }
+    const last = run[run.length - 1];
+    leftPts.push(project(last.r1 * Math.cos(last.a1 - hw), 0.5, last.r1 * Math.sin(last.a1 - hw), rot));
+    rightPts.push(project(last.r1 * Math.cos(last.a1 + hw), 0.5, last.r1 * Math.sin(last.a1 + hw), rot));
+    ctx.lineWidth = Math.max(1, 1.2 * scale);
+    for (const pts of [leftPts, rightPts]) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
   }
 
   function drawBridge(b, rot) {
@@ -3108,9 +3154,9 @@
     const nearSiege = state.siegeEngines.filter(s => Math.cos(s.angle - rot) >= 0);
     const farBridges = state.bridges.filter(b => Math.cos(b.angle - rot) < 0);
     const nearBridges = state.bridges.filter(b => Math.cos(b.angle - rot) >= 0);
-    const allRoadSegs = [0, 1].flatMap(roadSegs);
-    const farRoadSegs = allRoadSegs.filter(s => Math.cos(s.angle - rot) < 0);
-    const nearRoadSegs = allRoadSegs.filter(s => Math.cos(s.angle - rot) >= 0);
+    const road0Runs = roadRuns(0, rot), road1Runs = roadRuns(1, rot);
+    const farRoadRuns = [...road0Runs.far, ...road1Runs.far];
+    const nearRoadRuns = [...road0Runs.near, ...road1Runs.near];
 
     // she's on the platform for the first half of the trip (elevated,
     // grouped with player/turrets below) and out in the garden for the
@@ -3128,7 +3174,7 @@
     const playerFar = playerGrounded && Math.cos(state.player.angle - rot) < 0;
     const playerNear = playerGrounded && Math.cos(state.player.angle - rot) >= 0;
 
-    for (const s of farRoadSegs) drawRoadSeg(s, rot);
+    for (const run of farRoadRuns) drawRoadRun(run, rot);
     for (const b of farBushes) drawBush(b, rot);
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
@@ -3138,7 +3184,7 @@
 
     if (phosphorStyle === 'phosphore') drawCastleSilhouette(rot); else drawCastle(rot);
 
-    for (const s of nearRoadSegs) drawRoadSeg(s, rot);
+    for (const run of nearRoadRuns) drawRoadRun(run, rot);
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
