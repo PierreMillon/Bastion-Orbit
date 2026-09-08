@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.56</button>
+  <button id="versionBtn">v0.57</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.57</b> — chaque maison (et la grange/l'église) a maintenant sa propre orientation au lieu d'être toutes parallèles entre elles</div>
   <div><b>v0.56</b> — style Couleur mis en pause (Phosphore/Filaire seulement dans le menu, le code reste en réserve) ; la neige redevient de simples particules pleines au lieu de petits cercles creux qu'on confondait avec des ennemis lointains</div>
   <div><b>v0.55</b> — village étendu : 5 maisons de plus (dont plusieurs bien plus loin), et un vrai cœur de village avec une grange, une église (clocher + croix) et une fontaine qui scintille</div>
   <div><b>v0.54</b> — le jeu parle anglais et français : détecté automatiquement selon l'appareil (anglais par défaut sinon), bouton "Langue" dans le menu pour forcer l'autre — interface, menu, écrans de fin traduits (le changelog reste en français, c'est un journal de développement)</div>
@@ -1446,7 +1447,11 @@
     { x: 410 * Math.cos(1.7), z: 410 * Math.sin(1.7) },      // plus loin
     { x: 430 * Math.cos(-1.9), z: 430 * Math.sin(-1.9) },    // plus loin
     { x: 390 * Math.cos(0.15), z: 390 * Math.sin(0.15) }     // plus loin
-  ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z), hiddenCount: 0 }));
+  // yaw : orientation propre du bâtiment (indépendante de son angle
+  // autour du donjon) — signalé en session : sans ça, chaque maison
+  // pointait dans le même axe monde, "toutes parallèles" les unes aux
+  // autres au lieu de faire vrai petit village
+  ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z), yaw: Math.random() * Math.PI * 2, hiddenCount: 0 }));
   const HOUSE_SIZE = 16; // half-width of the base
   // maisons-cachettes (demandé en session) : indestructibles, un ennemi
   // qui approche peut s'y réfugier et devient intouchable (tir à
@@ -1496,9 +1501,12 @@
   const VILLAGE_CENTER_ANGLE = -1.3, VILLAGE_CENTER_R = 300;
   const VILLAGE_CENTER_X = VILLAGE_CENTER_R * Math.cos(VILLAGE_CENTER_ANGLE);
   const VILLAGE_CENTER_Z = VILLAGE_CENTER_R * Math.sin(VILLAGE_CENTER_ANGLE);
+  // yaw modéré (pas complètement aléatoire comme HOUSES) : ce trio est
+  // composé à la main avec un espacement calculé pour ne pas se toucher
+  // à angle nul — une rotation franche pourrait les faire chevaucher
   const VILLAGE_EXTRAS = [
-    { type: 'grange', x: VILLAGE_CENTER_X - 75, z: VILLAGE_CENTER_Z - 10 },
-    { type: 'eglise', x: VILLAGE_CENTER_X + 60, z: VILLAGE_CENTER_Z + 30 },
+    { type: 'grange', x: VILLAGE_CENTER_X - 75, z: VILLAGE_CENTER_Z - 10, yaw: 0.5 },
+    { type: 'eglise', x: VILLAGE_CENTER_X + 60, z: VILLAGE_CENTER_Z + 30, yaw: -0.35 },
     { type: 'fontaine', x: VILLAGE_CENTER_X - 10, z: VILLAGE_CENTER_Z + 95 }
   ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
 
@@ -3864,12 +3872,22 @@
     }
   }
 
+  // tourne un décalage local (dx, dz) autour de son propre centre, avant
+  // de l'ajouter à la position monde — sert à donner à chaque bâtiment
+  // (maison, grange, église) sa propre orientation plutôt que le même
+  // axe pour tous (signalé en session : "elles sont toutes parallèles")
+  function rotYaw(dx, dz, yaw) {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    return [dx * c - dz * s, dx * s + dz * c];
+  }
+
   // a plain little box with a pitched roof — four wall quads (painter-
   // sorted like the donjon's own facets) plus two roof slopes and a gable
   // triangle at each end
   function drawHouse(h, rot) {
     const s = HOUSE_SIZE, wallH = s * 0.9, roofH = s * 0.7;
-    const corners = [[-s, -s], [s, -s], [s, s], [-s, s]]; // local (dx, dz)
+    const yaw = h.yaw || 0;
+    const corners = [[-s, -s], [s, -s], [s, s], [-s, s]].map(([dx, dz]) => rotYaw(dx, dz, yaw)); // local (dx, dz), tournées
     const base = corners.map(([dx, dz]) => project(h.x + dx, 0, h.z + dz, rot));
     const top = corners.map(([dx, dz]) => project(h.x + dx, wallH, h.z + dz, rot));
     const walls = [];
@@ -3886,8 +3904,9 @@
       buildQuad(w.pts);
     }
     // roof: a ridge along one axis, two sloped quads meeting at the top
-    const ridgeA = project(h.x - s, wallH + roofH, h.z, rot);
-    const ridgeB = project(h.x + s, wallH + roofH, h.z, rot);
+    const [ridgeAx, ridgeAz] = rotYaw(-s, 0, yaw), [ridgeBx, ridgeBz] = rotYaw(s, 0, yaw);
+    const ridgeA = project(h.x + ridgeAx, wallH + roofH, h.z + ridgeAz, rot);
+    const ridgeB = project(h.x + ridgeBx, wallH + roofH, h.z + ridgeBz, rot);
     const slope1 = [top[0], top[1], ridgeB, ridgeA];
     const slope2 = [top[2], top[3], ridgeA, ridgeB];
     const slopes = [
@@ -3925,8 +3944,8 @@
   // dessiner tout de suite ; flushBoxRoofList les trie et les dessine
   // ensemble, une seule fois — mêmes fonctions réutilisées pour la
   // fontaine (bassin + pilier central).
-  function collectBoxRoof(list, x, z, sx, sz, wallH, roofH, rot, wallBase, roofColor) {
-    const corners = [[-sx, -sz], [sx, -sz], [sx, sz], [-sx, sz]];
+  function collectBoxRoof(list, x, z, sx, sz, wallH, roofH, rot, wallBase, roofColor, yaw = 0) {
+    const corners = [[-sx, -sz], [sx, -sz], [sx, sz], [-sx, sz]].map(([dx, dz]) => rotYaw(dx, dz, yaw));
     const base = corners.map(([dx, dz]) => project(x + dx, 0, z + dz, rot));
     const top = corners.map(([dx, dz]) => project(x + dx, wallH, z + dz, rot));
     for (let i = 0; i < 4; i++) {
@@ -3938,8 +3957,9 @@
       const fill = `rgb(${Math.round(wallBase[0] + g)},${Math.round(wallBase[1] + g)},${Math.round(wallBase[2] + g)})`;
       list.push({ depth, pts: [base[i], base[j], top[j], top[i]], fill });
     }
-    const ridgeA = project(x - sx, wallH + roofH, z, rot);
-    const ridgeB = project(x + sx, wallH + roofH, z, rot);
+    const [ridgeAx, ridgeAz] = rotYaw(-sx, 0, yaw), [ridgeBx, ridgeBz] = rotYaw(sx, 0, yaw);
+    const ridgeA = project(x + ridgeAx, wallH + roofH, z + ridgeAz, rot);
+    const ridgeB = project(x + ridgeBx, wallH + roofH, z + ridgeBz, rot);
     list.push({ depth: top[0].depth + top[1].depth, pts: [top[0], top[1], ridgeB, ridgeA], fill: roofColor });
     list.push({ depth: top[2].depth + top[3].depth, pts: [top[2], top[3], ridgeA, ridgeB], fill: roofColor });
     return { wallH, roofH };
@@ -3953,7 +3973,7 @@
   // comme un bâtiment agricole plutôt qu'une maison de plus
   function drawGrange(b, rot) {
     const list = [];
-    collectBoxRoof(list, b.x, b.z, 26, 18, 20, 16, rot, [150, 80, 45], '#6e2c1e');
+    collectBoxRoof(list, b.x, b.z, 26, 18, 20, 16, rot, [150, 80, 45], '#6e2c1e', b.yaw || 0);
     flushBoxRoofList(list);
   }
 
@@ -3961,14 +3981,20 @@
   // simple au sommet — pierre grise plutôt que le bois des maisons/grange
   function drawEglise(b, rot) {
     const list = [];
-    collectBoxRoof(list, b.x, b.z, 16, 30, 24, 18, rot, [145, 145, 148], '#3f3f48');
-    const towerZ = b.z - 34, towerH = 40, towerRoofH = 14;
-    collectBoxRoof(list, b.x, towerZ, 9, 9, towerH, towerRoofH, rot, [140, 140, 143], '#33333c');
+    const yaw = b.yaw || 0;
+    collectBoxRoof(list, b.x, b.z, 16, 30, 24, 18, rot, [145, 145, 148], '#3f3f48', yaw);
+    // le clocher est accroché à l'arrière de la nef, le long de son PROPRE
+    // axe — son décalage tourne donc avec le même yaw que la nef, sinon
+    // il se détache du bâtiment dès qu'on tourne celui-ci
+    const [towerDx, towerDz] = rotYaw(0, -34, yaw);
+    const towerX = b.x + towerDx, towerZ = b.z + towerDz;
+    const towerH = 40, towerRoofH = 14;
+    collectBoxRoof(list, towerX, towerZ, 9, 9, towerH, towerRoofH, rot, [140, 140, 143], '#33333c', yaw);
     flushBoxRoofList(list);
     // croix au sommet du clocher : deux petits traits qui se croisent,
     // toujours face caméra (pas besoin de la faire tourner avec rot,
     // trop petite pour que ça se remarque)
-    const apex = project(b.x, towerH + towerRoofH + 8, towerZ, rot);
+    const apex = project(towerX, towerH + towerRoofH + 8, towerZ, rot);
     ctx.strokeStyle = '#33333c';
     ctx.lineWidth = Math.max(1, 1.4 * scale);
     ctx.beginPath();

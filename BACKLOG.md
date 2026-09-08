@@ -1218,3 +1218,26 @@ Deux demandes dictées dans la foulée de v0.55.
    simple, dans tous les styles, jamais un contour. Vérifié en
    Playwright : petits points blancs pleins, nettement différents des
    cercles creux verts (ennemis/bâtiments), aucune erreur console.
+
+## Maisons/grange/église : chacune sa propre orientation → fait en v0.57
+
+Signalé en session : "les mains doivent être rotatées différemment, là
+elles sont toutes parallèles" — en fait les **maisons** (dictée mal
+retranscrite), qui étaient toutes dessinées avec le même axe de faîtage
+(toujours parallèle à l'axe X du monde), quelle que soit leur position.
+
+Chaque `HOUSES[i]` a maintenant un `yaw` aléatoire (0 à 2π), appliqué en
+tournant ses coins locaux ET son faîtage de toit autour de son propre
+centre avant de les placer dans le monde (`rotYaw`, nouvelle fonction
+partagée). La grange et l'église (v0.55) en profitent aussi, avec un yaw
+modéré et choisi à la main plutôt qu'aléatoire — ce trio est composé
+avec un espacement calculé pour un yaw nul, une rotation franche
+pourrait les faire chevaucher. Pour l'église, le clocher est accroché à
+l'arrière de la nef le long de son propre axe : son décalage tourne
+avec le même yaw que la nef, sinon il se détache visuellement dès
+qu'on tourne le bâtiment.
+
+Vérifié en Playwright (plusieurs angles de caméra) : les maisons
+pointent maintenant dans des directions clairement différentes,
+l'église garde son clocher bien accroché sous rotation, aucune erreur
+console.
