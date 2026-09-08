@@ -1589,3 +1589,94 @@ un brochet qui nage".
 Vérifié en Playwright (Filaire pur, plusieurs angles) : le ruisseau
 reste visible jusqu'aux deux bords de l'écran, densité de particules
 nettement plus légère, aucune erreur console.
+
+## Pont en arche, bâtiments dans l'eau/sur les routes, traits fantômes autour du donjon → fait en v0.65
+
+Trois problèmes signalés explicitement par Pierre ("le pont il ne fait
+pas une courbe... il y a encore des bâtiments qui sont dans l'eau ou
+sur des routes... il y a des traits qui ressemblent à des routes...
+qui viennent de nulle part, et qui vont nulle part"), + consigne
+permanente à partir de là : travailler en autonomie, sans repasser par
+des questions, en descendant la liste de priorités du BACKLOG.
+
+1. **Pont — vraie arche qui monte et redescend.** Le tablier était
+   plat (seule l'arche découpée dans le pilier en dessous donnait
+   l'illusion d'un pont "en volume", mais rien ne montait/descendait à
+   l'écran). Ajout de `bridgeDeckY(lr)` (bombement parabolique, nul aux
+   deux berges, maximal — `BRIDGE_ARCH_RISE`=9 — au centre) ; le
+   tablier ET les parapets sont maintenant découpés en 10 tranches le
+   long de l'axe de traversée (un seul quad plat ne peut pas montrer de
+   courbe). Corrigé au passage un vrai bug trouvé en relisant le code
+   pendant ce chantier : l'arche était découpée sur les faces `[1,3]`
+   du pilier (les extrémités côté berge, à rayon fixe) au lieu des
+   faces `[0,2]` (les faces amont/aval, celles qui longent vraiment le
+   courant) — l'ouverture était donc perpendiculaire au bon sens.
+2. **Bâtiments en collision avec routes/ruisseau — vérifié
+   numériquement** (script Node dédié, pas au jugé) pour TOUTES les
+   maisons + VILLAGE_EXTRAS (grange/église+clocher) + FARM_BUILDINGS
+   contre les deux routes ET le ruisseau. Deux vraies collisions
+   trouvées :
+   - `house[4]` (angle -2.4, r=360) à seulement 4.5 unités de la route
+     1 (marge -26) — décalée à l'angle -2.6, marge >65 maintenant.
+   - `ferme_grange` à seulement 16 unités du ruisseau (marge -31,
+     littéralement dedans) — `FARM_ANGLE` décalé de 0.85 à 0.55, marge
+     >100 maintenant (`ferme_maison`, liée au même point, revérifiée
+     aussi : marge >200).
+   Tout le reste (les 6 autres maisons, grange, église+clocher,
+   ferme_maison) avait déjà des marges saines (>75 unités) — pas de
+   régression introduite par les deux déplacements.
+3. **Traits fantômes autour du donjon.** Diagnostic en deux temps
+   (vérifié par test, pas par supposition — désactiver temporairement
+   `drawPlazaAndPaths` a confirmé que les traits venaient bien de là
+   avant de toucher au code) :
+   - D'abord corrigé un vrai bug d'occlusion : tout le groupe
+     place+bretelles+troisième chemin était classé far/near par UN
+     SEUL angle (celui de la place), alors que les bretelles relient
+     des points à des angles très différents. Un segment dont les deux
+     bouts sont de part et d'autre de la limite caméra se dessinait
+     donc ENTIER dans une seule passe. Fix : `drawPlazaAndPaths(rot,
+     wantFar)` classe maintenant chaque petit bout individuellement
+     (`pointFar`/`drawSplitLinePath`/`drawSplitRoadPath`).
+   - Mais le vrai coupable visible restait ailleurs, trouvé seulement
+     en comparant des captures avec/sans le module : une bretelle
+     tracée en ligne DROITE entre deux points d'angles très éloignés
+     (~150°) autour du donjon coupe près de son centre à l'écran quels
+     que soient leurs rayons — pas un problème d'occlusion, un problème
+     géométrique (la corde reste classée "near" tout du long et se
+     peint par-dessus la tour). Fix : `bowedPathPoints` interpole
+     l'ANGLE (coordonnées polaires) plutôt que x/z en ligne droite — le
+     rayon reste dans [min(r0,r1), max(r0,r1)] par construction, donc
+     le chemin contourne le donjon au lieu de couper à travers.
+     Appliqué aux deux bretelles route↔place ET au troisième chemin
+     place↔porte (celui-ci garde son point d'arrivée exact à la porte,
+     largeur `DOOR_HALF_WIDTH` inchangée — seule la route qui y mène se
+     courbe).
+
+Vérifié en Playwright : balayage de 24 angles de caméra (donjon zoomé,
+recherche visuelle de traits traversant sa silhouette) — plus aucun
+trait parasite trouvé ; script Node de collision ré-exécuté après les
+deux déplacements de bâtiments, toutes marges positives ; aucune
+erreur console sur 40s de jeu en continu.
+
+## Bouton "vague suivante" inutilisable en martelant vite + bonus affiché/dégressif → fait en v0.65
+
+Signalé en cours de route ("si j'appuie 4-5 fois par seconde... ça ne
+marche pas, il faut presque attendre une seconde à chaque fois").
+
+- **Vrai bug trouvé** : le garde anti-zoom iOS (`touchend` global,
+  `preventDefault()` si deux taps à moins de 350ms d'écart) visait un
+  vrai double-tap au même endroit, mais s'appliquait à TOUT l'écran —
+  y compris en martelant un bouton. `preventDefault()` sur `touchend`
+  supprime aussi le `click` de compatibilité qui suit, donc un clic sur
+  deux était avalé dès qu'on appuyait plus vite que 350ms d'écart, sur
+  n'importe quel bouton. Fix : les boutons/liens/inputs sont exemptés
+  de ce garde (le geste de zoom Safari ne se déclenche de toute façon
+  jamais sur un contrôle interactif). Vérifié en Playwright (contexte
+  tactile, 6 taps à 180ms d'écart) : les 6 taps sont maintenant tous
+  pris en compte, contre ~3 avant le correctif.
+- **Bonus d'or affiché + dégressif** : le bouton affiche maintenant
+  "+N" (or gagné en appelant la vague en avance). N diminue à mesure
+  qu'on approche la fin naturelle de la vague en cours (sauter une
+  vague qui allait de toute façon se terminer dans quelques secondes
+  ne fait quasiment rien gagner) — jamais sous 1. Recalculé chaque
+  frame (`updateNextWaveBonus`, dans `refreshBuyButtons()`).
