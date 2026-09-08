@@ -1721,19 +1721,6 @@ liée à la difficulté.
   n'a pas tout couvert. En cours de diagnostic (même méthode que la
   fois précédente : comparer avec/sans chaque système suspect plutôt
   que deviner) au moment de cette note.
-- **Zone sacrée autour de l'église** — même principe de bouton flottant
-  au toucher de l'église ; achète des paliers qui agrandissent une
-  ellipse au sol centrée sur l'église (même vocabulaire visuel que les
-  douves). C'est un no-man's-land pour les ennemis : ceux qui y entrent
-  perdent la moitié de leur vie IMMÉDIATEMENT à l'entrée (pas de dégâts
-  continus), et l'autre moitié s'ils en ressortent puis y rentrent à
-  nouveau (donc un ennemi qui reste dedans ne prend qu'un coup ; il
-  faut deux passages complets, entrée+sortie+ré-entrée, pour le tuer).
-  Les ennemis doivent apprendre à l'éviter une fois qu'ils l'ont
-  découverte à leurs dépens (piste : même vocabulaire que le comporte-
-  ment d'évitement des douves/du mur, à vérifier dans le code des
-  ennemis existant).
-
 Pas encore commencées au moment de cette note — priorité : finir le
 diagnostic des traits fantômes (régression, plus urgent), puis moulin,
 puis zone sacrée de l'église, dans cet ordre.
@@ -1886,3 +1873,43 @@ contrainte — son modèle de mouvement (lissage vers une cible, pas un
 simple décrément radial comme les ennemis) demanderait une intégration
 plus soignée, mise de côté pour ne pas risquer de casser le mouvement
 de sortie existant sans temps de test dédié. Noté pour plus tard.
+
+## Zone sacrée de l'église (3e des 6 gros chantiers) → fait en v0.70
+
+Même principe que le moulin (bouton flottant `#egliseBtn` au toucher de
+l'église, tap-vs-glissé déjà en place réutilisé), paliers géométriques
+qui agrandissent une ellipse au sol :
+
+- `EGLISE_ZONE_TIERS` : 4 paliers (25/55/100/180 or), `rx`/`rz` croissants
+  — une VRAIE ellipse (pas un cercle) orientée le long de la nef
+  (`EGLISE_EXTRA.yaw`), plus cohérente visuellement avec un bâtiment
+  allongé qu'un rond centré dessus.
+- Dessin (`drawEgliseZone`) : même vocabulaire que la place (N-gone,
+  classé par arête via `pointFar` — précaution reprise du correctif des
+  traits fantômes de v0.65, même si le risque est moindre ici : une
+  forme fermée autour d'un point fixe, pas une corde entre deux points
+  éloignés).
+- Dégâts (`updateEgliseZoneDamage`, appelé pour chaque ennemi `approach`
+  comme `avoidBushes`/`avoidStream`) : test point-dans-ellipse à chaque
+  frame, `e.holyInside` traqué pour détecter la TRANSITION dehors→dedans
+  (pas juste "est dedans", qui frapperait à chaque frame) ; `e.holyHits`
+  compte les passages, plafonné à 2 dans la vie de l'ennemi. Dégât =
+  moitié de `maxHp` (pas `hp` courant) à chaque passage, pour garantir
+  "deux passages complets pour tuer" quel que soit le dégât déjà subi
+  ailleurs, comme demandé littéralement.
+
+Pas fait (assumé, cohérent avec le scope du ruisseau infranchissable) :
+pas de comportement d'évitement/apprentissage pour les ennemis — la
+zone punit mais ne repousse pas, ce qui colle à "s'ils veulent quand
+même y passer" (implique une exposition incidente, pas activement
+évitée par l'IA) plutôt qu'à une vraie IA "apprenante" hors de portée
+raisonnable pour cette session.
+
+Vérifié en Playwright (hooks de debug temporaires marquant UN ennemi
+précis par référence — pas `enemies[0]`, dont le sens change si un
+autre meurt entre deux appels — retirés avant commit) : cycle complet
+mesuré sur un ennemi frais (hp=4/maxHp=4) → entre dans la zone → hp=2,
+holyHits=1, holyInside=true ; sort → holyInside=false ; rentre à
+nouveau → mort (retiré du tableau), exactement conforme à la règle.
+Tarif/paliers vérifiés (25 puis 55, coûts exacts déduits de l'or).
+Bouton suit la caméra en tournant. Aucune erreur console.

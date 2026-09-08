@@ -484,6 +484,7 @@
      (left/top) recalculée chaque frame dans render() tant que visible,
      via project(). Même idée pour l'église (zone sacrée). -->
 <button id="moulinBtn" class="worldBtn" hidden></button>
+<button id="egliseBtn" class="worldBtn" hidden></button>
 
 <div id="topbar">
   <button id="menuBtn" aria-label="Menu">☰</button>
@@ -491,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.69</button>
+  <button id="versionBtn">v0.70</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.70</b> — zone sacrée de l'église : le toucher fait apparaître un bouton d'achat par palier qui agrandit une ellipse au sol, no-man's-land pour les ennemis (moitié de vie perdue à l'entrée, l'autre moitié à la ré-entrée)</div>
   <div><b>v0.69</b> — économie du moulin : le toucher fait apparaître un bouton d'achat par palier (bouton flottant qui suit la rotation de la caméra), revenu passif ensuite</div>
   <div><b>v0.68</b> — le ruisseau est enfin infranchissable ("très important") : ennemis bloqués par une berge invisible, obligés de longer l'eau jusqu'au pont pour passer</div>
   <div><b>v0.67</b> — le moulin (2e des 6 gros chantiers) : une maison avec une vraie roue à aubes posée sur l'eau, qui tourne dans le bon sens par rapport au courant (recherché, pas inventé) ; corrige aussi l'eau du ruisseau qui pouvait s'arrêter avant le bord de l'écran à certaines rotations sur un écran large</div>
@@ -651,6 +653,8 @@
       moat_max: 'Douves max', horse_btn: 'Cheval',
       moulin_btn_start: 'Faire tourner le moulin', moulin_btn_upgrade: 'Améliorer le moulin',
       moulin_max: 'Moulin au maximum',
+      eglise_btn_start: 'Bénir le terrain', eglise_btn_upgrade: 'Agrandir la zone sacrée',
+      eglise_max: 'Zone sacrée au maximum',
       restart_full: 'Recommencer depuis le début',
       difficulty_prefix: 'Difficulté : ',
       diff_facile: 'Facile', diff_normal: 'Normal', diff_difficile: 'Difficile',
@@ -682,6 +686,8 @@
       moat_max: 'Moat max', horse_btn: 'Horse',
       moulin_btn_start: 'Start the mill', moulin_btn_upgrade: 'Upgrade the mill',
       moulin_max: 'Mill maxed out',
+      eglise_btn_start: 'Bless the ground', eglise_btn_upgrade: 'Expand the sacred ground',
+      eglise_max: 'Sacred ground maxed out',
       restart_full: 'Restart from the beginning',
       difficulty_prefix: 'Difficulty: ',
       diff_facile: 'Easy', diff_normal: 'Normal', diff_difficile: 'Hard',
@@ -1509,6 +1515,21 @@
   function moulinRate(n) { return MOULIN_BASE_RATE * Math.pow(MOULIN_GROWTH, n - 1); }
   const MOULIN_MAX_LEVEL = 6;
 
+  // zone sacrée de l'église (demandé en session) : "un peu comme le
+  // principe des douves mais centré sur l'église, qui va augmenter en
+  // taille... une ellipse au sol, un no-man's-land pour les ennemis".
+  // Paliers à coût croissant (mêmes proportions que MOAT_TIERS, pas
+  // réinventées), chacun élargit l'ellipse (rx le long de la nef, rz en
+  // travers) plutôt qu'un simple rayon — la nef est déjà allongée
+  // (32×60), une ellipse ronde aurait eu l'air à côté de la plaque.
+  const EGLISE_ZONE_TIERS = [
+    { cost: 25, rx: 70, rz: 45 },
+    { cost: 55, rx: 100, rz: 65 },
+    { cost: 100, rx: 135, rz: 85 },
+    { cost: 180, rx: 175, rz: 110 }
+  ];
+  const EGLISE_ZONE_SEGS = 20;
+
   const circlePts = [];
   for (let i = 0; i <= N_SEG; i++) {
     const a = (i / N_SEG) * Math.PI * 2;
@@ -2065,6 +2086,12 @@
     // niveau 0 = pas encore acheté, "juste de la farine" (narratif)
     moulinLevel: 0,
     moulinTimer: 0,
+    // zone sacrée de l'église (demandé en session) : ellipse au sol,
+    // agrandie par paliers achetés au toucher de l'église — un ennemi qui
+    // y entre perd la moitié de sa vie max IMMÉDIATEMENT à l'entrée, puis
+    // l'autre moitié s'il en ressort puis y rentre à nouveau (voir
+    // updateEgliseZoneDamage). Niveau 0 = zone inexistante.
+    egliseZoneLevel: 0,
     toSpawn: 0,
     spawnTimer: 0,
     spawnInterval: 0.9,
@@ -2774,10 +2801,18 @@
   function handleCanvasTap(clientX, clientY) {
     const rot = state.theta - Math.PI / 4;
     const m = moulinGeometry();
-    const pos = project(m.houseX, 10, m.houseZ, rot);
-    if (Math.hypot(clientX - pos.x, clientY - pos.y) < WORLD_TAP_RADIUS) {
+    const mPos = project(m.houseX, 10, m.houseZ, rot);
+    if (Math.hypot(clientX - mPos.x, clientY - mPos.y) < WORLD_TAP_RADIUS) {
       moulinBtnVisible = !moulinBtnVisible;
       updateMoulinBtn();
+      return; // un seul bâtiment à la fois — pas la peine de tester l'église si le moulin a déjà pris le tap
+    }
+    if (EGLISE_EXTRA) {
+      const ePos = project(EGLISE_EXTRA.x, 20, EGLISE_EXTRA.z, rot);
+      if (Math.hypot(clientX - ePos.x, clientY - ePos.y) < WORLD_TAP_RADIUS) {
+        egliseBtnVisible = !egliseBtnVisible;
+        updateEgliseBtn();
+      }
     }
   }
   function updateMoulinBtn() {
@@ -2804,6 +2839,33 @@
     state.moulinTimer = MOULIN_TICK;
     playHammer();
     updateMoulinBtn();
+  });
+
+  const egliseBtn = document.getElementById('egliseBtn');
+  let egliseBtnVisible = false;
+  function updateEgliseBtn() {
+    if (!egliseBtnVisible) { egliseBtn.hidden = true; return; }
+    egliseBtn.hidden = false;
+    if (state.egliseZoneLevel >= EGLISE_ZONE_TIERS.length) {
+      egliseBtn.textContent = t('eglise_max');
+      egliseBtn.classList.remove('unaffordable');
+      egliseBtn.disabled = true;
+    } else {
+      const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
+      egliseBtn.textContent = affordText(state.egliseZoneLevel === 0 ? t('eglise_btn_start') : t('eglise_btn_upgrade'), cost);
+      egliseBtn.classList.toggle('unaffordable', state.gold < cost);
+      egliseBtn.disabled = false;
+    }
+  }
+  egliseBtn.addEventListener('click', () => {
+    if (state.egliseZoneLevel >= EGLISE_ZONE_TIERS.length) return;
+    const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
+    if (state.gold < cost) return;
+    state.gold -= cost;
+    goldNum.textContent = state.gold;
+    state.egliseZoneLevel++;
+    playHammer();
+    updateEgliseBtn();
   });
 
   // ---- UI ----
@@ -2911,6 +2973,7 @@
     updateHorseBtn();
     updateNextWaveBonus(); // dégressif au fil de la vague, voir nextWaveBonus()
     updateMoulinBtn(); // no-op si pas visible (voir moulinBtnVisible)
+    updateEgliseBtn(); // idem pour egliseBtnVisible
   }
 
   function updatePrincessBtn() {
@@ -3800,6 +3863,8 @@
         e.r = Math.min(SPAWN_R, e.r - e.speed * speedMul * dt);
         avoidBushes(e);
         avoidStream(e, dt);
+        updateEgliseZoneDamage(e);
+        if (e.dead) continue;
         // spooked and walked all the way back out — vanishes, no gold (the
         // player didn't kill it, it just lost its nerve)
         if (e.fleeing && e.r >= SPAWN_R - 1) { e.dead = true; continue; }
@@ -4781,6 +4846,82 @@
     else drawFontaine(b, rot);
   }
 
+  // la zone sacrée de l'église (voir EGLISE_ZONE_TIERS/state.egliseZoneLevel
+  // plus haut) : une ellipse au sol, orientée le long de la nef (EGLISE_YAW,
+  // via EGLISE_EXTRA.yaw), même vocabulaire de contour que la place —
+  // classée par ARÊTE (pointFar) plutôt qu'en bloc, même précaution que
+  // pour les bretelles de la place (v0.65) même si ici le risque est
+  // moindre (une ellipse fermée autour d'un point fixe, pas une corde
+  // entre deux points éloignés).
+  function drawEgliseZone(rot, wantFar) {
+    if (state.egliseZoneLevel <= 0 || !EGLISE_EXTRA) return;
+    const tier = EGLISE_ZONE_TIERS[state.egliseZoneLevel - 1];
+    const yaw = EGLISE_EXTRA.yaw || 0;
+    const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+    const worldPts = [];
+    for (let i = 0; i < EGLISE_ZONE_SEGS; i++) {
+      const a = (i / EGLISE_ZONE_SEGS) * Math.PI * 2;
+      const lx = Math.cos(a) * tier.rx, lz = Math.sin(a) * tier.rz;
+      worldPts.push({ x: EGLISE_EXTRA.x + lx * cosY - lz * sinY, z: EGLISE_EXTRA.z + lx * sinY + lz * cosY });
+    }
+    if (phosphorStyle === 'couleur') {
+      if (pointFar(EGLISE_EXTRA.x, EGLISE_EXTRA.z, rot) === wantFar) {
+        const pts = worldPts.map(p => project(p.x, 0.5, p.z, rot));
+        ctx.fillStyle = 'rgba(232,217,168,0.22)';
+        buildQuad(pts);
+        ctx.strokeStyle = 'rgba(232,217,168,0.6)';
+        ctx.lineWidth = Math.max(1, 1.2 * scale);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath(); ctx.stroke();
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(232,217,168,0.85)';
+      ctx.lineWidth = Math.max(1, 1.2 * scale);
+      for (let i = 0; i < EGLISE_ZONE_SEGS; i++) {
+        const a = worldPts[i], b = worldPts[(i + 1) % EGLISE_ZONE_SEGS];
+        if (pointFar((a.x + b.x) / 2, (a.z + b.z) / 2, rot) !== wantFar) continue;
+        const pa = project(a.x, 0.5, a.z, rot), pb = project(b.x, 0.5, b.z, rot);
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+      }
+    }
+  }
+  // vrai/faux : un point du monde est-il dans l'ellipse actuelle (utilisé
+  // par la logique de dégâts, voir updateEgliseZoneDamage) — même
+  // transformation que le dessin ci-dessus (repère local tourné par yaw)
+  function isInEgliseZone(x, z) {
+    if (state.egliseZoneLevel <= 0 || !EGLISE_EXTRA) return false;
+    const tier = EGLISE_ZONE_TIERS[state.egliseZoneLevel - 1];
+    const yaw = EGLISE_EXTRA.yaw || 0;
+    const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+    const dx = x - EGLISE_EXTRA.x, dz = z - EGLISE_EXTRA.z;
+    const lx = dx * cosY + dz * sinY, lz = -dx * sinY + dz * cosY;
+    return (lx * lx) / (tier.rx * tier.rx) + (lz * lz) / (tier.rz * tier.rz) <= 1;
+  }
+  // dégâts de la zone sacrée : moitié de la vie MAX à l'entrée, l'autre
+  // moitié à la ré-entrée après en être ressorti (demandé explicitement :
+  // "ils perdent la moitié de leur vie dès qu'ils rentrent... et si ils
+  // sortent et qu'ils reviennent dans la zone, ils perdent l'autre
+  // moitié... il dort, il meurt" — deux passages complets pour tuer,
+  // pas plus, pas moins, quel que soit le dégât déjà subi ailleurs).
+  function updateEgliseZoneDamage(e) {
+    if (state.egliseZoneLevel <= 0) return;
+    const x = e.r * Math.cos(e.angle), z = e.r * Math.sin(e.angle);
+    const inside = isInEgliseZone(x, z);
+    if (inside && !e.holyInside) {
+      // transition dehors -> dedans : un "passage", au plus 2 dans la vie
+      // de l'ennemi (voir e.holyHits, initialisé à undefined -> 0)
+      e.holyHits = (e.holyHits || 0) + 1;
+      if (e.holyHits <= 2) {
+        e.hp -= e.maxHp * 0.5;
+        spawnBurst(x, 0, z, 'sparkle');
+        if (e.hp <= 0) killEnemy(e);
+      }
+    }
+    e.holyInside = inside;
+  }
+
   // les paysans (voir state.villagers/updateVillagers plus haut) : un
   // simple point (même langage visuel que les pips des maisons-cachettes)
   // qui bobine sur place en dansant, avec une note de musique flottante —
@@ -5733,6 +5874,11 @@
       moulinBtn.style.left = pos.x + 'px';
       moulinBtn.style.top = pos.y + 'px';
     }
+    if (egliseBtnVisible && EGLISE_EXTRA) {
+      const pos = project(EGLISE_EXTRA.x, 92, EGLISE_EXTRA.z, rot); // au-dessus du clocher
+      egliseBtn.style.left = pos.x + 'px';
+      egliseBtn.style.top = pos.y + 'px';
+    }
 
     // active moat: real water filling the whole slowed zone, once at least
     // one tier is bought — darkens/deepens with level (also stronger slow
@@ -5805,6 +5951,7 @@
     drawStreamFlow(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
     for (const b of farVillageExtras) drawVillageExtra(b, rot);
+    drawEgliseZone(rot, true);
     drawVillagers(rot, true);
     for (const b of farBushes) drawBush(b, rot);
     // douves : signalé en session — dessinées en un seul anneau complet
@@ -5837,6 +5984,7 @@
     drawStreamFlow(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
     for (const b of nearVillageExtras) drawVillageExtra(b, rot);
+    drawEgliseZone(rot, false);
     drawVillagers(rot, false);
     for (const b of nearBushes) drawBush(b, rot);
     if (state.moatLevel > 0) {
