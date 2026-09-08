@@ -429,10 +429,12 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.42</button>
+  <button id="versionBtn">v0.44</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.44</b> — routes bien plus droites, le ruisseau serpente pour de vrai ; cœur du câlin en pixel-art fidèle à l'image fournie ; chaque tourelle tournée depuis son propre centre (plus toutes parallèles) et vise l'ennemi le plus en face d'elle ; le seigneur patrouille de tourelle en tourelle quand la caméra reste longtemps immobile</div>
+  <div><b>v0.43</b> — petit village de maisons décoratives, le ruisseau traverse toute la carte avec un pont, gouttes d'huile bouillante animées, bannière FIGHT! agrandie</div>
   <div><b>v0.42</b> — corrige le débordement de la barre du haut sur petit écran, le changelog se ferme en tapant à côté</div>
   <div><b>v0.41</b> — douves : niveau 1 deux fois moins large, plus jamais de noyade (ralentit seulement) ; routes largeur physique constante (pas d'élargissement en axonométrie) ; porte/fenêtres vraiment plaquées sur le mur en phosphore ; occlusion correcte en filaire ; escalier à vis (déco) ; engins de siège plus variés</div>
   <div><b>v0.40</b> — routes : contour seul en phosphore/filaire (plus d'échelle), portée jusqu'à l'écran quel que soit l'angle</div>
@@ -885,6 +887,28 @@
   // turret at momentarily near-identical depth, popping him behind it for
   // a frame. Genuine radial separation removes the ambiguity outright.
   const TURRET_R = PLAYER_R * 1.12;
+  // patrouille de créneaux (demandé en session, retrouvé dans BACKLOG.md
+  // après avoir été signalé "pas encore fait") : hors combat/réparation/
+  // sortie, une fois la caméra immobile un moment, le seigneur cesse de
+  // coller pile sur l'angle caméra — il patrouille de tourelle en tourelle
+  // à la place, en s'y arrêtant chacune un moment. Et tant qu'elle tourne
+  // vite, il recule d'un cran (rayon réduit) pour ne jamais visuellement
+  // traverser une tourelle au passage.
+  // testé en session : à 0.5s (la durée d'abord notée dans BACKLOG.md), la
+  // patrouille se déclenche pendant la simple attente d'assez d'or entre
+  // deux achats de tourelle — le seigneur revient alors se planter à côté
+  // de la tourelle déjà posée juste avant le clic suivant, et toutes les
+  // tourelles finissent empilées au même endroit au lieu de se répartir
+  // sur l'anneau (l'écart entre deux achats, ~6-7s en tout début de
+  // partie, dépasse largement n'importe quel court délai d'immobilité).
+  // Relevé à une vraie inactivité prolongée pour ne plus interférer avec
+  // le rythme normal de construction — la patrouille reste pour les
+  // moments où on regarde vraiment sans rien faire, pas les pauses d'un
+  // clic à l'autre.
+  const PATROL_IDLE_TIME = 15;       // s d'immobilité caméra avant que la patrouille démarre
+  const PATROL_HOP_TIME = 2.6;       // s passées à chaque tourelle avant de sauter à la suivante
+  const PATROL_STEP_BACK = 16;       // recul radial pendant une rotation rapide
+  const PATROL_OMEGA_THRESHOLD = 0.6; // |omega| au-delà duquel la caméra est "en train de tourner"
   const TURRET_HEAL = 4;        // hp/s while player repairs a turret
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
@@ -930,7 +954,7 @@
   // on a now-genuinely-constant world width, not an artifact.
   const ROAD_WIDTH = 8;               // linear half-width, world units — convert to angle via /r where used
   function roadHalfAngle(r) { return ROAD_WIDTH / Math.max(1, r); }
-  const ROAD_WIND_AMP = 0.55;         // how far the road snakes off its base angle at its widest
+  const ROAD_WIND_AMP = 0.16;         // how far the road snakes off its base angle at its widest — réduit (était 0.55) : demandé plus droite, "beaucoup moins" de serpentage, mais pas parfaitement rectiligne
   const ROAD_WIND_FREQ = 0.011;       // how tightly it winds per world unit of radius
   const ROAD_CHANCE = 0.4;            // fraction of new spawns that pick a road
   const ROAD_SPEED_MUL = 1.45;        // speed bonus while actually on the road
@@ -1047,11 +1071,21 @@
     circlePts.push({ a, cx: Math.cos(a), cz: Math.sin(a) });
   }
   // a turret is a small cube, built from the same depth-sorted-quad recipe
-  // as the donjon wall, just with 4 sides instead of N_SEG
-  const SQUARE_PTS = [0.25, 0.75, 1.25, 1.75, 2.25].map(t => {
-    const a = t * Math.PI;
-    return { a, cx: Math.cos(a), cz: Math.sin(a) };
-  });
+  // as the donjon wall, just with 4 sides instead of N_SEG. Corners are
+  // generated per-turret at squareCornersAt(t.angle) — signalé en session :
+  // avant, chaque tour utilisait ce même jeu de coins fixe (SQUARE_PTS),
+  // donc toutes les arêtes de tous les cubes restaient parallèles entre
+  // elles quelle que soit leur position sur le cercle. Chaque tour doit se
+  // voir comme copiée-collée puis tournée depuis le centre du cercle de la
+  // tour — donc un cube dont les coins sont tournés de son propre angle
+  // autour du donjon, une paire d'arêtes radiale, l'autre tangentielle.
+  function squareCornersAt(angle) {
+    return [0.25, 0.75, 1.25, 1.75, 2.25].map(t => {
+      const a = t * Math.PI + angle;
+      return { a, cx: Math.cos(a), cz: Math.sin(a) };
+    });
+  }
+  const SQUARE_PTS = squareCornersAt(0);
 
   // garden: sparse, irregularly placed bush clumps enemies steer around.
   // Each clump precomputes up to 5 sphere offsets; only the first
@@ -1074,6 +1108,74 @@
     return { x, z, angle: b.a, offs };
   });
   const BUSH_RADIUS = 20;
+
+  // a handful of little houses out in the field (demandé en session : "un
+  // groupe un peu loin" + "une maison toute seule", pour commencer à
+  // donner une impression de village) — box + a small pitched roof, drawn
+  // with the same flat quads as everything else so it automatically picks
+  // up the phosphore/filaire treatment for free
+  const HOUSES = [
+    { x: 260 * Math.cos(1.0), z: 260 * Math.sin(1.0) },      // the lone house
+    { x: 300 * Math.cos(-0.85), z: 300 * Math.sin(-0.85) },  // the group, two close together
+    { x: 288 * Math.cos(-0.68), z: 288 * Math.sin(-0.68) }
+  ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z) }));
+  const HOUSE_SIZE = 16; // half-width of the base
+
+  // a stream crossing one of the roads, with a little bridge over it
+  // (demandé en session, puis précisé : "doit traverser la carte" — pas
+  // juste un petit segment local) — perpendicular to the road at that
+  // radius, running out to the same guaranteed-off-screen distance as the
+  // roads themselves (roadMaxR()), so it genuinely crosses the whole
+  // visible map rather than stopping short near the crossing point.
+  const STREAM_CROSS_R = 180;
+  const STREAM_HALF_WIDTH = 11;
+  // demandé en session : le ruisseau doit vraiment serpenter (contrairement
+  // aux routes, qu'on veut désormais plus droites) — un simple décalage
+  // sinusoïdal latéral le long de sa ligne centrale, nul à d=0 (le
+  // croisement/pont reste bien aligné) et croissant/périodique de part et
+  // d'autre.
+  const STREAM_WIND_AMP = 16;
+  const STREAM_WIND_FREQ = 0.018;
+  const STREAM_SEG_COUNT = 48;
+  function streamHalfLen() { return roadMaxR(); }
+  function streamGeometry() {
+    const a = ROAD_ANGLES[0];
+    const cx = STREAM_CROSS_R * Math.cos(a), cz = STREAM_CROSS_R * Math.sin(a);
+    const tx = -Math.sin(a), tz = Math.cos(a); // tangent to the road here — the stream runs across it
+    const rx = Math.cos(a), rz = Math.sin(a);  // perpendicular to the stream — its own width direction, and the winding offset direction
+    return { angle: a, cx, cz, tx, tz, rx, rz };
+  }
+  // the stream's centerline, sampled along its length (d from -halfLen to
+  // +halfLen), each point nudged sideways by the sine wiggle
+  function streamPointAt(g, d) {
+    const off = Math.sin(d * STREAM_WIND_FREQ) * STREAM_WIND_AMP;
+    return { x: g.cx + g.tx * d + g.rx * off, z: g.cz + g.tz * d + g.rz * off };
+  }
+  function streamSegs() {
+    const g = streamGeometry();
+    const halfLen = streamHalfLen();
+    const segs = [];
+    for (let i = 0; i < STREAM_SEG_COUNT; i++) {
+      const d0 = -halfLen + (2 * halfLen) * (i / STREAM_SEG_COUNT);
+      const d1 = -halfLen + (2 * halfLen) * ((i + 1) / STREAM_SEG_COUNT);
+      const p0 = streamPointAt(g, d0), p1 = streamPointAt(g, d1);
+      segs.push({ p0, p1, angle: Math.atan2(p0.z + p1.z, p0.x + p1.x) });
+    }
+    return segs;
+  }
+  // same far/near contiguous-run grouping as roadRuns — the stream now
+  // winds too, so it can cross the visibility boundary more than once
+  function streamRuns(rot) {
+    const segs = streamSegs();
+    const far = [], near = [];
+    let current = null, currentSide = null;
+    for (const s of segs) {
+      const side = Math.cos(s.angle - rot) < 0 ? 'far' : 'near';
+      if (side !== currentSide) { current = []; (side === 'far' ? far : near).push(current); currentSide = side; }
+      current.push(s);
+    }
+    return { far, near };
+  }
 
   // ---- game state ----
   const state = {
@@ -1126,10 +1228,13 @@
       sortieTimer: SORTIE_TICK,
       repairTimer: REPAIR_TICK,
       oilTimer: OIL_TICK,
+      oilDripTimer: 0, // separate, faster cadence — just the falling-drops visual, not the damage tick
       repairMaxedPlayed: false,
       // sortied out with nothing to fight: wanders the grounds instead of
       // parking at a fixed spot right outside the door
-      wanderTimer: 0, wanderAngle: 0, wanderR: BASE_R
+      wanderTimer: 0, wanderAngle: 0, wanderR: BASE_R,
+      // patrouille de créneaux — voir PATROL_* plus haut
+      stillTimer: 0, patrolTimer: 0, patrolTurretIdx: 0, patrolling: false
     }
   };
 
@@ -1343,6 +1448,27 @@
     return best;
   }
 
+  // demandé en session : chaque tour doit viser en priorité l'ennemi le
+  // plus "en face" d'elle, pas le même ennemi le plus proche du mur partagé
+  // par toutes les tours (nearestVisibleTarget) — même filtre de visibilité
+  // à l'écran, mais le classement se fait sur l'écart angulaire avec
+  // fromAngle (l'angle propre de la tour) au lieu de la distance radiale.
+  function nearestVisibleTargetFacing(fromAngle) {
+    const rot = state.theta - Math.PI / 4;
+    let best = null, bestD = Infinity;
+    const consider = (obj) => {
+      const x = obj.r * Math.cos(obj.angle), z = obj.r * Math.sin(obj.angle);
+      const y = obj.state === 'onTop' ? platformTopY() : 0;
+      const p = project(x, y, z, rot);
+      if (p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) return;
+      const d = Math.abs(angDiff(fromAngle, obj.angle));
+      if (d < bestD) { bestD = d; best = obj; }
+    };
+    for (const e of state.enemies) { if (e.state !== 'jumping') consider(e); }
+    for (const s of state.siegeEngines) consider(s);
+    return best;
+  }
+
   // whoever's actively menacing the princess (same proximity check as her
   // own damage tick) gets absolute targeting priority from the lord and
   // every turret, regardless of range — protecting her matters more than
@@ -1404,6 +1530,23 @@
 
   // a small death effect: a puff of smoke for a regular enemy, a burst of
   // sparkles for a siege engine — purely decorative, no gameplay weight
+  // huile bouillante versée : une pluie de petites gouttes qui tombent le
+  // long du mur, du haut de la plate-forme jusqu'au sol — pas un burst
+  // radiant comme spawnBurst, un vrai rideau qui descend
+  function spawnOilDrips(towerAngle) {
+    for (let i = 0; i < 3; i++) {
+      const a = towerAngle + (Math.random() - 0.5) * OIL_ANGULAR_WIDTH * 1.8;
+      const r = BASE_R + (Math.random() - 0.5) * 14;
+      state.particles.push({
+        x: r * Math.cos(a), z: r * Math.sin(a),
+        y: platformTopY() * 0.85 + Math.random() * 15,
+        vx: 0, vz: 0, vy: -(90 + Math.random() * 40),
+        life: 0, maxLife: 1.1 + Math.random() * 0.3,
+        kind: 'drip'
+      });
+    }
+  }
+
   function spawnBurst(x, y, z, kind) {
     const n = kind === 'sparkle' ? 8 : 6;
     for (let i = 0; i < n; i++) {
@@ -1916,6 +2059,42 @@
       p.behavior = 'combat';
     }
 
+    // patrouille de créneaux : seulement en 'combat' (l'état par défaut,
+    // qu'il y ait ou non une cible en ce moment) — les autres comportements
+    // ci-dessus ont déjà chacun leur propre destination explicite
+    if (p.behavior === 'combat') {
+      const turning = Math.abs(state.omega) > PATROL_OMEGA_THRESHOLD;
+      p.stillTimer = turning ? 0 : p.stillTimer + dt;
+      const shouldPatrol = state.towers.length > 0 && p.stillTimer >= PATROL_IDLE_TIME;
+      if (shouldPatrol) {
+        if (!p.patrolling) {
+          // vient de démarrer : pars de la tourelle la plus proche plutôt
+          // que de sauter n'importe où au premier instant
+          let bi = 0, bd = Infinity;
+          state.towers.forEach((t, i) => {
+            const dd = Math.abs(angDiff(p.angle, t.angle));
+            if (dd < bd) { bd = dd; bi = i; }
+          });
+          p.patrolTurretIdx = bi;
+          p.patrolTimer = PATROL_HOP_TIME;
+          p.patrolling = true;
+        } else {
+          p.patrolTimer -= dt;
+          if (p.patrolTimer <= 0) {
+            p.patrolTurretIdx = (p.patrolTurretIdx + 1) % state.towers.length;
+            p.patrolTimer = PATROL_HOP_TIME;
+          }
+        }
+        targetAngle = state.towers[p.patrolTurretIdx % state.towers.length].angle;
+      } else {
+        p.patrolling = false;
+      }
+      if (turning) targetR = PLAYER_R - PATROL_STEP_BACK;
+    } else {
+      p.stillTimer = 0;
+      p.patrolling = false;
+    }
+
     // he only ever crosses in/out through the door — while still mostly
     // up but headed down (or still mostly down but headed up), the real
     // destination angle (a siege engine, a wander spot, wherever) is put
@@ -1996,6 +2175,14 @@
       damagedTurret.hp = Math.min(damagedTurret.maxHp, damagedTurret.hp + TURRET_HEAL * dt);
     } else if (p.behavior === 'oil') {
       if (oilTower && Math.abs(angDiff(p.angle, targetAngle)) < 0.12 && Math.abs(p.r - PLAYER_R) < 6) {
+        // demandé en session : "plein de points qui tombent type eau"
+        // tant que ça verse — indépendant du tic de dégâts (bien plus
+        // lent), juste l'habillage visuel du filet d'huile
+        p.oilDripTimer -= dt;
+        if (p.oilDripTimer <= 0) {
+          p.oilDripTimer = 0.05;
+          spawnOilDrips(oilTower.angle);
+        }
         p.oilTimer -= dt;
         if (p.oilTimer <= 0) {
           p.oilTimer = OIL_TICK;
@@ -2363,7 +2550,7 @@
       t.atkTimer -= dt;
       if (t.atkTimer <= 0) {
         const from = worldPos(TURRET_R, t.angle, platformTopY());
-        const target = princessDecoyTarget || nearestVisibleTarget();
+        const target = princessDecoyTarget || nearestVisibleTargetFacing(t.angle);
         if (target) {
           const dmg = state.princessDead ? PRINCESS_DEATH_TURRET_MUL : 1;
           fire(from, target, dmg);
@@ -2550,7 +2737,13 @@
       // Margin kept tiny (not 0): right at the true tangent (cos=0) it'd
       // otherwise disappear noticeably before the silhouette edge actually
       // gets there, which read as popping off too soon.
-      const facing = Math.cos(q.mid - rot) > 0.02;
+      // NB: the true tangent/silhouette edge of this iso projection sits at
+      // ±45° from `rot`, not ±90° (signalé en session : la porte disparaît
+      // trop tôt d'un côté, trop tard de l'autre — un seuil centré sur
+      // rot au lieu de rot+45° coupe la fenêtre visible à cheval sur la
+      // vraie bordure au lieu de pile dessus). See drawCastleSilhouette's
+      // aL/aR derivation for the full reasoning.
+      const facing = Math.cos(q.mid - rot - Math.PI / 4) > 0.02;
       if (windowHere && facing) {
         for (const wa of WINDOW_ANGLES) {
           if (Math.abs(angDiff(q.mid, wa)) < Math.PI / N_SEG) {
@@ -2559,7 +2752,7 @@
             // sticker glued to the camera rather than a feature embedded in
             // a turning cylindrical wall — compressing its width as it
             // turns away from facing the camera sells the rotation
-            const wf = Math.max(0.15, Math.cos(wa - rot));
+            const wf = Math.max(0.15, Math.cos(wa - rot - Math.PI / 4));
             const ww = 6 * scale * wf, wh = 14 * scale;
             ctx.fillStyle = '#1c1109';
             archPath(wp.x, wp.y, ww, wh);
@@ -2571,7 +2764,7 @@
       }
       if (doorHere && facing && Math.abs(angDiff(q.mid, DOOR_ANGLE)) < Math.PI / N_SEG) {
         const dp = project(radius * 0.99 * Math.cos(DOOR_ANGLE), 12, radius * 0.99 * Math.sin(DOOR_ANGLE), rot);
-        const df = Math.max(0.15, Math.cos(DOOR_ANGLE - rot));
+        const df = Math.max(0.15, Math.cos(DOOR_ANGLE - rot - Math.PI / 4));
         const dw = 12 * scale * df, dh = 22 * scale;
         ctx.fillStyle = '#160e08';
         archPath(dp.x, dp.y, dw, dh);
@@ -2713,7 +2906,7 @@
     // comme les facettes du mur elles-mêmes. Le panneau est donc plat sur
     // le mur et tourne avec lui pour de vrai, pas par approximation.
     const cutout = (angle, yBase, halfWidth, height) => {
-      if (Math.cos(angle - rot) < 0.05) return; // facing away, skip
+      if (Math.cos(angle - rot - Math.PI / 4) < 0.05) return; // facing away, skip — see the note above drawWallBand's own `facing`
       const topV = height - halfWidth; // where the straight sides end and the round top begins
       const pts = [[-halfWidth, 0], [-halfWidth, topV]];
       const ARCH_STEPS = 10;
@@ -2885,8 +3078,11 @@
   function drawTurret(t, rot) {
     const y0 = platformTopY(), y1 = y0 + 20, half = 8;
     const px = TURRET_R * Math.cos(t.angle), pz = TURRET_R * Math.sin(t.angle);
-    const tops = SQUARE_PTS.map(c => project(px + half * c.cx, y1, pz + half * c.cz, rot));
-    const bots = SQUARE_PTS.map(c => project(px + half * c.cx, y0, pz + half * c.cz, rot));
+    // chaque tour = son propre carré tourné depuis le centre de son cercle
+    // (t.angle), pas le carré global partagé — voir squareCornersAt
+    const corners = squareCornersAt(t.angle);
+    const tops = corners.map(c => project(px + half * c.cx, y1, pz + half * c.cz, rot));
+    const bots = corners.map(c => project(px + half * c.cx, y0, pz + half * c.cz, rot));
 
     const faces = [];
     for (let i = 0; i < 4; i++) {
@@ -2900,7 +3096,7 @@
     const baseL = 80 - 62 * (1 - Math.exp(-crowding * 0.5)); // 80% (isolated) down toward ~18%
     const sat = 55 - dmg * 35;
     for (const f of faces) {
-      const mid = (SQUARE_PTS[f.i].a + SQUARE_PTS[f.i + 1].a) / 2;
+      const mid = (corners[f.i].a + corners[f.i + 1].a) / 2;
       const faceLight = 0.5 + 0.3 * Math.cos(mid - Math.PI * 0.75);
       const l = Math.max(6, Math.min(92, baseL + (faceLight - 0.5) * 30));
       ctx.fillStyle = `hsl(210, ${sat}%, ${l}%)`;
@@ -2924,6 +3120,103 @@
       const pos = project(b.x + o.dx, 0, b.z + o.dz, rot);
       drawBallSprite('bush', 7 * scale, '#7ea457', '#385226', pos);
     }
+  }
+
+  // a plain little box with a pitched roof — four wall quads (painter-
+  // sorted like the donjon's own facets) plus two roof slopes and a gable
+  // triangle at each end
+  function drawHouse(h, rot) {
+    const s = HOUSE_SIZE, wallH = s * 0.9, roofH = s * 0.7;
+    const corners = [[-s, -s], [s, -s], [s, s], [-s, s]]; // local (dx, dz)
+    const base = corners.map(([dx, dz]) => project(h.x + dx, 0, h.z + dz, rot));
+    const top = corners.map(([dx, dz]) => project(h.x + dx, wallH, h.z + dz, rot));
+    const walls = [];
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      const midx = (corners[i][0] + corners[j][0]) / 2, midz = (corners[i][1] + corners[j][1]) / 2;
+      const depth = base[i].depth + base[j].depth;
+      walls.push({ depth, pts: [base[i], base[j], top[j], top[i]], light: Math.cos(Math.atan2(midz, midx) - Math.PI * 0.75) });
+    }
+    walls.sort((a, b) => a.depth - b.depth);
+    for (const w of walls) {
+      const g = Math.round(120 + w.light * 30);
+      ctx.fillStyle = `rgb(${g},${g - 25},${g - 55})`;
+      buildQuad(w.pts);
+    }
+    // roof: a ridge along one axis, two sloped quads meeting at the top
+    const ridgeA = project(h.x - s, wallH + roofH, h.z, rot);
+    const ridgeB = project(h.x + s, wallH + roofH, h.z, rot);
+    const slope1 = [top[0], top[1], ridgeB, ridgeA];
+    const slope2 = [top[2], top[3], ridgeA, ridgeB];
+    const slopes = [
+      { pts: slope1, depth: top[0].depth + top[1].depth },
+      { pts: slope2, depth: top[2].depth + top[3].depth }
+    ].sort((a, b) => a.depth - b.depth);
+    for (const sl of slopes) {
+      ctx.fillStyle = '#8a3f2e';
+      buildQuad(sl.pts);
+    }
+  }
+
+  function drawStreamSeg(seg, rot) {
+    const g = streamGeometry();
+    const pts = [
+      [seg.p0.x - g.rx * STREAM_HALF_WIDTH, seg.p0.z - g.rz * STREAM_HALF_WIDTH],
+      [seg.p0.x + g.rx * STREAM_HALF_WIDTH, seg.p0.z + g.rz * STREAM_HALF_WIDTH],
+      [seg.p1.x + g.rx * STREAM_HALF_WIDTH, seg.p1.z + g.rz * STREAM_HALF_WIDTH],
+      [seg.p1.x - g.rx * STREAM_HALF_WIDTH, seg.p1.z - g.rz * STREAM_HALF_WIDTH]
+    ].map(([x, z]) => project(x, 0.3, z, rot));
+    ctx.fillStyle = '#5b8fae';
+    buildQuad(pts);
+  }
+  // same "just the two edges, no per-segment fill" fix as drawRoadRun — a
+  // full quad per short segment in phosphore/filaire draws visible rungs
+  // between segments instead of a clean winding ribbon
+  function drawStreamRun(run, rot) {
+    if (phosphorStyle === 'couleur') { for (const seg of run) drawStreamSeg(seg, rot); return; }
+    const g = streamGeometry();
+    const leftPts = [], rightPts = [];
+    for (const seg of run) {
+      leftPts.push(project(seg.p0.x - g.rx * STREAM_HALF_WIDTH, 0.3, seg.p0.z - g.rz * STREAM_HALF_WIDTH, rot));
+      rightPts.push(project(seg.p0.x + g.rx * STREAM_HALF_WIDTH, 0.3, seg.p0.z + g.rz * STREAM_HALF_WIDTH, rot));
+    }
+    const last = run[run.length - 1];
+    leftPts.push(project(last.p1.x - g.rx * STREAM_HALF_WIDTH, 0.3, last.p1.z - g.rz * STREAM_HALF_WIDTH, rot));
+    rightPts.push(project(last.p1.x + g.rx * STREAM_HALF_WIDTH, 0.3, last.p1.z + g.rz * STREAM_HALF_WIDTH, rot));
+    ctx.lineWidth = Math.max(1, 1.2 * scale);
+    for (const pts of [leftPts, rightPts]) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
+  }
+  function drawStreamExtras(rot) {
+    const g = streamGeometry();
+    const { cx, cz, tx, tz, rx, rz } = g;
+    const halfLen = streamHalfLen();
+    // pale streaks for a hint of current/shimmer, spread along the whole
+    // length (fixed spacing, not a fixed count), following the same wiggle
+    // as the water itself so they stay inside its banks
+    ctx.strokeStyle = 'rgba(230,245,255,0.5)';
+    ctx.lineWidth = Math.max(1, scale);
+    const SHIMMER_GAP = 55;
+    for (let d = -halfLen; d <= halfLen; d += SHIMMER_GAP) {
+      const c = streamPointAt(g, d);
+      const a = project(c.x - rx * STREAM_HALF_WIDTH * 0.7, 0.35, c.z - rz * STREAM_HALF_WIDTH * 0.7, rot);
+      const b = project(c.x + rx * STREAM_HALF_WIDTH * 0.7, 0.35, c.z + rz * STREAM_HALF_WIDTH * 0.7, rot);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    // the little bridge itself, spanning the water along the road — sits at
+    // d=0 where the wiggle is zero, so it's still square with the crossing
+    const bridgePts = [
+      [cx - rx * (STREAM_HALF_WIDTH + 4) - tx * 9, cz - rz * (STREAM_HALF_WIDTH + 4) - tz * 9],
+      [cx + rx * (STREAM_HALF_WIDTH + 4) - tx * 9, cz + rz * (STREAM_HALF_WIDTH + 4) - tz * 9],
+      [cx + rx * (STREAM_HALF_WIDTH + 4) + tx * 9, cz + rz * (STREAM_HALF_WIDTH + 4) + tz * 9],
+      [cx - rx * (STREAM_HALF_WIDTH + 4) + tx * 9, cz - rz * (STREAM_HALF_WIDTH + 4) + tz * 9]
+    ].map(([x, z]) => project(x, 1.5, z, rot));
+    ctx.fillStyle = '#8a6a42';
+    buildQuad(bridgePts);
   }
 
   function drawEnemy(e, rot) {
@@ -3106,6 +3399,35 @@
     }
   }
 
+  // custom pixel-art heart for the câlin icon, replacing the ❤ emoji —
+  // demandé en session, avec une image de référence à respecter "en
+  // respectant la grille de pixel scrupuleusement" : chaque case de la
+  // grille est un carré plein (pas d'antialiasing, pas de courbes), même
+  // contour rouge foncé / remplissage magenta / deux surbrillances lilas
+  // sur la ligne la plus large, pointe à un seul pixel en bas.
+  const HEART_GRID = [
+    '..RR.RR..',
+    '.RMR.RMR.',
+    'RMHMRMHMR',
+    'RMMMMMMMR',
+    '.RMMMMMR.',
+    '..RMMMR..',
+    '...RMR...'
+  ];
+  const HEART_COLORS = { R: '#c0392b', M: '#d6368f', H: '#c9a0dc' };
+  function drawPixelHeart(cx, baseY, cell) {
+    const cols = HEART_GRID[0].length, rows = HEART_GRID.length;
+    const x0 = cx - (cols * cell) / 2, y0 = baseY - rows * cell;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const ch = HEART_GRID[r][c];
+        if (ch === '.') continue;
+        ctx.fillStyle = HEART_COLORS[ch];
+        ctx.fillRect(Math.round(x0 + c * cell), Math.round(y0 + r * cell), cell, cell);
+      }
+    }
+  }
+
   function drawPrincess(rot) {
     const w = princessWorld();
     const pos = project(w.x, w.y, w.z, rot);
@@ -3120,9 +3442,7 @@
     ctx.fillRect(pos.x - bw / 2, pos.y - rad - 12, bw * (pr.hp / pr.maxHp), 4);
 
     if (state.calin.hugging) {
-      ctx.font = `${Math.round(14 * scale)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('❤', pos.x, pos.y - rad - 20);
+      drawPixelHeart(pos.x, pos.y - rad - 6, Math.max(1, 2.2 * scale));
     } else if (pr.pos > 0.92) {
       // down in the garden: show what she's actually earning, so the
       // bonus reads as a real number instead of a hidden percentage
@@ -3160,6 +3480,16 @@
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
       ctx.fill();
+    } else if (pt.kind === 'drip') {
+      // a short streak in its own fall direction reads as a drop of
+      // liquid rather than a floating dot
+      const tail = project(pt.x, pt.y - pt.vy * 0.03, pt.z, rot);
+      ctx.strokeStyle = `rgba(160,205,225,${0.75 * f})`;
+      ctx.lineWidth = Math.max(1, 2 * scale);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      ctx.lineTo(tail.x, tail.y);
+      ctx.stroke();
     } else {
       ctx.fillStyle = `rgba(255,225,120,${f})`;
       ctx.beginPath();
@@ -3250,6 +3580,12 @@
     const road0Runs = roadRuns(0, rot), road1Runs = roadRuns(1, rot);
     const farRoadRuns = [...road0Runs.far, ...road1Runs.far];
     const nearRoadRuns = [...road0Runs.near, ...road1Runs.near];
+    const farHouses = HOUSES.filter(h => Math.cos(h.angle - rot) < 0);
+    const nearHouses = HOUSES.filter(h => Math.cos(h.angle - rot) >= 0);
+    const streamRunsAll = streamRuns(rot);
+    // the bridge/shimmer extras sit at d≈0 (the crossing point) — draw them
+    // in whichever pass that point itself falls into
+    const streamExtrasFar = Math.cos(streamGeometry().angle - rot) < 0;
 
     // she's on the platform for the first half of the trip (elevated,
     // grouped with player/turrets below) and out in the garden for the
@@ -3268,6 +3604,9 @@
     const playerNear = playerGrounded && Math.cos(state.player.angle - rot) >= 0;
 
     for (const run of farRoadRuns) drawRoadRun(run, rot);
+    for (const run of streamRunsAll.far) drawStreamRun(run, rot);
+    if (streamExtrasFar) drawStreamExtras(rot);
+    for (const h of farHouses) drawHouse(h, rot);
     for (const b of farBushes) drawBush(b, rot);
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
@@ -3278,6 +3617,9 @@
     if (phosphorStyle === 'phosphore') drawCastleSilhouette(rot); else drawCastle(rot);
 
     for (const run of nearRoadRuns) drawRoadRun(run, rot);
+    for (const run of streamRunsAll.near) drawStreamRun(run, rot);
+    if (!streamExtrasFar) drawStreamExtras(rot);
+    for (const h of nearHouses) drawHouse(h, rot);
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
@@ -3335,8 +3677,8 @@
     ctx.scale(s, s);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `900 ${Math.round(58 * scale)}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
-    ctx.lineWidth = 6 * scale;
+    ctx.font = `900 ${Math.round(84 * scale)}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.lineWidth = 8 * scale;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = '#241d15';
     ctx.strokeText('FIGHT!', 0, 0);

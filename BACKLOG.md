@@ -333,10 +333,11 @@ réel en dessous.
   problème persiste).
 - **Le seigneur passe derrière les tourelles en tournant vite** → fait en
   v0.25 : tourelles décalées d'un cran vers le bord (TURRET_R), vraie
-  séparation radiale au lieu du même rayon que le seigneur. **Pas encore
-  fait** : la patrouille de créneaux (saut de tourelle en tourelle après
-  une demi-seconde d'immobilité, recul d'un cran au sol en tournant) —
-  animation à part entière, plus lourde que la correction du bug lui-même.
+  séparation radiale au lieu du même rayon que le seigneur. La patrouille
+  de créneaux (saut de tourelle en tourelle après une immobilité prolongée,
+  recul d'un cran au sol en tournant) → **fait en v0.44**, avec un délai
+  d'immobilité bien plus long que les 0.5s notés ici à l'origine — voir
+  l'entrée v0.44 plus bas pour pourquoi.
 
 ## Système d'éclairage à concevoir
 
@@ -549,3 +550,88 @@ remonter ne répondait parfois plus. Cause : sur un petit bouton mobile, un
 tap pouvait déclencher pointerleave (le doigt dérive hors des limites du
 bouton) PUIS pointerup — deux bascules de la cible qui s'annulaient.
 Corrigé avec la capture de pointeur + une garde anti-double-déclenchement.
+
+## Douves/routes/porte/filaire/escalier/engins de siège → fait en v0.41
+
+Rattrapage : plusieurs correctifs signalés en session groupés dans une
+seule version. Douves : niveau 1 deux fois moins large, plus de dégâts —
+seulement un ralentissement (signalé : "faut juste que ça ralentisse").
+Routes : largeur physique constante au lieu d'une largeur angulaire fixe
+(qui grossissait avec la distance en axonométrie) ; portée jusqu'à
+SPAWN_R (garanti hors écran quel que soit l'angle) au lieu d'un rayon fixe
+qui s'arrêtait court selon la rotation caméra. Porte/fenêtres : le vrai
+bug était un décalage de 45° dans le calcul de face visible
+(`cos(angle - rot)` au lieu de `cos(angle - rot - π/4)`) — la vraie
+frontière de visibilité de ce repère axonométrique est centrée sur
+`rot+π/4`, pas `rot`. Filaire : applique désormais le même remplissage
+fond+contour que le phosphore (avant, rien n'était occulté, donc le roi et
+les fenêtres restaient visibles "à travers" le donjon). Escalier à vis :
+trou décoratif au centre de la plateforme (idée dite plus tôt, perdue,
+retrouvée et posée). Engins de siège : SIEGE_GROUP_RADIUS remonté (45→68)
+pour que les tiers 2/3 (trébuchet, tour de siège) aient une vraie chance
+d'apparaître.
+
+## Contour des routes en phosphore/filaire "en échelle" → fait en v0.40
+
+Signalé : en phosphore/filaire, chaque petit segment de route dessinait
+son propre contour complet, ce qui donnait des barreaux perpendiculaires
+entre segments (effet "échelle") au lieu d'une route continue. Corrigé en
+ne traçant que les deux bords, en continu sur tout un "run" (groupe de
+segments contigus du même côté far/near), sans remplir chaque segment
+séparément.
+
+## Village de maisons, ruisseau traversant toute la carte, gouttes d'huile bouillante, bannière FIGHT! agrandie → fait en v0.43
+
+Petit village de maisons décoratives (boîte + toit à deux pans, même
+recette de facettes triées en profondeur que le donjon) dispersées dans
+le jardin. Le ruisseau (jusque-là un segment local près du croisement
+avec une route) traverse désormais toute la carte, perpendiculaire à la
+route qu'il croise, avec un petit pont à l'endroit du croisement — demandé
+en session : "doit traverser la carte", pas juste un segment local.
+Animation de gouttes qui tombent quand on tient Huile bouillante appuyé
+(particules dédiées, kind:'drip', traînée courte). Bannière FIGHT! agrandie
+(84px au lieu de 58, contour plus épais) suite à un retour "trop petite".
+
+## Routes moins serpentantes, ruisseau vraiment serpentant, cœur du câlin en pixel-art, tourelles orientées + ciblage par tourelle + patrouille → fait en v0.44
+
+Quatre demandes groupées :
+
+- **Routes moins serpentantes** : `ROAD_WIND_AMP` réduit de 0.55 à 0.16
+  ("plus droite, pas juste droite, mais qui serpente beaucoup moins").
+- **Ruisseau vraiment serpentant** : jusqu'ici une ligne parfaitement
+  droite (juste perpendiculaire à la route qu'il croise) ; ajout d'un
+  décalage sinusoïdal latéral le long de sa ligne centrale (nul pile au
+  croisement, pour que le pont reste bien aligné), avec le même découpage
+  en segments/runs far-near que les routes pour un rendu propre en
+  phosphore/filaire.
+- **Cœur du câlin en pixel-art** : remplace l'emoji ❤ par une grille de
+  pixels dessinée case par case (contour rouge foncé, remplissage
+  magenta, deux surbrillances lilas sur la ligne la plus large, pointe à
+  un seul pixel en bas), à partir d'une image de référence fournie en
+  session — "en respectant la grille de pixel scrupuleusement".
+- **Tourelles orientées individuellement** : avant, toutes les tourelles
+  partageaient le même jeu de coins de carré (SQUARE_PTS), donc toutes
+  leurs arêtes de cube restaient parallèles entre elles quelle que soit
+  leur position sur l'anneau. Chaque tourelle utilise désormais son
+  propre carré tourné de son propre angle autour du donjon (un cube
+  "copié-collé puis tourné depuis le centre de son cercle", demandé en
+  session) — une paire d'arêtes pointe radialement, l'autre tangentiellement.
+- **Chaque tourelle vise l'ennemi le plus en face d'elle** : avant, toutes
+  les tourelles (et le seigneur) partageaient la même cible "la plus
+  proche du mur, visible à l'écran" (nearestVisibleTarget). Nouvelle
+  fonction `nearestVisibleTargetFacing(fromAngle)` : même filtre de
+  visibilité, mais classée par écart angulaire avec l'angle propre de la
+  tourelle plutôt que par distance radiale. Le ciblage du seigneur lui-même
+  n'a pas été touché (demande explicitement limitée aux tourelles).
+- **Patrouille de tourelle en tourelle** (idée retrouvée dans ce fichier,
+  notée "pas encore fait" : "saut de tourelle en tourelle après une
+  demi-seconde d'immobilité"). Implémentée avec un délai bien plus long
+  que les 0.5s d'origine : testé en session, à 0.5s la patrouille se
+  déclenchait pendant la simple attente d'assez d'or entre deux achats de
+  tourelle, ramenant le seigneur se planter à côté de la tourelle déjà
+  posée juste avant chaque achat suivant — toutes les tourelles finissaient
+  empilées au même endroit au lieu de se répartir sur l'anneau. Relevé à
+  15s de vraie inactivité pour ne plus interférer avec le rythme normal de
+  construction. Le "recul d'un cran au sol en tournant" de l'idée
+  d'origine est fait aussi : le seigneur réduit son rayon pendant une
+  rotation rapide de la caméra.
