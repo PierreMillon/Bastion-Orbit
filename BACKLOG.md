@@ -1362,3 +1362,64 @@ v0.60) : jets visibles autour du pilier de la fontaine, particules du
 ruisseau qui avancent le long du chemin, banks visiblement lissées,
 plus aucun trait perpendiculaire, "+2" nettement plus gros et lisible
 sans avoir besoin de zoomer. Aucune erreur console.
+
+## Église ×2, ruisseau "flot infini", musique qui se coupe, pont en pierre, place + 3e chemin, ferme → fait en v0.62
+
+Six demandes dictées à la suite (dont une glissée en plein milieu du
+travail — "la musique ne se coupe toujours pas quand je quitte le
+jeu").
+
+1. **Église deux fois plus grande** — toutes les dimensions ×2 (nef,
+   clocher, croix). "Attention à pas faire de collision avec les
+   autres maisons" : le trio grange/église/fontaine a dû être
+   repositionné plus loin (`VILLAGE_CENTER_R` 300 → 460, angle -1.3 →
+   -1.55) et réécarté, vérifié **numériquement** (petit script Node à
+   part, pas juste au jugé) contre les 8 `HOUSES` ET entre les trois —
+   marge minimale ~36 unités, aucune collision.
+2. **Particules du ruisseau : beaucoup plus petites et nombreuses,
+   partout sur la longueur, "un flot infini"** — `STREAM_FLOW_COUNT`
+   16 → 110, rayon de dessin 1.6 → 0.7×scale.
+3. **"La musique ne se coupe toujours pas quand je quitte le jeu"** —
+   bug réel, pas juste un réglage : `visibilitychange` ne faisait que
+   redébloquer l'audio au retour sur l'onglet (`ensureAudio`), rien ne
+   coupait `bgMusic` en le quittant. Ajouté : coupée sur `hidden`,
+   reprise au retour. Vérifié (Playwright, `document.hidden` simulé) :
+   `paused` passe bien à `true` puis `false`.
+4. **Pont en pierre, deux fois plus imposant** — tablier deux fois plus
+   large ET plus long (`BRIDGE_HALF_LEN`/`BRIDGE_HALF_WIDTH`), plus
+   deux murets latéraux (avant : une simple plaque plate, aucun mur).
+   `drawStoneGrid` superpose une grille de joints (interpolation
+   bilinéaire entre les 4 coins déjà projetés) sur le tablier ET les
+   murets pour qu'on voie vraiment les blocs plutôt qu'un aplat uni —
+   "des gros blocs qui font les murs sur les côtés et le sol".
+5. **Place du village + troisième chemin vers la porte** — "les deux
+   chemins doivent se lier... arriver quasiment en bas de l'église...
+   sur une sorte de place... à partir de la place il y a un troisième
+   chemin qui va jusqu'en bas de la porte de la tour". Fait en scope
+   **assumé et volontairement limité** : une bretelle depuis chacune
+   des deux routes existantes (prise au même rayon que la place —
+   point le plus proche par construction) rejoint une place (`PLAZA_X/
+   Z`, décalée du pied de l'église vers le donjon), d'où part un
+   troisième chemin jusqu'à la porte. **Purement visuel**, superposé
+   par-dessus — `roadAngleAt`/le pathing des ennemis sur les routes
+   (vitesse bonus, `roadIdx`) ne sont PAS touchés, pour ne rien casser
+   dans un système déjà réglé et testé tout au long de la session. Le
+   vrai raccordement du système de routes lui-même (les ennemis
+   suivraient réellement ce tracé) reste le "gros chantier routes →
+   centre-ville → donjon" toujours pas commencé — noté honnêtement,
+   pas fait en douce comme si c'était la même chose.
+6. **Ferme** — "un gros bâtiment et un petit, assez loin, quasiment en
+   limite de vision pour donner de la profondeur". `FARM_BUILDINGS`
+   (`ferme_grange` + `ferme_maison`, même recette `collectBoxRoof` que
+   grange/maison), à l'opposé du village existant (angle 0.85, r=470,
+   proche de `SPAWN_R_BASE`). Vérifié numériquement aussi : marge
+   ~153 unités vs les 8 maisons, ~23 unités entre les deux bâtiments
+   de la ferme eux-mêmes.
+
+Vérifié en Playwright (style Filaire pur, par défaut) : église bien
+plus grande sans chevaucher grange/fontaine/maisons voisines sur
+plusieurs angles de caméra ; ruisseau visiblement plus dense en petits
+points ; musique coupée/reprise sur `visibilitychange` simulé ; pont
+avec grille de pierre visible sur tablier et murets ; place + bretelles
++ troisième chemin qui convergent clairement vers l'église. Aucune
+erreur console sur l'ensemble des captures.

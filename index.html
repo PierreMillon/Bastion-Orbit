@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.61</button>
+  <button id="versionBtn">v0.62</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.62</b> — église deux fois plus grande (repositionnée, aucune collision) ; ruisseau bien plus dense en petites particules ; la musique se coupe enfin quand on quitte l'onglet ; pont en pierre imposant avec parapets et blocs visibles ; place du village + troisième chemin vers la porte ; une ferme au loin pour la profondeur</div>
   <div><b>v0.61</b> — la fontaine a de vrais jets d'eau qui giclent du pilier central ; le ruisseau a des particules qui coulent vraiment le long du chemin (plus de traits perpendiculaires) et des berges bien plus souples ; les nombres flottants (or) sont trois fois plus gros</div>
   <div><b>v0.60</b> — style par défaut : Filaire pur (vert) au lieu de Phosphore pour un nouveau chargement — les réglages déjà sauvegardés ne changent pas</div>
   <div><b>v0.59</b> — jauge circulaire au-dessus de tout ennemi/engin de siège en pleine action (pose de pont, échelle, grignotage du mur, coup depuis la plateforme, rechargement) : on voit maintenant venir l'effet au lieu qu'il tombe sans prévenir</div>
@@ -1009,6 +1010,15 @@
     try { localStorage.setItem('bo_musicVolume', String(musicVolume)); } catch (e) { /* ignore */ }
     if (musicVolume > 0) tryPlayMusic(); else bgMusic.pause();
   });
+  // signalé en session : "la musique ne se coupe toujours pas quand je
+  // quitte le jeu" — le visibilitychange plus haut ne fait que redébloquer
+  // l'audio au retour sur l'onglet (ensureAudio), rien ne coupait bgMusic
+  // en le quittant. Coupée ici, reprise au retour (tryPlayMusic respecte
+  // déjà musicVolume<=0 tout seul).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) bgMusic.pause();
+    else tryPlayMusic();
+  });
 
   // bruitages : même principe, curseur 0-100% appliqué dans beep()/
   // playPurr() (voir sfxVolume plus haut, déclaré avant ces fonctions)
@@ -1506,17 +1516,59 @@
   // pas commencé). Rejoint quand même le chantier "eau vivante" : la
   // fontaine scintille avec le même vocabulaire visuel que les douves/le
   // ruisseau (voir drawFountainGlints).
-  const VILLAGE_CENTER_ANGLE = -1.3, VILLAGE_CENTER_R = 300;
+  // ré-écarté en session (église deux fois plus grande, voir drawEglise :
+  // "attention à pas faire de collision avec les autres maisons") —
+  // repositionné plus loin (300 -> 460 unités, angle -1.3 -> -1.55) et
+  // les trois écartés davantage entre eux. Vérifié numériquement (script
+  // à part, pas juste au jugé) contre les 8 maisons de HOUSES ET entre
+  // eux trois : marge minimale ~36 unités, aucune collision.
+  const VILLAGE_CENTER_ANGLE = -1.55, VILLAGE_CENTER_R = 460;
   const VILLAGE_CENTER_X = VILLAGE_CENTER_R * Math.cos(VILLAGE_CENTER_ANGLE);
   const VILLAGE_CENTER_Z = VILLAGE_CENTER_R * Math.sin(VILLAGE_CENTER_ANGLE);
   // yaw modéré (pas complètement aléatoire comme HOUSES) : ce trio est
   // composé à la main avec un espacement calculé pour ne pas se toucher
   // à angle nul — une rotation franche pourrait les faire chevaucher
   const VILLAGE_EXTRAS = [
-    { type: 'grange', x: VILLAGE_CENTER_X - 75, z: VILLAGE_CENTER_Z - 10, yaw: 0.5 },
-    { type: 'eglise', x: VILLAGE_CENTER_X + 60, z: VILLAGE_CENTER_Z + 30, yaw: -0.35 },
-    { type: 'fontaine', x: VILLAGE_CENTER_X - 10, z: VILLAGE_CENTER_Z + 95 }
+    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: 0.5 },
+    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: -0.35 },
+    { type: 'fontaine', x: VILLAGE_CENTER_X, z: VILLAGE_CENTER_Z - 180 }
   ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
+
+  // place du village + troisième chemin vers la porte (demandé en
+  // session : "les deux chemins doivent se lier... arriver quasiment en
+  // bas de l'église... sur une sorte de place... à partir de la place il
+  // y a un troisième chemin qui va jusqu'en bas de la porte de la tour").
+  // Scope assumé et noté dans BACKLOG.md : purement visuel, superposé
+  // aux deux routes existantes SANS toucher à roadAngleAt/le pathing des
+  // ennemis dessus (déjà réglé/testé tout au long de la session) — le
+  // vrai raccordement du système de routes reste le "gros chantier
+  // routes → centre-ville → donjon" toujours pas commencé.
+  const EGLISE_WORLD_X = VILLAGE_CENTER_X + 120, EGLISE_WORLD_Z = VILLAGE_CENTER_Z + 30;
+  const _eglDist = Math.hypot(EGLISE_WORLD_X, EGLISE_WORLD_Z);
+  // la place est "au pied" de l'église, pas dessus — décalée vers le
+  // donjon le long de la même ligne radiale
+  const PLAZA_X = EGLISE_WORLD_X * (1 - 40 / _eglDist);
+  const PLAZA_Z = EGLISE_WORLD_Z * (1 - 40 / _eglDist);
+  const PLAZA_R = Math.hypot(PLAZA_X, PLAZA_Z);
+  const PLAZA_RADIUS = 46; // taille de la place elle-même
+  const PLAZA_ANGLE = Math.atan2(PLAZA_Z, PLAZA_X);
+
+  // la ferme (demandé en session : "un gros bâtiment et un petit,
+  // assez loin, quasiment en limite de vision pour donner de la
+  // profondeur") — à l'opposé du village existant pour ne rien
+  // chevaucher, à un rayon proche de SPAWN_R_BASE (480, la portée
+  // garantie hors-écran la plus courte) sans dépendre de SPAWN_R lui-
+  // même (TDZ, comme HOUSES/VILLAGE_EXTRAS)
+  const FARM_ANGLE = 0.85, FARM_R = 470;
+  const FARM_X = FARM_R * Math.cos(FARM_ANGLE), FARM_Z = FARM_R * Math.sin(FARM_ANGLE);
+  const FARM_BUILDINGS = [
+    { type: 'ferme_grange', x: FARM_X, z: FARM_Z, yaw: 1.1 },
+    { type: 'ferme_maison', x: FARM_X + 75, z: FARM_Z - 45, yaw: 0.6 }
+  ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
+  // combiné une seule fois ici pour que le tri far/near (voir plus bas
+  // dans render()) traite le cœur de village ET la ferme ensemble, sans
+  // dupliquer le filtre/la boucle de dessin pour chacun
+  const ALL_VILLAGE_EXTRAS = [...VILLAGE_EXTRAS, ...FARM_BUILDINGS];
 
   // a stream crossing one of the roads, with a little bridge over it
   // (demandé en session, puis précisé : "doit traverser la carte" — pas
@@ -1526,6 +1578,15 @@
   // visible map rather than stopping short near the crossing point.
   const STREAM_CROSS_R = 180;
   const STREAM_HALF_WIDTH = 11;
+  // pont en pierre (demandé en session : "deux fois plus imposant",
+  // "des gros blocs qui font les murs sur les côtés et le sol") — voir
+  // drawStoneBridge/drawStoneGrid plus bas. Tablier deux fois plus large
+  // ET deux fois plus long que l'ancien pont (simple plaque plate, sans
+  // parapets), plus deux murets latéraux texturés en pierre.
+  const BRIDGE_HALF_LEN = 18;                    // le long du chemin (était 9)
+  const BRIDGE_HALF_WIDTH = STREAM_HALF_WIDTH + 8; // en travers (était STREAM_HALF_WIDTH + 4)
+  const BRIDGE_DECK_Y = 2.5;
+  const BRIDGE_WALL_H = 7;
   // demandé en session : le ruisseau doit vraiment serpenter (contrairement
   // aux routes, qu'on veut désormais plus droites) — un simple décalage
   // sinusoïdal latéral le long de sa ligne centrale, nul à d=0 (le
@@ -1582,7 +1643,11 @@
   // Même portée fixe que glintSeeds.stream (±400, pas streamHalfLen()) —
   // pas besoin de suivre SPAWN_R, une particule hors de la portion
   // visible ne coûte rien, elle est juste hors-écran.
-  const STREAM_FLOW_COUNT = 16;
+  // demandé en session : "beaucoup plus petites et beaucoup plus
+  // nombreuses... partout sur la longueur du cours d'eau, une sorte de
+  // flot infini" — 16 -> 110, rayon de dessin réduit d'autant (voir
+  // drawStreamFlow)
+  const STREAM_FLOW_COUNT = 110;
   const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
   const STREAM_FLOW_RANGE = 400;
   let streamFlowSeeds = null;
@@ -4052,27 +4117,30 @@
 
   // l'église : nef allongée + petit clocher carré à une extrémité, croix
   // simple au sommet — pierre grise plutôt que le bois des maisons/grange
+  // deux fois plus grande (demandé en session) — toutes les dimensions
+  // ×2 (nef, clocher, décalage du clocher) ; repositionnée plus loin et
+  // le trio ré-écarté en conséquence, voir VILLAGE_EXTRAS plus haut
   function drawEglise(b, rot) {
     const list = [];
     const yaw = b.yaw || 0;
-    collectBoxRoof(list, b.x, b.z, 16, 30, 24, 18, rot, [145, 145, 148], '#3f3f48', yaw);
+    collectBoxRoof(list, b.x, b.z, 32, 60, 48, 36, rot, [145, 145, 148], '#3f3f48', yaw);
     // le clocher est accroché à l'arrière de la nef, le long de son PROPRE
     // axe — son décalage tourne donc avec le même yaw que la nef, sinon
     // il se détache du bâtiment dès qu'on tourne celui-ci
-    const [towerDx, towerDz] = rotYaw(0, -34, yaw);
+    const [towerDx, towerDz] = rotYaw(0, -68, yaw);
     const towerX = b.x + towerDx, towerZ = b.z + towerDz;
-    const towerH = 40, towerRoofH = 14;
-    collectBoxRoof(list, towerX, towerZ, 9, 9, towerH, towerRoofH, rot, [140, 140, 143], '#33333c', yaw);
+    const towerH = 80, towerRoofH = 28;
+    collectBoxRoof(list, towerX, towerZ, 18, 18, towerH, towerRoofH, rot, [140, 140, 143], '#33333c', yaw);
     flushBoxRoofList(list);
     // croix au sommet du clocher : deux petits traits qui se croisent,
     // toujours face caméra (pas besoin de la faire tourner avec rot,
     // trop petite pour que ça se remarque)
-    const apex = project(towerX, towerH + towerRoofH + 8, towerZ, rot);
+    const apex = project(towerX, towerH + towerRoofH + 16, towerZ, rot);
     ctx.strokeStyle = '#33333c';
-    ctx.lineWidth = Math.max(1, 1.4 * scale);
+    ctx.lineWidth = Math.max(1, 2 * scale);
     ctx.beginPath();
-    ctx.moveTo(apex.x, apex.y - 7 * scale); ctx.lineTo(apex.x, apex.y + 5 * scale);
-    ctx.moveTo(apex.x - 4 * scale, apex.y - 2 * scale); ctx.lineTo(apex.x + 4 * scale, apex.y - 2 * scale);
+    ctx.moveTo(apex.x, apex.y - 14 * scale); ctx.lineTo(apex.x, apex.y + 10 * scale);
+    ctx.moveTo(apex.x - 8 * scale, apex.y - 4 * scale); ctx.lineTo(apex.x + 8 * scale, apex.y - 4 * scale);
     ctx.stroke();
   }
 
@@ -4161,9 +4229,26 @@
     }
   }
 
+  // la ferme (demandé en session : "un gros bâtiment et un petit, assez
+  // loin, quasiment en limite de vision pour donner de la profondeur")
+  // — même recette que grange/maison, dimensions propres pour ne pas
+  // dépendre des constantes du cœur de village
+  function drawFermeGrange(b, rot) {
+    const list = [];
+    collectBoxRoof(list, b.x, b.z, 30, 20, 22, 17, rot, [150, 80, 45], '#6e2c1e', b.yaw || 0);
+    flushBoxRoofList(list);
+  }
+  function drawFermeMaison(b, rot) {
+    const list = [];
+    collectBoxRoof(list, b.x, b.z, 14, 14, 13, 10, rot, [120, 95, 65], '#8a3f2e', b.yaw || 0);
+    flushBoxRoofList(list);
+  }
+
   function drawVillageExtra(b, rot) {
     if (b.type === 'grange') drawGrange(b, rot);
     else if (b.type === 'eglise') drawEglise(b, rot);
+    else if (b.type === 'ferme_grange') drawFermeGrange(b, rot);
+    else if (b.type === 'ferme_maison') drawFermeMaison(b, rot);
     else drawFontaine(b, rot);
   }
 
@@ -4210,22 +4295,70 @@
       ctx.stroke();
     }
   }
-  function drawStreamExtras(rot) {
+  // grille de joints de pierre superposée à un quad déjà projeté à
+  // l'écran — interpolation bilinéaire entre les 4 coins (pas un vrai
+  // calcul de profondeur par bloc, inutile à cette échelle) pour que la
+  // grille suive la perspective/l'axonométrie du quad plutôt que d'être
+  // plaquée à plat. p0..p3 dans l'ordre autour du quad, comme buildQuad.
+  function drawStoneGrid(p0, p1, p2, p3, cols, rows, color) {
+    const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, 0.9 * scale);
+    for (let i = 1; i < cols; i++) {
+      const t = i / cols;
+      const a = lerp(p0, p1, t), b = lerp(p3, p2, t);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    for (let j = 1; j < rows; j++) {
+      const t = j / rows;
+      const a = lerp(p0, p3, t), b = lerp(p1, p2, t);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+  }
+  // pont en pierre (demandé en session, voir BRIDGE_* plus haut) : un
+  // tablier (sol) plus large/plus long qu'avant, plus deux murets
+  // latéraux — tablier et murets texturés en gros blocs (drawStoneGrid)
+  // plutôt qu'un aplat uni, pour qu'on voie vraiment les pierres.
+  function drawStoneBridge(rot) {
     const g = streamGeometry();
     const { cx, cz, tx, tz, rx, rz } = g;
+    const toWorld = (lr, lt) => ({ x: cx + rx * lr + tx * lt, z: cz + rz * lr + tz * lt });
+    const deckCorners = [
+      [-BRIDGE_HALF_WIDTH, -BRIDGE_HALF_LEN], [BRIDGE_HALF_WIDTH, -BRIDGE_HALF_LEN],
+      [BRIDGE_HALF_WIDTH, BRIDGE_HALF_LEN], [-BRIDGE_HALF_WIDTH, BRIDGE_HALF_LEN]
+    ];
+    const deckPts = deckCorners.map(([lr, lt]) => {
+      const w = toWorld(lr, lt);
+      return project(w.x, BRIDGE_DECK_Y, w.z, rot);
+    });
+    ctx.fillStyle = '#8f8a7c';
+    buildQuad(deckPts);
+    drawStoneGrid(deckPts[0], deckPts[1], deckPts[2], deckPts[3], 3, 9, 'rgba(55,50,44,0.55)');
+
+    // parapets : un muret de chaque côté, du niveau du tablier jusqu'à
+    // BRIDGE_WALL_H plus haut — un seul quad par côté (pas d'épaisseur
+    // simulée en 3D, comme le reste du décor plat du jeu), texturé
+    // pierre comme le tablier
+    const topY = BRIDGE_DECK_Y + BRIDGE_WALL_H;
+    for (const side of [-1, 1]) {
+      const lr = side * BRIDGE_HALF_WIDTH;
+      const wBase0 = toWorld(lr, -BRIDGE_HALF_LEN), wBase1 = toWorld(lr, BRIDGE_HALF_LEN);
+      const p0 = project(wBase0.x, BRIDGE_DECK_Y, wBase0.z, rot);
+      const p1 = project(wBase1.x, BRIDGE_DECK_Y, wBase1.z, rot);
+      const p2 = project(wBase1.x, topY, wBase1.z, rot);
+      const p3 = project(wBase0.x, topY, wBase0.z, rot);
+      ctx.fillStyle = '#7c766a';
+      buildQuad([p0, p1, p2, p3]);
+      drawStoneGrid(p0, p1, p2, p3, 6, 2, 'rgba(45,40,35,0.6)');
+    }
+  }
+  function drawStreamExtras(rot) {
     // les traits perpendiculaires au chemin de l'eau ont été retirés
     // (demandé en session) — remplacés par des particules qui coulent
-    // vraiment le long du ruisseau, voir drawStreamFlow.
-    // the little bridge itself, spanning the water along the road — sits at
-    // d=0 where the wiggle is zero, so it's still square with the crossing
-    const bridgePts = [
-      [cx - rx * (STREAM_HALF_WIDTH + 4) - tx * 9, cz - rz * (STREAM_HALF_WIDTH + 4) - tz * 9],
-      [cx + rx * (STREAM_HALF_WIDTH + 4) - tx * 9, cz + rz * (STREAM_HALF_WIDTH + 4) - tz * 9],
-      [cx + rx * (STREAM_HALF_WIDTH + 4) + tx * 9, cz + rz * (STREAM_HALF_WIDTH + 4) + tz * 9],
-      [cx - rx * (STREAM_HALF_WIDTH + 4) + tx * 9, cz - rz * (STREAM_HALF_WIDTH + 4) + tz * 9]
-    ].map(([x, z]) => project(x, 1.5, z, rot));
-    ctx.fillStyle = '#8a6a42';
-    buildQuad(bridgePts);
+    // vraiment le long du ruisseau, voir drawStreamFlow. Le pont sits at
+    // d=0 où le décalage sinusoïdal est nul, donc reste bien aligné avec
+    // le croisement même si le ruisseau serpente de part et d'autre.
+    drawStoneBridge(rot);
   }
 
   // reflets scintillants du ruisseau — contrairement aux douves (un seul
@@ -4268,9 +4401,9 @@
       if (isFar !== wantFar) continue;
       const x = p.x + g.rx * fl.lat, z = p.z + g.rz * fl.lat;
       const pos = project(x, 0.4, z, rot);
-      ctx.fillStyle = 'rgba(225,242,255,0.6)';
+      ctx.fillStyle = 'rgba(225,242,255,0.55)';
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 1.6 * scale, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, 0.7 * scale, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -4432,6 +4565,58 @@
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
+  }
+
+  // segment de chemin tout simple (droit, largeur fixe) — pour les
+  // bretelles place<->routes et le troisième chemin place->porte, qui
+  // n'ont pas besoin du serpentage/cache des deux routes principales
+  // (voir roadSegs/roadRuns), juste deux points reliés.
+  function drawSimpleRoadPath(x0, z0, x1, z1, halfWidth, rot) {
+    const dx = x1 - x0, dz = z1 - z0;
+    const len = Math.hypot(dx, dz) || 1;
+    const px = -dz / len, pz = dx / len; // perpendiculaire unitaire
+    const left0 = project(x0 + px * halfWidth, 0.5, z0 + pz * halfWidth, rot);
+    const left1 = project(x1 + px * halfWidth, 0.5, z1 + pz * halfWidth, rot);
+    const right0 = project(x0 - px * halfWidth, 0.5, z0 - pz * halfWidth, rot);
+    const right1 = project(x1 - px * halfWidth, 0.5, z1 - pz * halfWidth, rot);
+    if (phosphorStyle === 'couleur') {
+      ctx.fillStyle = '#9c8360';
+      buildQuad([left0, left1, right1, right0]);
+    } else {
+      ctx.lineWidth = Math.max(1, 1.2 * scale);
+      ctx.beginPath(); ctx.moveTo(left0.x, left0.y); ctx.lineTo(left1.x, left1.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(right0.x, right0.y); ctx.lineTo(right1.x, right1.y); ctx.stroke();
+    }
+  }
+
+  // place du village + troisième chemin vers la porte (voir PLAZA_*/
+  // "place du village" plus haut pour le contexte et le scope assumé) :
+  // une bretelle depuis chacune des deux routes existantes (prise au
+  // même rayon que la place — le point le plus proche par construction),
+  // la place elle-même (un N-gone, même langage que la fontaine), et le
+  // troisième chemin qui continue jusqu'au pied de la porte.
+  function drawPlazaAndPaths(rot) {
+    for (let idx = 0; idx < 2; idx++) {
+      const a = roadAngleAt(idx, PLAZA_R);
+      drawSimpleRoadPath(PLAZA_R * Math.cos(a), PLAZA_R * Math.sin(a), PLAZA_X, PLAZA_Z, ROAD_WIDTH, rot);
+    }
+    const doorX = BASE_R * Math.cos(DOOR_ANGLE), doorZ = BASE_R * Math.sin(DOOR_ANGLE);
+    drawSimpleRoadPath(PLAZA_X, PLAZA_Z, doorX, doorZ, ROAD_WIDTH, rot);
+
+    const N = 10, pts = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      pts.push(project(PLAZA_X + PLAZA_RADIUS * Math.cos(a), 0.5, PLAZA_Z + PLAZA_RADIUS * Math.sin(a), rot));
+    }
+    if (phosphorStyle === 'couleur') { ctx.fillStyle = '#9c8360'; buildQuad(pts); }
+    else {
+      ctx.lineWidth = Math.max(1, 1.2 * scale);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < N; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
       ctx.stroke();
     }
   }
@@ -4742,12 +4927,17 @@
     const nearRoadRuns = [...road0Runs.near, ...road1Runs.near];
     const farHouses = HOUSES.filter(h => Math.cos(h.angle - rot) < 0);
     const nearHouses = HOUSES.filter(h => Math.cos(h.angle - rot) >= 0);
-    const farVillageExtras = VILLAGE_EXTRAS.filter(b => Math.cos(b.angle - rot) < 0);
-    const nearVillageExtras = VILLAGE_EXTRAS.filter(b => Math.cos(b.angle - rot) >= 0);
+    const farVillageExtras = ALL_VILLAGE_EXTRAS.filter(b => Math.cos(b.angle - rot) < 0);
+    const nearVillageExtras = ALL_VILLAGE_EXTRAS.filter(b => Math.cos(b.angle - rot) >= 0);
     const streamRunsAll = streamRuns(rot);
     // the bridge/shimmer extras sit at d≈0 (the crossing point) — draw them
     // in whichever pass that point itself falls into
     const streamExtrasFar = Math.cos(streamGeometry().angle - rot) < 0;
+    // la place + les bretelles/le troisième chemin (voir drawPlazaAndPaths)
+    // sont ancrés à la place elle-même — même logique de pass unique que
+    // streamExtrasFar juste au-dessus, pas la peine de les découper en
+    // plusieurs segments far/near pour un ajout aussi ponctuel
+    const plazaFar = Math.cos(PLAZA_ANGLE - rot) < 0;
 
     // she's on the platform for the first half of the trip (elevated,
     // grouped with player/turrets below) and out in the garden for the
@@ -4766,6 +4956,7 @@
     const playerNear = playerGrounded && Math.cos(state.player.angle - rot) >= 0;
 
     for (const run of farRoadRuns) drawRoadRun(run, rot);
+    if (plazaFar) drawPlazaAndPaths(rot);
     for (const run of streamRunsAll.far) drawStreamRun(run, rot);
     if (streamExtrasFar) drawStreamExtras(rot);
     drawStreamGlints(rot, true);
@@ -4782,6 +4973,7 @@
     if (phosphorStyle === 'phosphore') drawCastleSilhouette(rot); else drawCastle(rot);
 
     for (const run of nearRoadRuns) drawRoadRun(run, rot);
+    if (!plazaFar) drawPlazaAndPaths(rot);
     for (const run of streamRunsAll.near) drawStreamRun(run, rot);
     if (!streamExtrasFar) drawStreamExtras(rot);
     drawStreamGlints(rot, false);
