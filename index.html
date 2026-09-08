@@ -464,10 +464,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.66</button>
+  <button id="versionBtn">v0.67</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.67</b> — le moulin (2e des 6 gros chantiers) : une maison avec une vraie roue à aubes posée sur l'eau, qui tourne dans le bon sens par rapport au courant (recherché, pas inventé) ; corrige aussi l'eau du ruisseau qui pouvait s'arrêter avant le bord de l'écran à certaines rotations sur un écran large</div>
   <div><b>v0.66</b> — mécanique des paysans : le village vit (danse sur la place, notes de musique) tant qu'aucun ennemi n'est apparu, puis se met à l'abri dès la première attaque ; vague après vague, certains partent se battre, d'autres se réfugient à l'église ou au château (visibles près du feu dans la vue intérieure)</div>
   <div><b>v0.65</b> — pont en pierre : le tablier monte vraiment et redescend en arche (plus un simple trou décoratif dans un pilier plat) ; corrige une maison posée sur une route et une ferme posée dans le ruisseau (vérifié numériquement) ; corrige les bretelles place-route/porte qui coupaient tout droit à travers le donjon (chemins en arc de cercle autour de lui désormais) ; bouton "vague suivante" enfin utilisable en martelant vite (un vieux garde anti-zoom mobile avalait un clic sur deux) + affiche l'or gagné, dégressif en fin de vague</div>
   <div><b>v0.64</b> — le ruisseau reste visible jusqu'aux deux bords de l'écran, particules trois fois moins nombreuses mais qui ondulent légèrement d'un côté à l'autre, comme un poisson qui nage</div>
@@ -885,6 +886,12 @@
   // reaches those functions' own section further down the file.
   const _roadSegsCache = [null, null];
   let _streamSegsCache = null;
+  // même raison TDZ : resize() (appelé plus bas) remet ces deux graines à
+  // zéro pour que leur portée se recalcule sur SPAWN_R à jour (voir la
+  // note sur streamFlowRange plus loin) — doivent donc déjà exister avant
+  // le premier appel de resize()
+  let glintSeeds = null;
+  let streamFlowSeeds = null;
 
   function resize() {
     W = canvas.width = innerWidth;
@@ -914,6 +921,16 @@
     _roadSegsCache[0] = null;
     _roadSegsCache[1] = null;
     _streamSegsCache = null;
+    // signalé en session : "l'eau doit être visible jusqu'au bord de
+    // l'écran même si on tourne... dès que je tourne ça fait des espaces
+    // où il y a pas d'eau avec les contours" — la portée FIXE (640) des
+    // particules/reflets pouvait tomber SOUS streamHalfLen()=SPAWN_R sur
+    // un écran large, laissant les berges (qui suivent SPAWN_R, elles)
+    // continuer bien plus loin que l'eau qui coule dedans. Invalidé ici
+    // pour que la portée réelle (voir ensureStreamFlowSeeds/ensureGlintSeeds)
+    // se recalcule sur le SPAWN_R à jour au prochain resize.
+    streamFlowSeeds = null;
+    glintSeeds = null;
   }
   // spawning genuinely off-screen (above) is still correct — a wave should
   // never pop an enemy in mid-frame — but on a tall phone that radius is far
@@ -1783,6 +1800,23 @@
   // plat précédent ne rendait pas cet effet). Voir bridgeDeckY plus bas.
   const BRIDGE_ARCH_RISE = 9;
   const BRIDGE_ARCH_SEGS = 10;
+  // le moulin (demandé en session : "une maison avec une roue... posée sur
+  // l'eau, elle tourne dans le bon sens par rapport à l'eau") — recherché
+  // (pas inventé au hasard, comme demandé) : sur une roue à aubes "en
+  // dessous" (undershot), le courant pousse les aubes immergées dans le
+  // sens du courant lui-même — la face de la roue en contact avec l'eau se
+  // déplace donc DANS le même sens que le courant. Voir
+  // https://www.alternative-energy-tutorials.com/hydro-energy/waterwheel-design.html
+  // Position : sur la berge du ruisseau, à un autre endroit que le pont
+  // (d=-220, loin du croisement d=0) — vérifié numériquement (script à
+  // part, même méthode que pour les autres bâtiments) contre les deux
+  // routes et tous les autres bâtiments, marges > 60 unités partout.
+  const MOULIN_D = -220;      // position le long du ruisseau (axe tx,tz), loin du pont
+  const MOULIN_BANK = 1;      // quel côté de la berge (axe rx,rz)
+  const MOULIN_HOUSE_SX = 20, MOULIN_HOUSE_SZ = 16, MOULIN_HOUSE_YAW = 0.2;
+  const MOULIN_WHEEL_R = 14;
+  const MOULIN_WHEEL_SEGS = 12;
+  const MOULIN_SPIN_RATE = 1.1; // rad/s — positif = undershot correct, voir drawMoulinWheel
   // demandé en session : le ruisseau doit vraiment serpenter (contrairement
   // aux routes, qu'on veut désormais plus droites) — un simple décalage
   // sinusoïdal latéral le long de sa ligne centrale, nul à d=0 (le
@@ -1804,17 +1838,25 @@
   // appel de dessin, jamais au chargement du script — SPAWN_R (utilisé
   // indirectement via streamHalfLen()) n'est pas encore fiable avant le
   // premier resize(), même risque de TDZ/valeur-pas-encore-prête que
-  // SNOW_LAYERS en son temps (voir plus haut).
-  let glintSeeds = null;
+  // SNOW_LAYERS en son temps (voir plus haut). (glintSeeds lui-même est
+  // déclaré tout en haut du script, avec _streamSegsCache, pour la même
+  // raison — resize() le remet à null et ce fichier-ci ne fait qu'y
+  // écrire, pas le redéclarer.)
   function ensureGlintSeeds() {
     if (glintSeeds) return;
+    // BUG trouvé en session (signalé : "l'eau doit être visible jusqu'au
+    // bord de l'écran... dès que je tourne ça fait des espaces où il y a
+    // pas d'eau") : portée FIXE à 640, alors que les berges elles-mêmes
+    // suivent streamHalfLen()=SPAWN_R, qui peut dépasser 640 sur un écran
+    // large — les reflets s'arrêtaient donc avant la fin des berges. Fixé
+    // en portée DYNAMIQUE (le plus grand des deux) au lieu d'un chiffre
+    // deviné une fois pour toutes.
+    const range = Math.max(640, streamHalfLen() + 40);
     glintSeeds = {
       // d : distance signée le long de la ligne centrale du ruisseau
-      // (même paramètre que streamPointAt) — portée généreuse et fixe,
-      // pas besoin de suivre streamHalfLen() : un reflet hors de la
-      // portion visible ne coûte rien, il est juste hors-écran
+      // (même paramètre que streamPointAt)
       stream: Array.from({ length: GLINT_STREAM_COUNT }, () => ({
-        d: (Math.random() - 0.5) * 640,
+        d: (Math.random() - 0.5) * 2 * range,
         phase: Math.random() * 10,
         speed: 0.6 + Math.random() * 1.2
       })),
@@ -1856,14 +1898,21 @@
   // garder un décalage latéral figé.
   const STREAM_FLOW_COUNT = 733;
   const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
-  const STREAM_FLOW_RANGE = 640;
   const STREAM_FLOW_WOBBLE = 3.5; // amplitude de l'ondulation latérale
-  let streamFlowSeeds = null;
+  // portée réelle utilisée (voir ensureStreamFlowSeeds) — plus une const
+  // figée à 640 (même bug/même fix que glintSeeds.stream juste au-dessus :
+  // "l'eau doit être visible jusqu'au bord de l'écran... dès que je
+  // tourne ça fait des espaces où il y a pas d'eau"), recalculée en
+  // fonction de streamHalfLen()=SPAWN_R réel. update() (le rebouclage de
+  // fl.d) et ensureStreamFlowSeeds() (la génération) doivent utiliser la
+  // MÊME valeur, d'où la variable partagée plutôt qu'un calcul local.
+  let streamFlowRange = 640;
   function ensureStreamFlowSeeds() {
     if (streamFlowSeeds) return;
-    const step = (2 * STREAM_FLOW_RANGE) / STREAM_FLOW_COUNT;
+    streamFlowRange = Math.max(640, streamHalfLen() + 40);
+    const step = (2 * streamFlowRange) / STREAM_FLOW_COUNT;
     streamFlowSeeds = Array.from({ length: STREAM_FLOW_COUNT }, (_, i) => ({
-      d: -STREAM_FLOW_RANGE + i * step + (Math.random() - 0.5) * step * 0.6,
+      d: -streamFlowRange + i * step + (Math.random() - 0.5) * step * 0.6,
       lat: (Math.random() * 2 - 1) * STREAM_HALF_WIDTH * 0.7,
       latPhase: Math.random() * 10,
       latSpeed: 0.6 + Math.random() * 1.1
@@ -3082,7 +3131,7 @@
     ensureStreamFlowSeeds();
     for (const fl of streamFlowSeeds) {
       fl.d += STREAM_FLOW_SPEED * dt;
-      if (fl.d > STREAM_FLOW_RANGE) fl.d -= 2 * STREAM_FLOW_RANGE;
+      if (fl.d > streamFlowRange) fl.d -= 2 * streamFlowRange;
     }
 
     updateSnow(dt);
@@ -4778,6 +4827,62 @@
       }
     }
   }
+  // géométrie du moulin — recalculée à chaque appel (même convention que
+  // drawStoneBridge : streamGeometry() ne dépend que de constantes, pas
+  // besoin d'un cache dédié pour un seul bâtiment)
+  function moulinGeometry() {
+    const g = streamGeometry();
+    const c = streamPointAt(g, MOULIN_D);
+    const houseX = c.x + g.rx * MOULIN_BANK * (STREAM_HALF_WIDTH + 26);
+    const houseZ = c.z + g.rz * MOULIN_BANK * (STREAM_HALF_WIDTH + 26);
+    // la roue mord légèrement dans l'eau plutôt que de s'arrêter pile au
+    // bord — "posée sur l'eau", pas juste à côté
+    const wheelX = c.x + g.rx * MOULIN_BANK * (STREAM_HALF_WIDTH - 3);
+    const wheelZ = c.z + g.rz * MOULIN_BANK * (STREAM_HALF_WIDTH - 3);
+    return { g, houseX, houseZ, wheelX, wheelZ };
+  }
+  // la roue à aubes : undershot, voir la note sur MOULIN_SPIN_RATE plus
+  // haut — chaque aube tourne dans le plan (sens du courant, vertical),
+  // l'axe de rotation est donc horizontal le long de rx,rz (perpendiculaire
+  // au courant ET à la roue). Au point bas (contact avec l'eau), la
+  // vitesse de l'aube doit être dans le MÊME sens que tx,tz (le courant) —
+  // ce qui correspond à faire croître l'angle local avec le temps (sens
+  // trigonométrique dans le plan (tx,tz, haut)), d'où MOULIN_SPIN_RATE>0.
+  function drawMoulinWheel(m, rot) {
+    const { g, wheelX, wheelZ } = m;
+    const centerY = MOULIN_WHEEL_R; // le bas de la roue touche juste l'eau (y=0)
+    const rim = [];
+    for (let i = 0; i < MOULIN_WHEEL_SEGS; i++) {
+      const theta = state.time * MOULIN_SPIN_RATE + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
+      const along = Math.cos(theta) * MOULIN_WHEEL_R; // le long du courant (tx,tz)
+      const up = Math.sin(theta) * MOULIN_WHEEL_R;    // vertical
+      const wx = wheelX + g.tx * along, wz = wheelZ + g.tz * along;
+      rim.push(project(wx, centerY + up, wz, rot));
+    }
+    const hub = project(wheelX, centerY, wheelZ, rot);
+    ctx.lineWidth = Math.max(1, 1.3 * scale);
+    ctx.strokeStyle = '#8a6a42';
+    // jante
+    ctx.beginPath();
+    ctx.moveTo(rim[0].x, rim[0].y);
+    for (let i = 1; i < rim.length; i++) ctx.lineTo(rim[i].x, rim[i].y);
+    ctx.closePath();
+    ctx.stroke();
+    // rayons — un sur deux seulement, plus lisible qu'une roue pleine de traits
+    for (let i = 0; i < rim.length; i += 2) {
+      ctx.beginPath();
+      ctx.moveTo(hub.x, hub.y);
+      ctx.lineTo(rim[i].x, rim[i].y);
+      ctx.stroke();
+    }
+  }
+  function drawMoulin(rot) {
+    const m = moulinGeometry();
+    const list = [];
+    collectBoxRoof(list, m.houseX, m.houseZ, MOULIN_HOUSE_SX, MOULIN_HOUSE_SZ, 20, 14, rot, [150, 110, 70], '#6e4a2e', MOULIN_HOUSE_YAW);
+    flushBoxRoofList(list);
+    drawMoulinWheel(m, rot);
+  }
   function drawStreamExtras(rot) {
     // les traits perpendiculaires au chemin de l'eau ont été retirés
     // (demandé en session) — remplacés par des particules qui coulent
@@ -5510,6 +5615,11 @@
     drawPlazaAndPaths(rot, true);
     for (const run of streamRunsAll.far) drawStreamRun(run, rot);
     if (streamExtrasFar) drawStreamExtras(rot);
+    // le moulin est à un autre endroit du ruisseau que le pont (d=-220 vs
+    // d=0) — classé far/near par SA PROPRE position (pointFar), pas par
+    // streamExtrasFar qui ne concerne que le point de croisement (même
+    // genre de bug que celui corrigé sur les bretelles de la place en v0.65)
+    if (pointFar(moulinGeometry().houseX, moulinGeometry().houseZ, rot)) drawMoulin(rot);
     drawStreamGlints(rot, true);
     drawStreamFlow(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
@@ -5541,6 +5651,7 @@
     drawPlazaAndPaths(rot, false);
     for (const run of streamRunsAll.near) drawStreamRun(run, rot);
     if (!streamExtrasFar) drawStreamExtras(rot);
+    if (!pointFar(moulinGeometry().houseX, moulinGeometry().houseZ, rot)) drawMoulin(rot);
     drawStreamGlints(rot, false);
     drawStreamFlow(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);

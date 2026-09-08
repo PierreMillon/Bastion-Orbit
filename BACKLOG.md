@@ -1713,3 +1713,141 @@ distance au premier ennemi de la liste, pas un vrai calcul par
 maison) ; la panique n'a pas d'animation de fuite visible ; le lot
 mobilisé par vague est une constante fixe (3) plutôt qu'une formule
 liée à la difficulté.
+
+## Nouvelles demandes reçues pendant le travail en autonomie (2026-09-08, en attente)
+
+- **Encore des traits fantômes** (signalé avec capture annotée, deux
+  traits isolés en zone vide, pas liés à un bâtiment visible) — v0.65
+  n'a pas tout couvert. En cours de diagnostic (même méthode que la
+  fois précédente : comparer avec/sans chaque système suspect plutôt
+  que deviner) au moment de cette note.
+- **Économie du moulin** — toucher/cliquer le moulin fait apparaître un
+  bouton flottant ancré au-dessus de lui à l'écran (suit sa position
+  projetée même si la caméra tourne, comme un marqueur UI). Ce bouton
+  affiche un tarif (dit "équilibré", à choisir raisonnablement, pas
+  arbitraire) et achète un palier : au niveau 0 le moulin ne rapporte
+  rien (juste de la farine, narratif) ; le premier palier (~30 or)
+  débloque un revenu passif (~1 or/seconde) ; paliers suivants coûtent
+  plus cher et rapportent plus, même logique que le jardin existant
+  (GARDEN_TICK/gardenLevel) à réutiliser comme modèle.
+- **Zone sacrée autour de l'église** — même principe de bouton flottant
+  au toucher de l'église ; achète des paliers qui agrandissent une
+  ellipse au sol centrée sur l'église (même vocabulaire visuel que les
+  douves). C'est un no-man's-land pour les ennemis : ceux qui y entrent
+  perdent la moitié de leur vie IMMÉDIATEMENT à l'entrée (pas de dégâts
+  continus), et l'autre moitié s'ils en ressortent puis y rentrent à
+  nouveau (donc un ennemi qui reste dedans ne prend qu'un coup ; il
+  faut deux passages complets, entrée+sortie+ré-entrée, pour le tuer).
+  Les ennemis doivent apprendre à l'éviter une fois qu'ils l'ont
+  découverte à leurs dépens (piste : même vocabulaire que le comporte-
+  ment d'évitement des douves/du mur, à vérifier dans le code des
+  ennemis existant).
+
+Pas encore commencées au moment de cette note — priorité : finir le
+diagnostic des traits fantômes (régression, plus urgent), puis moulin,
+puis zone sacrée de l'église, dans cet ordre.
+
+## Traits fantômes (capture annotée) : non reproduits malgré recherche poussée — mis de côté pour avancer
+
+Diagnostic mené (comme d'habitude, par comparaison plutôt que par
+supposition) : plus de 80 captures Playwright passées en revue —
+balayage fin (36 angles), balayage large en combat actif avec plusieurs
+vagues/ennemis/engins (20+ captures), ET la même recherche sur le build
+v0.65 d'AVANT le moulin/les paysans (pour vérifier si c'était déjà là
+ou une régression de ce chantier) — aucune trace des deux traits
+diagonaux isolés décrits/annotés par Pierre, dans aucune des deux
+versions. Tentative de reproduire EXACTEMENT la même rotation caméra
+que sa capture (même séquence de glissés) : constaté que la caméra a
+de l'inertie/un temps réel dans son mouvement (state.omega), donc la
+même séquence de gestes ne redonne pas exactement le même angle d'une
+exécution à l'autre — impossible à reproduire pixel pour pixel en
+rejouant simplement les mêmes gestes.
+
+Mis de côté pour ne pas rester bloqué dessus (cohérent avec "on corrige
+plus tard en fonction de ce qu'on voit" plutôt que de creuser une
+piste sans preuve) — repris dès qu'une nouvelle capture/piste plus
+précise arrive (quel bâtiment est proche, à quel moment de la partie,
+combien de temps ça reste affiché).
+
+## Nouvelles demandes (suite, 2026-09-08 tard) — en attente
+
+- **Le ruisseau doit être infranchissable ("très important")** — "le
+  cours d'eau est beaucoup trop rapide, personne ne peut le traverser,
+  il faut absolument passer par le pont." Actuellement le ruisseau est
+  purement décoratif : ennemis et joueur marchent au travers sans rien
+  qui les arrête, ce qui rend le pont facultatif. Il faut une vraie
+  mécanique d'évitement (même esprit qu'avoidBushes déjà en place) qui
+  détourne quiconque approche du ruisseau vers l'angle du pont plutôt
+  que de le laisser traverser n'importe où. Chantier de pathing, pas
+  juste visuel — prioritaire, juste après le correctif de portée de
+  l'eau en cours.
+- **Grange plus loin, pour la continuité du ruisseau** — redemandé
+  ("je te l'avais déjà signalé"), formulation encore vague ("pour la
+  perspective, la continuité de l'eau par rapport au champ visible").
+  Interprétation retenue faute de mieux : un bâtiment supplémentaire
+  loin le long du ruisseau (au-delà du moulin, vers le bord visible)
+  pour donner l'impression que l'eau continue au loin plutôt que de
+  sembler s'arrêter dans le vide. À corriger si l'intention réelle
+  était différente.
+- **Zone sacrée de l'église** : toujours en attente, voir la section
+  précédente pour le détail complet.
+- **Vrais curseurs de volume (0-100%)** — les réglages son actuels sont
+  de simples on/off ; il faut deux vraies glissières précises, une pour
+  la musique et une pour les bruitages, séparément.
+
+## Le moulin — bâtiment + roue (2e des 6 gros chantiers) → fait en v0.67 ; l'économie (bouton/tarifs) reste à faire
+
+Recherché avant d'implémenter (demandé explicitement : "un vrai
+mécanisme de moulin à eau à rechercher, pas inventé au hasard") :
+sur une roue "undershot" (en dessous), le courant pousse les aubes
+immergées dans le SENS DU COURANT lui-même — la face de la roue en
+contact avec l'eau se déplace donc dans le même sens que l'eau qui
+coule. Voir
+[alternative-energy-tutorials.com](https://www.alternative-energy-tutorials.com/hydro-energy/waterwheel-design.html).
+
+- Position : sur la berge, à d=-220 le long du ruisseau (loin du pont
+  à d=0) — vérifié numériquement (script à part, même méthode que pour
+  les autres bâtiments) contre les deux routes et tous les bâtiments
+  existants, marges > 60 unités partout.
+- La roue (`drawMoulinWheel`) : jante + rayons en fil de fer, dont
+  chaque point suit `theta = state.time * MOULIN_SPIN_RATE + angle`
+  dans le plan (sens du courant, vertical) — le signe de
+  `MOULIN_SPIN_RATE` a été choisi pour que le point bas (celui qui
+  touche l'eau) se déplace dans le même sens que `tx,tz` (le courant),
+  conformément au principe ci-dessus.
+- Classée far/near par SA PROPRE position (`pointFar`), PAS par
+  `streamExtrasFar` (qui ne concerne que le point de croisement du
+  pont, à un autre endroit) — même genre de bug que celui corrigé sur
+  les bretelles de la place en v0.65, évité dès le départ cette fois.
+
+Vérifié en Playwright : roue visible et animée (rayons à des angles
+différents d'une capture à l'autre), aucune erreur console sur ~50s de
+jeu en continu avec rotations de caméra régulières.
+
+Pas fait : le volet "économie" demandé séparément (bouton flottant au
+toucher, tarifs par palier, revenu passif) — voir la section
+"Nouvelles demandes" plus haut, toujours en attente.
+
+## Eau du ruisseau qui s'arrêtait avant le bord de l'écran sur rotation → fait en v0.67
+
+Signalé en session : "l'eau doit être visible jusqu'au bord de
+l'écran, même si on tourne... dès que je tourne ça fait des espaces où
+il y a pas d'eau avec les contours". Cause trouvée : `STREAM_FLOW_RANGE`
+et la portée de `glintSeeds.stream` étaient des constantes FIXES à 640,
+choisies en v0.63/v0.64 en supposant que ça suffirait à couvrir
+`streamHalfLen()` (= `SPAWN_R`, qui dépend de la taille d'écran) — sur
+un écran large, `SPAWN_R` peut dépasser 640, donc les berges (qui
+suivent `SPAWN_R`) continuaient plus loin que l'eau qui coule dedans,
+visible surtout en tournant vers cette zone.
+
+Fix : portée dynamique (`Math.max(640, streamHalfLen() + 40)`),
+recalculée dans `ensureStreamFlowSeeds`/`ensureGlintSeeds` — 640 reste
+le plancher (cas courant), mais suit `SPAWN_R` quand il est plus
+grand. `streamFlowSeeds`/`glintSeeds` sont maintenant invalidés dans
+`resize()` (comme `_streamSegsCache`) pour se recalculer si la fenêtre
+change de taille — et donc déclarés tout en haut du script, avec
+`_streamSegsCache`, pour la même raison de TDZ (resize() les touche
+avant que le script n'atteigne leur ancien emplacement plus bas).
+
+Vérifié en Playwright : balayage de 24 angles de caméra, aucune erreur
+console.
