@@ -464,10 +464,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.67</button>
+  <button id="versionBtn">v0.68</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.68</b> — le ruisseau est enfin infranchissable ("très important") : ennemis bloqués par une berge invisible, obligés de longer l'eau jusqu'au pont pour passer</div>
   <div><b>v0.67</b> — le moulin (2e des 6 gros chantiers) : une maison avec une vraie roue à aubes posée sur l'eau, qui tourne dans le bon sens par rapport au courant (recherché, pas inventé) ; corrige aussi l'eau du ruisseau qui pouvait s'arrêter avant le bord de l'écran à certaines rotations sur un écran large</div>
   <div><b>v0.66</b> — mécanique des paysans : le village vit (danse sur la place, notes de musique) tant qu'aucun ennemi n'est apparu, puis se met à l'abri dès la première attaque ; vague après vague, certains partent se battre, d'autres se réfugient à l'église ou au château (visibles près du feu dans la vue intérieure)</div>
   <div><b>v0.65</b> — pont en pierre : le tablier monte vraiment et redescend en arche (plus un simple trou décoratif dans un pilier plat) ; corrige une maison posée sur une route et une ferme posée dans le ruisseau (vérifié numériquement) ; corrige les bretelles place-route/porte qui coupaient tout droit à travers le donjon (chemins en arc de cercle autour de lui désormais) ; bouton "vague suivante" enfin utilisable en martelant vite (un vieux garde anti-zoom mobile avalait un clic sur deux) + affiche l'or gagné, dégressif en fin de vague</div>
@@ -2574,6 +2575,51 @@
     e.angle = Math.atan2(z, x);
   }
 
+  // le ruisseau doit être infranchissable, sauf au pont (demandé en
+  // session, "très important" : "personne ne peut traverser le cours
+  // d'eau, il faut absolument passer par le pont"). Jusque là purement
+  // décoratif — n'importe qui marchait au travers sans rien qui l'arrête,
+  // ce qui rendait le pont facultatif. Même esprit qu'avoidBushes (mur
+  // invisible qui repousse), plus un léger réglage d'angle vers le pont
+  // pour que ça longe la berge au lieu de juste buter dessus sans bouger.
+  //
+  // Approximation volontaire pour rester bon marché à chaque frame et par
+  // ennemi : la coordonnée `d` (le long du courant) est calculée par
+  // simple PROJECTION du point sur l'axe tx,tz plutôt qu'en cherchant le
+  // vrai point le plus proche sur la ligne centrale ondulée (ce qui
+  // demanderait d'échantillonner plusieurs `d`, comme minDistToStream
+  // dans les scripts de vérification hors-jeu) — largement suffisant vu
+  // la faible amplitude du serpentage (STREAM_WIND_AMP=16).
+  const STREAM_AVOID_MARGIN = 6;
+  const STREAM_AVOID_STEER_SPEED = 45; // unités/seconde le long de la berge, vers d=0 (le pont)
+  function avoidStream(e, dt) {
+    const g = streamGeometry();
+    const x = e.r * Math.cos(e.angle), z = e.r * Math.sin(e.angle);
+    const dx = x - g.cx, dz = z - g.cz;
+    let d = dx * g.tx + dz * g.tz; // ≈ position le long du courant
+    if (Math.abs(d) < BRIDGE_SPAN_HALF + STREAM_AVOID_MARGIN) return; // couloir du pont : on laisse passer
+    const p0 = streamPointAt(g, d);
+    const perp = (x - p0.x) * g.rx + (z - p0.z) * g.rz; // distance latérale signée
+    const limit = STREAM_HALF_WIDTH + STREAM_AVOID_MARGIN;
+    if (Math.abs(perp) >= limit) return; // assez loin de l'eau, rien à faire
+    // bloqué : glisse le long de la berge vers le pont (d -> 0) tout en
+    // restant collé au bord (perp fixé à la limite). BUG trouvé en
+    // testant (vérifié via un hook de debug, pas juste supposé) : corriger
+    // perp puis changer l'angle polaire brut (r,angle autour du DONJON)
+    // pour "dériver vers le pont" invalidait le clamp qu'on venait de
+    // faire — le ruisseau n'est pas un cercle centré sur le donjon, donc
+    // tourner à rayon constant pouvait replonger dans l'eau un peu plus
+    // loin. Fix : tout le calcul (y compris la dérive) se fait dans le
+    // repère du ruisseau (d, perp), converti en (r, angle) une seule fois
+    // à la fin.
+    const side = perp >= 0 ? 1 : -1;
+    d += Math.sign(-d) * Math.min(Math.abs(d), STREAM_AVOID_STEER_SPEED * dt);
+    const p = streamPointAt(g, d);
+    const nx = p.x + g.rx * side * limit, nz = p.z + g.rz * side * limit;
+    e.r = Math.hypot(nx, nz);
+    e.angle = Math.atan2(nz, nx);
+  }
+
   // approaching enemies gently push each other apart instead of stacking on
   // the same spot or walking through one another — same circle-vs-circle
   // idea as avoidBushes, eased in over a few frames (spring-like) rather
@@ -3630,6 +3676,7 @@
         if (!onScreen0) speedMul *= OFFSCREEN_APPROACH_MUL;
         e.r = Math.min(SPAWN_R, e.r - e.speed * speedMul * dt);
         avoidBushes(e);
+        avoidStream(e, dt);
         // spooked and walked all the way back out — vanishes, no gold (the
         // player didn't kill it, it just lost its nerve)
         if (e.fleeing && e.r >= SPAWN_R - 1) { e.dead = true; continue; }

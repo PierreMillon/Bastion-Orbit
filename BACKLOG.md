@@ -1771,16 +1771,6 @@ combien de temps ça reste affiché).
 
 ## Nouvelles demandes (suite, 2026-09-08 tard) — en attente
 
-- **Le ruisseau doit être infranchissable ("très important")** — "le
-  cours d'eau est beaucoup trop rapide, personne ne peut le traverser,
-  il faut absolument passer par le pont." Actuellement le ruisseau est
-  purement décoratif : ennemis et joueur marchent au travers sans rien
-  qui les arrête, ce qui rend le pont facultatif. Il faut une vraie
-  mécanique d'évitement (même esprit qu'avoidBushes déjà en place) qui
-  détourne quiconque approche du ruisseau vers l'angle du pont plutôt
-  que de le laisser traverser n'importe où. Chantier de pathing, pas
-  juste visuel — prioritaire, juste après le correctif de portée de
-  l'eau en cours.
 - **Grange plus loin, pour la continuité du ruisseau** — redemandé
   ("je te l'avais déjà signalé"), formulation encore vague ("pour la
   perspective, la continuité de l'eau par rapport au champ visible").
@@ -1851,3 +1841,41 @@ avant que le script n'atteigne leur ancien emplacement plus bas).
 
 Vérifié en Playwright : balayage de 24 angles de caméra, aucune erreur
 console.
+
+## Le ruisseau devient infranchissable, sauf au pont ("très important") → fait en v0.68 (ennemis) ; joueur pas encore couvert
+
+Signalé "très important" : "le cours d'eau est beaucoup trop rapide,
+personne ne peut le traverser, il faut absolument passer par le pont."
+Jusque là purement décoratif — ennemis (et joueur) marchaient au
+travers sans rien qui les arrête, rendant le pont facultatif.
+
+`avoidStream(e, dt)`, même esprit qu'`avoidBushes` déjà en place : un
+ennemi qui approche du ruisseau HORS du couloir du pont (± `BRIDGE_SPAN_HALF`
+autour de d=0) est repoussé au bord (mur invisible), puis glisse le
+long de la berge vers le pont jusqu'à pouvoir passer.
+
+**Vrai bug trouvé en testant** (hook de debug temporaire lisant
+d/perp de chaque ennemi en direct, retiré avant commit — pas juste
+supposé que ça marchait) : le premier essai clampait la position au
+bord PUIS faisait dériver l'ANGLE POLAIRE brut (autour du donjon) vers
+l'angle du pont, à RAYON CONSTANT — or le ruisseau n'est pas un cercle
+centré sur le donjon, donc tourner à rayon constant pouvait replonger
+dans l'eau un peu plus loin (mesuré : un ennemi à perp=-9, soit
+DANS l'eau, à d=382, largement hors du couloir du pont). Fix : tout le
+calcul (y compris la dérive vers le pont) se fait entièrement dans le
+repère du ruisseau (d, perp) plutôt qu'en coordonnées polaires autour
+du donjon — converti en (r, angle) une seule fois à la fin, ce qui
+garantit de rester exactement sur le bord pendant toute la dérive.
+
+Vérifié en Playwright : 623 échantillons sur ~60s de jeu en continu
+(vagues forcées en rafale pour maximiser le nombre d'ennemis actifs) —
+0 violation (aucun ennemi mesuré dans l'eau hors du couloir du pont),
+contre au moins 1 avec la première version. Capture visuelle : les
+ennemis s'agglutinent bien le long de la berge/route vers le pont
+plutôt que de traverser n'importe où. Aucune erreur console.
+
+Pas fait : le joueur (sortie) n'est pas encore soumis à la même
+contrainte — son modèle de mouvement (lissage vers une cible, pas un
+simple décrément radial comme les ennemis) demanderait une intégration
+plus soignée, mise de côté pour ne pas risquer de casser le mouvement
+de sortie existant sans temps de test dédié. Noté pour plus tard.
