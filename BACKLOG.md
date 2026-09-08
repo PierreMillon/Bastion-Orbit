@@ -962,10 +962,61 @@ tenir compte des maisons-cachettes et du cheval une fois codés.
    arrive par l'eau en bateau (pavé simple, style actuel à dessiner).
    Une fois arrivés (routes ou bateau), les ennemis se dispatchent pour
    choisir où construire leurs engins de siège. *Pas fait.*
-5. **Maisons = cachettes indestructibles** : un ennemi peut s'y cacher et
-   devient intouchable (tourelles, tir à distance) — SEULE une sortie
-   chargée du seigneur peut l'en déloger ; la maison elle-même ne se
-   détruit jamais. *Pas fait.*
+5. **Maisons = cachettes indestructibles** → fait en v0.53 (3 itérations,
+   chacune mesurée en jeu, pas juste raisonnée à froid). Un ennemi qui
+   approche (pas un bâtisseur ni un porteur d'échelle, qui ont leur
+   propre mission) a une chance de se cacher s'il passe à moins de
+   `HOUSE_HIDE_R` d'une maison. Une fois caché : retiré de
+   `state.enemies` (donc littéralement intouchable — `nearestVisibleTarget`/
+   tourelles ne peuvent pas viser ce qui n'existe plus dans le tableau),
+   compté dans `house.hiddenCount`. Pips rouges au-dessus du toit (même
+   langage visuel que l'équipage des engins de siège) tant que
+   `hiddenCount > 0`. `nearestSortieTarget` traite les maisons occupées à
+   la même priorité que les ennemis actifs (un tir à distance ne peut
+   rien contre elles, comme les engins de siège). Une fois arrivé, chaque
+   coup de sortie déloge (`flushHouseEnemy`) — pas ne tue pas — jusqu'à
+   `horseMul` occupants d'un coup : ils reprennent leur marche vers le
+   mur depuis la maison, redevenant des cibles normales. La maison
+   elle-même n'a pas de PV et ne peut jamais être détruite.
+
+   **Constat honnête : la mécanique ne s'est déclenchée qu'à la 3ᵉ
+   correction, chacune vérifiée par une mesure en jeu (pas par lecture de
+   code) :**
+   - *1ʳᵉ tentative* (`HOUSE_HIDE_R = 26`, jet à 22% par cycle de "mood"
+     ~1.5-4s) : 150s de jeu, plusieurs vagues, **0 cachette**. Les 3
+     maisons sont loin des angles de route (`ROAD_ANGLES` ≈ ±2.1-2.3 rad,
+     maisons à ±0.68-1.0 rad) — un ennemi sur route ne les croise jamais.
+   - *2ᵉ tentative* (`HOUSE_HIDE_R` → 70) : toujours **0 cachette** sur un
+     nouveau test de 60s. Cause trouvée en instrumentant le jeu
+     (compteur temporaire de distance minimale) : la vérification
+     n'avait lieu qu'au rythme du cycle de "mood", alors qu'un ennemi ne
+     reste dans une bande de 70 unités que ~3s en la traversant — deux
+     horloges désynchronisées qui ratent presque tous les passages par
+     pure malchance de timing. Fix : jet à chaque frame (probabilité
+     proportionnelle à `dt`, `HOUSE_HIDE_CHANCE_PER_SEC = 0.2`) au lieu
+     du rythme du mood.
+   - *3ᵉ tentative* : toujours **0 cachette** avec le jet par frame à 70
+     unités. Instrumentation plus poussée (distance minimale ET nombre
+     de frames sous le seuil) : sur ~100s à vagues 6-7, des centaines de
+     passages sous 250 unités mais jamais sous 70 — la distance minimale
+     géométrique qu'un ennemi "tout-terrain" (marche ~radiale depuis son
+     angle de spawn) peut approcher d'une maison à r≈260-300 est
+     ~r·sin(écart d'angle), qui ne descend sous 70 que pour une fenêtre
+     d'angles de spawn minuscule. 70 unités n'était donc pas "presque
+     suffisant" mais géométriquement quasi inatteignable.
+     `HOUSE_HIDE_R` → **140**, qui couvre la zone où le trafic mesuré est
+     réellement dense.
+   - **Vérifié : ça marche.** Nouveau test avec `HOUSE_HIDE_R = 140` —
+     première cachette obtenue à la vague 8 (~100s), une maison passe à
+     `hiddenCount: 1`. Instrumentation de debug entièrement retirée
+     ensuite (elle ne servait qu'à mesurer, jamais destinée à rester).
+
+   Reste à surveiller en jeu réel par Pierre : le déclenchement met un
+   certain temps à apparaître (vague ~7-8 dans le test, pas une garantie
+   immédiate) — si ça reste trop rare à l'usage, la prochaine piste est
+   de rapprocher les maisons des angles de route plutôt que de continuer
+   à agrandir `HOUSE_HIDE_R` (qui commence à dépasser la taille des
+   maisons elles-mêmes, 16 unités de large).
 6. **Cheval du seigneur** → fait en v0.52. `horseMul(level) = 1 + level`
    (palier 1 → ×2 exactement, comme exigé "au minimum" ; palier 2 → ×3,
    etc. — sans plafond). Coût : `horseCost(n) = 40 × 1.35^(n-1)`, même

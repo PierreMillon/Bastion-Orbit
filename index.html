@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.52</button>
+  <button id="versionBtn">v0.53</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.53</b> — les maisons du village sont enfin de vraies cachettes : un ennemi qui approche peut s'y réfugier (intouchable au tir à distance/tourelles), seule une sortie chargée peut l'en déloger — corrige un bug de déclenchement quasi jamais atteint (voir BACKLOG.md)</div>
   <div><b>v0.52</b> — cheval du seigneur : en sortie, ×2 vitesse/dégâts au palier 1 (débloqué par paliers sans plafond, bouton dédié), monture dessinée sous le seigneur</div>
   <div><b>v0.51</b> — curseurs de volume séparés pour la musique et les bruitages (0-100%, menu), remplacent l'ancien bouton ON/OFF</div>
   <div><b>v0.50</b> — 4 paliers de difficulté (Facile/Normal/Difficile/Très difficile, menu), calibrés au simulateur pour les cibles de survie visées</div>
@@ -1278,8 +1279,42 @@
     { x: 260 * Math.cos(1.0), z: 260 * Math.sin(1.0) },      // the lone house
     { x: 300 * Math.cos(-0.85), z: 300 * Math.sin(-0.85) },  // the group, two close together
     { x: 288 * Math.cos(-0.68), z: 288 * Math.sin(-0.68) }
-  ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z) }));
+  ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z), hiddenCount: 0 }));
   const HOUSE_SIZE = 16; // half-width of the base
+  // maisons-cachettes (demandé en session) : indestructibles, un ennemi
+  // qui approche peut s'y réfugier et devient intouchable (tir à
+  // distance, tourelles) — SEULE une sortie chargée du seigneur, une
+  // fois arrivé sur place, peut l'en déloger (le renvoie dehors,
+  // vulnérable à nouveau, plutôt que de le tuer directement — "déloger"
+  // pas "tuer").
+  // Trois causes trouvées en instrumentant le jeu (mesures réelles, pas
+  // du raisonnement à froid) avant que ça se déclenche jamais :
+  // 1. 26 unités d'abord essayé — 150s, plusieurs vagues, 0 cachette.
+  //    Les maisons sont loin des angles de route (ROAD_ANGLES ≈ ±2.1-2.3
+  //    rad, maisons à ±0.68-1.0 rad) donc un ennemi "tout-terrain" (angle
+  //    de spawn ~fixe, faible dérive latérale) ne passe presque jamais
+  //    assez près. → élargi à 70.
+  // 2. Toujours 70 → toujours 0 cachette. La vérification n'avait lieu
+  //    qu'au rythme des cycles de "mood" (1.5-4s) alors qu'un ennemi ne
+  //    reste dans une bande de 70 unités que ~3s en la traversant — deux
+  //    horloges désynchronisées qui ratent presque tous les passages par
+  //    pure malchance de timing. → fix : jet à chaque frame (proportionnel
+  //    à dt), plus au rythme du mood (voir plus bas).
+  // 3. Toujours 0 avec le jet par frame. Instrumentation directe de la
+  //    distance minimale jamais atteinte par un ennemi à une maison
+  //    (window.__DEBUG_MINDIST, retiré depuis) : sur ~100s à vagues 6-7,
+  //    des centaines de passages sous 250 unités, mais le plus proche
+  //    jamais mesuré est 70.4 — juste au-dessus du seuil. Un ennemi
+  //    "tout-terrain" marche en ligne (quasi) radiale depuis son angle de
+  //    spawn ; la distance minimale géométrique qu'il peut approcher
+  //    d'une maison à r≈260-300 est ~r·sin(écart d'angle), qui ne
+  //    descend sous 70 que pour une toute petite fenêtre d'angles de
+  //    spawn. → 70 n'était pas trop restrictif à cause du mauvais tirage,
+  //    mais parce que la géométrie du parcours rend "moins de 70" presque
+  //    impossible à atteindre. Élargi à 140, qui couvre la zone où le
+  //    trafic mesuré est réellement dense.
+  const HOUSE_HIDE_R = 140;             // distance d'une maison pour pouvoir s'y cacher / en être délogé
+  const HOUSE_HIDE_CHANCE_PER_SEC = 0.2; // probabilité/seconde (jet à chaque frame, proportionnel à dt) — ~45 % de se cacher sur une traversée type de 3s
 
   // a stream crossing one of the roads, with a little bridge over it
   // (demandé en session, puis précisé : "doit traverser la carte" — pas
@@ -1485,6 +1520,14 @@
       const d = Math.abs(angDiff(fromAngle, e.angle));
       if (d < bestD) { bestD = d; best = e; }
     }
+    // maisons-cachettes : même priorité que les ennemis actifs (comme les
+    // engins de siège, un tir à distance ne peut rien contre elles — voir
+    // HOUSE_HIDE_R plus haut) plutôt qu'un dernier recours façon pont
+    for (const house of HOUSES) {
+      if (house.hiddenCount <= 0) continue;
+      const d = Math.abs(angDiff(fromAngle, house.angle));
+      if (d < bestD) { bestD = d; best = house; }
+    }
     if (best) return best;
     // nothing left to fight: a standing bridge is fair game too
     for (const b of state.bridges) {
@@ -1590,6 +1633,22 @@
       jumpT: 0,
       mood: 'walk',      // walk | pause | retreat | sulk — a little internal life, not a straight march in
       moodTimer: 1 + Math.random() * 2
+    });
+  }
+
+  // maisons-cachettes : un ennemi délogé par une sortie reprend son
+  // chemin vers le mur depuis la maison — "délogé", pas tué, redevient
+  // juste une cible normale (tir à distance/tourelles) à partir de là
+  function flushHouseEnemy(house) {
+    state.enemies.push({
+      angle: house.angle, r: house.r,
+      speed: 24 + state.wave * 1.5,
+      hp: enemyHp(state.wave), maxHp: enemyHp(state.wave),
+      wt: Math.random() * 10, wanderSeed: Math.random() * 10,
+      hopping: false, hopT: 0, fleeing: false,
+      builder: false, buildTimer: 0, ladder: false, roadIdx: -1,
+      state: 'approach', timer: 0, jumpFrom: 0, jumpT: 0,
+      mood: 'walk', moodTimer: 1 + Math.random() * 2
     });
   }
 
@@ -2586,7 +2645,15 @@
           // membres d'équipage à la fois plutôt qu'un seul, même
           // multiplicateur que sur les PV ci-dessous
           const hitMul = Math.round(horseMul(state.horseLevel));
-          if (sortieTarget.tierIdx !== undefined) {
+          if (sortieTarget.hiddenCount !== undefined) {
+            // maison-cachette : les délogés reprennent leur route vers le
+            // mur, redevenant des cibles normales — la maison elle-même
+            // ne prend jamais de dégâts (indestructible)
+            const n = Math.min(hitMul, sortieTarget.hiddenCount);
+            sortieTarget.hiddenCount -= n;
+            for (let i = 0; i < n; i++) flushHouseEnemy(sortieTarget);
+            spawnBurst(sortieTarget.x, 0, sortieTarget.z, 'smoke');
+          } else if (sortieTarget.tierIdx !== undefined) {
             // équipage vivant: sortie kills crew one at a time, not a
             // shared hp pool — ranged fire alone only chips hp, and living
             // crew heals it right back (see the regen in the enemies
@@ -2824,6 +2891,22 @@
           // rarer still: spooked, turns tail and walks off the map for good
           if (!e.fleeing && Math.random() < 0.012) e.fleeing = true;
         }
+        // maisons-cachettes : vérifié à CHAQUE frame (dt-proportionnel),
+        // pas au rythme du mood ci-dessus — un bâtisseur/porteur
+        // d'échelle a sa propre mission, ne se cache jamais
+        if (!e.fleeing && !e.builder && !e.ladder) {
+          const hx = e.r * Math.cos(e.angle), hz = e.r * Math.sin(e.angle);
+          for (const house of HOUSES) {
+            if (Math.hypot(hx - house.x, hz - house.z) < HOUSE_HIDE_R &&
+                Math.random() < HOUSE_HIDE_CHANCE_PER_SEC * dt) {
+              e.dead = true; // pas killEnemy() : disparaît, pas un kill, pas d'or
+              house.hiddenCount++;
+              e.hidAway = true;
+              break;
+            }
+          }
+        }
+        if (e.hidAway) continue;
         let nearby = 0;
         const ex0 = e.r * Math.cos(e.angle), ez0 = e.r * Math.sin(e.angle);
         for (const o of state.enemies) {
@@ -3628,6 +3711,20 @@
     for (const sl of slopes) {
       ctx.fillStyle = '#8a3f2e';
       buildQuad(sl.pts);
+    }
+    // maison-cachette occupée : même langage visuel que les pips
+    // d'équipage des engins de siège — "rien ne se passe en silence"
+    if (h.hiddenCount > 0) {
+      const pipR = 2.4 * scale, gap = 7 * scale;
+      const topPos = project(h.x, wallH + roofH + 6, h.z, rot);
+      const shown = Math.min(h.hiddenCount, 5);
+      const startX = topPos.x - ((shown - 1) * gap) / 2;
+      for (let i = 0; i < shown; i++) {
+        ctx.beginPath();
+        ctx.arc(startX + i * gap, topPos.y, pipR, 0, Math.PI * 2);
+        ctx.fillStyle = '#c9503f';
+        ctx.fill();
+      }
     }
   }
 
