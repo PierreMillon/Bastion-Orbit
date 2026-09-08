@@ -871,3 +871,89 @@ difficile) sélectionnables — le jeu n'en a pas, cf. plus haut ; vérifier
 en jeu réel (Playwright/partie manuelle longue) que le ressenti confirme
 les chiffres du simulateur au-delà d'une vérification syntaxique/fumée
 courte déjà faite ce tour-ci.
+
+**Cibles validées par Pierre le 2026-09-08** (levait le "en attente" de
+la section c ci-dessus) : correct ~85% facile, ~55-65% normal, ~30-40%
+difficile, ~15-20% très difficile. **Implication concrète** : Bastion
+Orbit doit donc bien avoir de vrais **paliers de difficulté
+sélectionnables** — je m'étais trompé plus haut en disant que le jeu
+n'en avait pas besoin/n'en aurait pas ; Pierre confirme qu'il en veut.
+**Pas fait** : ajouter un sélecteur facile/normal/difficile/très
+difficile (probablement un multiplicateur sur `enemyHp`/`waveSpawnCount`
+par palier, à caler avec le simulateur — `--check` devra tester les 4
+paliers, pas qu'un seul). Prochaine étape du chantier difficulté.
+
+## Réponses de Pierre à la grosse consigne (reçues le 2026-09-08, notées avant tout travail)
+
+- **Langue** : auto-détection de la langue de l'appareil (fr/en/...),
+  anglais par défaut dans tous les autres cas — PAS d'anglais fixe.
+  Lève le point "en attente" de la Partie 2.2 ci-dessus.
+- **Bélier validé** : nouveau type d'engin de siège — lent, très fort,
+  construit au loin — vient s'ajouter aux paliers existants
+  (bouclier/arbalète/trébuchet/tour). Lève le "validation Pierre en
+  attente" de la Partie 1.A.
+- **Section explicative** : s'appelle **"Astuces"** (nom commun aux 3
+  jeux). Lève le "le nom importe peu" de la Partie 2.3.
+- **Teinte phosphore** : on GARDE le vert actuel (`#46ffa0`) — décision
+  prise, ne plus revenir dessus.
+- **Chemin vers un autre château / progression multi-niveaux** :
+  **REPORTÉ**. Un seul château tant que la difficulté n'est pas réglée.
+  Reste au backlog, aucun code à faire pour l'instant.
+
+## Nouvelle consigne du 2026-09-08 (donjon/seigneur/routes/ville/maisons/cheval) — pas fait
+
+À intégrer dans la Partie 1 (corrections Bastion Orbit), avant
+l'uniformisation. Le simulateur de difficulté devra être mis à jour pour
+tenir compte des maisons-cachettes et du cheval une fois codés.
+
+1. **Donjon : 24 facettes → 12** (diviser `WALL_SEG` par deux, probablement
+   `N_SEG` aussi selon si la silhouette doit suivre). *Pas fait.*
+2. **Tir du seigneur "dans l'axe" ×2** — précisé par Pierre : c'est le TIR
+   du seigneur DEPUIS LES REMPARTS (aligné sur l'ennemi visé, la
+   mécanique `facingMultiplier`/`VISION_TIGHT` existante), PAS la charge
+   en sortie. Donc ×2 vient s'appliquer par-dessus le ×2 déjà existant à
+   `VISION_TIGHT` (bonus de précision actuel) — à clarifier au codage si
+   ça veut dire un ×4 total dans l'axe serré, ou si ça REMPLACE l'échelle
+   actuelle (1x/1.5x/2x) par quelque chose de plus généreux. *Pas fait.*
+3. **Routes → centre-ville (maisons) → chemin → donjon** : réseau en
+   deux temps au lieu d'un accès direct route→donjon. Refonte de la
+   génération de routes/maisons actuelle (`HOUSES`, `ROAD_ANGLES`).
+   *Pas fait, gros chantier de géométrie.*
+4. **Arrivée par bateau** : en plus des routes, une partie des ennemis
+   arrive par l'eau en bateau (pavé simple, style actuel à dessiner).
+   Une fois arrivés (routes ou bateau), les ennemis se dispatchent pour
+   choisir où construire leurs engins de siège. *Pas fait.*
+5. **Maisons = cachettes indestructibles** : un ennemi peut s'y cacher et
+   devient intouchable (tourelles, tir à distance) — SEULE une sortie
+   chargée du seigneur peut l'en déloger ; la maison elle-même ne se
+   détruit jamais. *Pas fait.*
+6. **Cheval du seigneur** : en sortie, monte un cheval — palier 1 donne
+   au minimum ×2 vitesse et ×2 dégâts. Déblocage par PALIERS de
+   progression sans plafond (même formule que le jardin : coût ×
+   1.35^(n-1) ou équivalent à caler), chaque palier suivant rend le
+   cheval plus rapide/plus fort. Bouton dédié dans le bandeau, affichant
+   le palier courant, retour visuel clair (cheval dessiné + état
+   débloqué/pas débloqué). *Pas fait.*
+
+## Écran de défaite / fausse pub hors thème → pas fait
+
+Signalé par Pierre (capture à l'appui, v0.45, vague 6) : l'écran
+"ALERTE SÉCURITÉ" à la défaite (fond jaune, bordure rouge, bouton
+"Continuer quand même") n'est PAS dans le thème du jeu (phosphore vert
+sur noir, filaire, monochrome, comme tout le chrome depuis v0.32 — voir
+plus haut). Le gag textuel (fausse alerte, faux scan à 99%, "Antivirus
+Royal PRO") peut rester tel quel, seul l'HABILLAGE VISUEL doit changer :
+bordure fine verte, fond noir, typographie du jeu, scanlines/glow si
+c'est le style en place — plus de jaune/rouge criard. Vérifier aussi
+l'écran de défaite réel qui suit (`showGameOver`/`#overlay`), au cas où
+lui non plus ne serait pas dans le thème. *Pas fait.*
+
+## Exploration : animation de l'eau (douves/ruisseau) — maquette de comparaison, pas encore intégrée
+
+Demandé en session : tester une animation de l'eau dans l'esprit du
+style actuel (phosphore/filaire), 5 variations différentes, dans un
+artefact de comparaison côte à côte (même principe que la maquette de
+teintes faite plus tôt) — Pierre choisit avant toute intégration au jeu
+réel. *Statut : voir la réponse de ce tour pour le lien de l'artefact
+une fois publié — rien à intégrer dans index.html tant que Pierre n'a
+pas choisi.*
