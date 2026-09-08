@@ -975,5 +975,45 @@ marche ("marching ants"), lisibles même en vert phosphore pur ; D —
 reflets scintillants façon particules (même vocabulaire que les gouttes
 d'huile/la neige) ; E — le méandre lui-même qui avance dans le temps
 (phase de STREAM_WIND_FREQ animée). Toggle Phosphore/Filaire/Couleur
-dans la maquette pour comparer dans les 3 styles. Rien à intégrer dans
-index.html tant que Pierre n'a pas choisi.
+dans la maquette pour comparer dans les 3 styles.
+
+**Choix de Pierre : variation D (reflets scintillants)** → fait en v0.48.
+`ensureGlintSeeds()` (paresseux, même précaution TDZ que SNOW_LAYERS —
+généré au premier dessin, pas au chargement du script). Douves :
+`drawMoatGlints`, dessiné juste après `drawRingBand` — profite du même
+tour de passe-passe d'occlusion (le donjon, dessiné plus tard, masque
+naturellement la moitié éloignée). Ruisseau : `drawStreamGlints(rot,
+wantFar)`, appelé séparément dans les passes far/near existantes — lui
+ne peut pas se contenter d'un seul dessin global comme les douves
+puisqu'il traverse le donjon des deux côtés à la fois. `state.time`
+ajouté (horloge simple en secondes) pour piloter le clignotement.
+Vérifié en Playwright (couleur + phosphore, douves et ruisseau,
+plusieurs captures rapprochées confirmant l'animation, pas d'erreur).
+
+## Intérieur du donjon : 3 maquettes de traitement visuel → publiées, en attente du choix de Pierre
+
+Suite à sa question sur le rendu jamais livré (image de référence
+retrouvée dans les fichiers reçus — capture Pinterest "Fline Arts",
+intérieur de tour en pixel art avec escalier/tonneaux/personnages),
+maquette de comparaison publiée : https://claude.ai/code/artifact/4d5dcd1f-fbcc-4e99-b79a-34a0a95ac7f1
+("Salle du Foyer"). Trois traitements de LA MÊME composition (escalier
+de pierre, tonneaux, foyer, roi + princesse aux échecs) : A — pixel art
+fidèle à la référence (asset peint une fois, fond fixe) ; B — style
+procédural du jeu (dégradés radiaux + quads facettés, calculé en direct,
+caméra orbitale possible, cohérent avec le reste) ; C — illustration
+peinte low-poly, entre les deux (asset fixe, plus doux que A). Rien
+intégré au jeu, en attente du choix de Pierre.
+
+## Village étendu : plus de maisons, grange, fontaine, église, ruisseau animé — pas fait
+
+Demandé en session (dicté, retranscrit) : rajouter des maisons plus
+loin, et au centre du village une grange, une fontaine et une église,
+avec une animation d'eau qui coule (rejoint directement le chantier
+"eau vivante" ci-dessus/l'idée centre-ville de la grosse consigne du
+2026-09-08). **Mécanique de la fontaine** : quand le seigneur est faible
+(PV bas) et en sortie (chargé/dehors), s'il est à proximité de la
+fontaine il peut choisir d'aller y boire pour régénérer sa santé — un
+nouveau point de soin au sol, hors du donjon, à gérer comme un vrai
+choix tactique (aller se soigner = s'éloigner du combat). *Pas fait* —
+rejoint le chantier "routes → centre-ville → donjon" déjà noté plus haut
+comme gros chantier de géométrie, pas encore commencé.

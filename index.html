@@ -462,10 +462,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.47</button>
+  <button id="versionBtn">v0.48</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.48</b> — l'eau (douves, ruisseau) scintille : reflets qui clignotent au hasard à la surface, choisis parmi 5 maquettes comparées</div>
   <div><b>v0.47</b> — donjon à 12 facettes (au lieu de 24) ; tir du seigneur depuis les remparts ×2 ("dans l'axe", pas la sortie) — difficulté rééquilibrée en conséquence ; écran de fin (fausse alerte + défaite) enfin dans le thème phosphore, plus de jaune/rouge criard</div>
   <div><b>v0.46</b> — courbe de difficulté retravaillée (simulateur headless à l'appui, voir sim/) : les ennemis gagnent des PV avec les vagues au lieu de rester à 2 PV plat pour toujours, une vague sur cinq est allégée (répit avant chaque poussée)</div>
   <div><b>v0.45</b> — correctifs suite à un audit qualité : tri en profondeur correct en mode Perspective pour le seigneur/les ennemis en haut, cache de sprites plus robuste, musique (2 Mo) ne se télécharge plus avant le premier geste, géométrie des routes/du ruisseau mise en cache au lieu d'être reconstruite chaque frame</div>
@@ -1189,6 +1190,44 @@
   const STREAM_WIND_AMP = 16;
   const STREAM_WIND_FREQ = 0.018;
   const STREAM_SEG_COUNT = 48;
+
+  // reflets scintillants (choix de Pierre parmi 5 maquettes comparées,
+  // voir BACKLOG.md — "variation D") : des points de lumière isolés qui
+  // clignotent au hasard à la surface de l'eau, même vocabulaire visuel
+  // que les particules déjà en place (gouttes d'huile, neige) plutôt
+  // qu'une technique inédite.
+  const GLINT_STREAM_COUNT = 9;
+  const GLINT_MOAT_COUNT = 16;
+  const GLINT_FLICKER_THRESHOLD = 0.55; // sous ce seuil de sin(), invisible — au-dessus, l'alpha grimpe jusqu'à 1
+  // graines paresseuses (voir ensureGlintSeeds) : générées au premier
+  // appel de dessin, jamais au chargement du script — SPAWN_R (utilisé
+  // indirectement via streamHalfLen()) n'est pas encore fiable avant le
+  // premier resize(), même risque de TDZ/valeur-pas-encore-prête que
+  // SNOW_LAYERS en son temps (voir plus haut).
+  let glintSeeds = null;
+  function ensureGlintSeeds() {
+    if (glintSeeds) return;
+    glintSeeds = {
+      // d : distance signée le long de la ligne centrale du ruisseau
+      // (même paramètre que streamPointAt) — portée généreuse et fixe,
+      // pas besoin de suivre streamHalfLen() : un reflet hors de la
+      // portion visible ne coûte rien, il est juste hors-écran
+      stream: Array.from({ length: GLINT_STREAM_COUNT }, () => ({
+        d: (Math.random() - 0.5) * 640,
+        phase: Math.random() * 10,
+        speed: 0.6 + Math.random() * 1.2
+      })),
+      // angle + fraction radiale (0=bord intérieur, 1=bord extérieur) —
+      // se replace tout seul sur la largeur réelle de la douve active,
+      // quel que soit le palier acheté
+      moat: Array.from({ length: GLINT_MOAT_COUNT }, () => ({
+        angle: Math.random() * Math.PI * 2,
+        rFrac: Math.random(),
+        phase: Math.random() * 10,
+        speed: 0.6 + Math.random() * 1.2
+      }))
+    };
+  }
   function streamHalfLen() { return roadMaxR(); }
   function streamGeometry() {
     const a = ROAD_ANGLES[0];
@@ -1240,6 +1279,7 @@
   const state = {
     theta: 0,
     omega: 0, // angular velocity for drag inertia
+    time: 0,  // simple running clock, seconds — used by the water glint animation
     castleH: CASTLE_MAX_H, // starts fully built — the lord has no reason to be rebuilding on wave 1
     fightBanner: 0,
     gold: 0,
@@ -2068,6 +2108,8 @@
   function update(dt) {
     const p = state.player;
 
+    state.time += dt; // horloge simple, réutilisée par l'animation de l'eau (voir drawWaterGlints)
+
     updateSnow(dt);
 
     if (state.fightBanner > 0) state.fightBanner = Math.max(0, state.fightBanner - dt);
@@ -2810,6 +2852,26 @@
     ctx.fill('evenodd');
   }
 
+  // reflets scintillants sur les douves — dessinés juste après le
+  // remplissage de l'anneau (même endroit, avant le donjon), pour
+  // profiter du même tour de passe-passe d'occlusion que drawRingBand :
+  // le donjon, opaque, dessiné plus tard par-dessus, masque naturellement
+  // la moitié éloignée sans avoir besoin de split far/near explicite ici.
+  function drawMoatGlints(innerR, outerR, rot) {
+    ensureGlintSeeds();
+    for (const g of glintSeeds.moat) {
+      const flick = Math.sin(state.time * g.speed + g.phase);
+      if (flick < GLINT_FLICKER_THRESHOLD) continue;
+      const alpha = (flick - GLINT_FLICKER_THRESHOLD) / (1 - GLINT_FLICKER_THRESHOLD);
+      const r = innerR + (outerR - innerR) * g.rFrac;
+      const pos = project(r * Math.cos(g.angle), 0.4, r * Math.sin(g.angle), rot);
+      ctx.fillStyle = `rgba(230,245,255,${(alpha * 0.85).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (1.4 + alpha * 1.6) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // one vertical band of wall, radius fixed across its height — called two
   // or three times per donjon (below/above the projecting stone course) so
   // it doubles as the ledge's own outward-facing band too
@@ -3324,6 +3386,30 @@
     buildQuad(bridgePts);
   }
 
+  // reflets scintillants du ruisseau — contrairement aux douves (un seul
+  // anneau, occlusion "gratuite" via drawRingBand), le ruisseau traverse
+  // le donjon des deux côtés à la fois (voir streamRuns) : chaque reflet
+  // doit donc être classé far/near comme les segments eux-mêmes plutôt
+  // que dessiné en un seul bloc.
+  function drawStreamGlints(rot, wantFar) {
+    ensureGlintSeeds();
+    const g = streamGeometry();
+    for (const gl of glintSeeds.stream) {
+      const p = streamPointAt(g, gl.d);
+      const angle = Math.atan2(p.z, p.x);
+      const isFar = Math.cos(angle - rot) < 0;
+      if (isFar !== wantFar) continue;
+      const flick = Math.sin(state.time * gl.speed + gl.phase);
+      if (flick < GLINT_FLICKER_THRESHOLD) continue;
+      const alpha = (flick - GLINT_FLICKER_THRESHOLD) / (1 - GLINT_FLICKER_THRESHOLD);
+      const pos = project(p.x, 0.4, p.z, rot);
+      ctx.fillStyle = `rgba(230,245,255,${(alpha * 0.85).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (1.4 + alpha * 1.6) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function drawEnemy(e, rot) {
     let y = 0;
     if (e.state === 'approach' && e.hopping) y = Math.sin(Math.min(1, e.hopT) * Math.PI) * 9;
@@ -3670,6 +3756,7 @@
         'rgba(18,60,110,0.8)'
       ][lvl - 1];
       drawRingBand(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, shade);
+      drawMoatGlints(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot);
     }
 
     // building/extending the moat floods the garden: it submerges the
@@ -3719,6 +3806,7 @@
     for (const run of farRoadRuns) drawRoadRun(run, rot);
     for (const run of streamRunsAll.far) drawStreamRun(run, rot);
     if (streamExtrasFar) drawStreamExtras(rot);
+    drawStreamGlints(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
     for (const b of farBushes) drawBush(b, rot);
     for (const e of far) drawEnemy(e, rot);
@@ -3732,6 +3820,7 @@
     for (const run of nearRoadRuns) drawRoadRun(run, rot);
     for (const run of streamRunsAll.near) drawStreamRun(run, rot);
     if (!streamExtrasFar) drawStreamExtras(rot);
+    drawStreamGlints(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
