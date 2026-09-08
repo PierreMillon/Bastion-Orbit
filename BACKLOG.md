@@ -1145,16 +1145,50 @@ Vérifié en Playwright : ouverture/fermeture/réouverture (pas de fuite de
 boucle d'animation), plusieurs captures espacées confirmant le
 déplacement du chat et le vacillement du feu — aucune erreur console.
 
-## Village étendu : plus de maisons, grange, fontaine, église, ruisseau animé — pas fait
+## Village étendu : plus de maisons, grange, fontaine, église, ruisseau animé — partiellement fait en v0.55
 
 Demandé en session (dicté, retranscrit) : rajouter des maisons plus
 loin, et au centre du village une grange, une fontaine et une église,
 avec une animation d'eau qui coule (rejoint directement le chantier
 "eau vivante" ci-dessus/l'idée centre-ville de la grosse consigne du
-2026-09-08). **Mécanique de la fontaine** : quand le seigneur est faible
-(PV bas) et en sortie (chargé/dehors), s'il est à proximité de la
-fontaine il peut choisir d'aller y boire pour régénérer sa santé — un
-nouveau point de soin au sol, hors du donjon, à gérer comme un vrai
-choix tactique (aller se soigner = s'éloigner du combat). *Pas fait* —
-rejoint le chantier "routes → centre-ville → donjon" déjà noté plus haut
-comme gros chantier de géométrie, pas encore commencé.
+2026-09-08). Redemandé le même jour ("y a que j'attendais aussi qui
+sont pas là, faut rajouter des maisons, l'église etc.") — traité tout
+de suite plutôt que d'attendre le gros chantier centre-ville complet.
+
+**Fait en v0.55 :**
+- `HOUSES` passe de 3 à 8 — 5 maisons de plus, réparties tout autour,
+  dont plusieurs nettement plus loin (jusqu'à 430 unités contre 260-300
+  pour les 3 premières). Héritent automatiquement de la mécanique de
+  cachette (v0.53) et du tri profondeur far/near — rien de spécifique à
+  coder, c'est le même tableau.
+- Un vrai cœur de village (`VILLAGE_EXTRAS`) à un angle dégagé (aucune
+  maison ni route ne passe par là) : une **grange** (bois roux, plus
+  grande qu'une maison), une **église** (nef en pierre grise + clocher
+  + croix simple au sommet) et une **fontaine** (bassin octogonal +
+  pilier central + reflets scintillants, même vocabulaire visuel que
+  les douves/le ruisseau — variation D choisie en session, voir plus
+  haut). `collectBoxRoof`/`flushBoxRoofList` : les quads de plusieurs
+  volumes qui se touchent (nef + clocher de l'église, rebord + pilier
+  de la fontaine) sont empilés dans une liste commune et triés par
+  profondeur ENSEMBLE plutôt que volume par volume — un premier essai
+  sans ça faisait passer le clocher devant un pan de la nef qui aurait
+  dû le cacher (repéré en capture, pas juste en relisant le code).
+  Vérifié en Playwright, style Couleur ET Phosphore, capture rapprochée :
+  les 3 bâtiments se lisent clairement, aucune erreur console.
+
+**Pas fait :**
+- Purement décoratif — pas de mécanique de cachette sur la grange/
+  l'église (contrairement aux maisons), pas encore tranché si ça vaudrait
+  le coup de l'étendre là aussi.
+- **Mécanique de la fontaine-soin** : quand le seigneur est faible
+  (PV bas) et en sortie (chargé/dehors), s'il est à proximité de la
+  fontaine il peut choisir d'aller y boire pour régénérer sa santé — un
+  nouveau point de soin au sol, hors du donjon, à gérer comme un vrai
+  choix tactique (aller se soigner = s'éloigner du combat). Toujours pas
+  fait — c'est une vraie mécanique de gameplay (sortie ciblée sur un
+  point fixe, cooldown, feedback visuel), pas juste du décor, ça mérite
+  son propre passage.
+- Le centre du village n'est positionné qu'à un angle pratique choisi à
+  la main, pas encore raccordé aux routes ("routes → centre-ville →
+  donjon" de la grosse consigne, gros chantier de géométrie pas
+  commencé).

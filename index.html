@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.54</button>
+  <button id="versionBtn">v0.55</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.55</b> — village étendu : 5 maisons de plus (dont plusieurs bien plus loin), et un vrai cœur de village avec une grange, une église (clocher + croix) et une fontaine qui scintille</div>
   <div><b>v0.54</b> — le jeu parle anglais et français : détecté automatiquement selon l'appareil (anglais par défaut sinon), bouton "Langue" dans le menu pour forcer l'autre — interface, menu, écrans de fin traduits (le changelog reste en français, c'est un journal de développement)</div>
   <div><b>v0.53</b> — les maisons du village sont enfin de vraies cachettes : un ennemi qui approche peut s'y réfugier (intouchable au tir à distance/tourelles), seule une sortie chargée peut l'en déloger — corrige un bug de déclenchement quasi jamais atteint (voir BACKLOG.md)</div>
   <div><b>v0.52</b> — cheval du seigneur : en sortie, ×2 vitesse/dégâts au palier 1 (débloqué par paliers sans plafond, bouton dédié), monture dessinée sous le seigneur</div>
@@ -1417,10 +1418,21 @@
   // donner une impression de village) — box + a small pitched roof, drawn
   // with the same flat quads as everything else so it automatically picks
   // up the phosphore/filaire treatment for free
+  // village étendu (demandé en session, dicté : "faut rajouter des
+  // maisons") — les 3 premières restent telles quelles (le groupe et la
+  // maison isolée d'origine), 5 de plus ajoutées en périphérie, dont
+  // plusieurs nettement "plus loin" (jusqu'à 430 contre 260-300 pour les
+  // premières) pour donner une vraie impression de hameau étalé plutôt
+  // qu'un unique petit cluster.
   const HOUSES = [
     { x: 260 * Math.cos(1.0), z: 260 * Math.sin(1.0) },      // the lone house
     { x: 300 * Math.cos(-0.85), z: 300 * Math.sin(-0.85) },  // the group, two close together
-    { x: 288 * Math.cos(-0.68), z: 288 * Math.sin(-0.68) }
+    { x: 288 * Math.cos(-0.68), z: 288 * Math.sin(-0.68) },
+    { x: 340 * Math.cos(2.5), z: 340 * Math.sin(2.5) },
+    { x: 360 * Math.cos(-2.4), z: 360 * Math.sin(-2.4) },
+    { x: 410 * Math.cos(1.7), z: 410 * Math.sin(1.7) },      // plus loin
+    { x: 430 * Math.cos(-1.9), z: 430 * Math.sin(-1.9) },    // plus loin
+    { x: 390 * Math.cos(0.15), z: 390 * Math.sin(0.15) }     // plus loin
   ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z), hiddenCount: 0 }));
   const HOUSE_SIZE = 16; // half-width of the base
   // maisons-cachettes (demandé en session) : indestructibles, un ennemi
@@ -1457,6 +1469,25 @@
   //    trafic mesuré est réellement dense.
   const HOUSE_HIDE_R = 140;             // distance d'une maison pour pouvoir s'y cacher / en être délogé
   const HOUSE_HIDE_CHANCE_PER_SEC = 0.2; // probabilité/seconde (jet à chaque frame, proportionnel à dt) — ~45 % de se cacher sur une traversée type de 3s
+
+  // cœur de village (demandé en session, dicté : "l'église etc.") — une
+  // petite place avec une grange, une fontaine et une église, à un angle
+  // dégagé (aucune HOUSES ni route ne passe par là). Purement décoratif
+  // pour l'instant, comme les maisons avant leur mécanique de cachette :
+  // pas de gameplay dessus ici (pas de cachette, pas encore la fontaine-
+  // soin dictée dans la grosse consigne du 2026-09-08 — voir BACKLOG.md,
+  // ça reste tributaire du gros chantier "routes → centre-ville → donjon"
+  // pas commencé). Rejoint quand même le chantier "eau vivante" : la
+  // fontaine scintille avec le même vocabulaire visuel que les douves/le
+  // ruisseau (voir drawFountainGlints).
+  const VILLAGE_CENTER_ANGLE = -1.3, VILLAGE_CENTER_R = 300;
+  const VILLAGE_CENTER_X = VILLAGE_CENTER_R * Math.cos(VILLAGE_CENTER_ANGLE);
+  const VILLAGE_CENTER_Z = VILLAGE_CENTER_R * Math.sin(VILLAGE_CENTER_ANGLE);
+  const VILLAGE_EXTRAS = [
+    { type: 'grange', x: VILLAGE_CENTER_X - 75, z: VILLAGE_CENTER_Z - 10 },
+    { type: 'eglise', x: VILLAGE_CENTER_X + 60, z: VILLAGE_CENTER_Z + 30 },
+    { type: 'fontaine', x: VILLAGE_CENTER_X - 10, z: VILLAGE_CENTER_Z + 95 }
+  ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
 
   // a stream crossing one of the roads, with a little bridge over it
   // (demandé en session, puis précisé : "doit traverser la carte" — pas
@@ -3870,6 +3901,128 @@
     }
   }
 
+  // ---- cœur de village : grange/fontaine/église (VILLAGE_EXTRAS plus haut,
+  // purement décoratif pour l'instant) — même recette que drawHouse (box +
+  // pans de toit en quads plats), mais l'église a besoin de DEUX box+toit
+  // (nef + clocher) qui se touchent presque : les dessiner l'un après
+  // l'autre comme deux appels séparés triait chacun correctement en
+  // interne mais jamais l'un par rapport à l'autre, ce qui pouvait faire
+  // passer le clocher devant un pan de la nef qui aurait dû le cacher.
+  // collectBoxRoof empile les quads dans une liste commune au lieu de les
+  // dessiner tout de suite ; flushBoxRoofList les trie et les dessine
+  // ensemble, une seule fois — mêmes fonctions réutilisées pour la
+  // fontaine (bassin + pilier central).
+  function collectBoxRoof(list, x, z, sx, sz, wallH, roofH, rot, wallBase, roofColor) {
+    const corners = [[-sx, -sz], [sx, -sz], [sx, sz], [-sx, sz]];
+    const base = corners.map(([dx, dz]) => project(x + dx, 0, z + dz, rot));
+    const top = corners.map(([dx, dz]) => project(x + dx, wallH, z + dz, rot));
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      const midx = (corners[i][0] + corners[j][0]) / 2, midz = (corners[i][1] + corners[j][1]) / 2;
+      const depth = base[i].depth + base[j].depth;
+      const light = Math.cos(Math.atan2(midz, midx) - Math.PI * 0.75);
+      const g = light * 30;
+      const fill = `rgb(${Math.round(wallBase[0] + g)},${Math.round(wallBase[1] + g)},${Math.round(wallBase[2] + g)})`;
+      list.push({ depth, pts: [base[i], base[j], top[j], top[i]], fill });
+    }
+    const ridgeA = project(x - sx, wallH + roofH, z, rot);
+    const ridgeB = project(x + sx, wallH + roofH, z, rot);
+    list.push({ depth: top[0].depth + top[1].depth, pts: [top[0], top[1], ridgeB, ridgeA], fill: roofColor });
+    list.push({ depth: top[2].depth + top[3].depth, pts: [top[2], top[3], ridgeA, ridgeB], fill: roofColor });
+    return { wallH, roofH };
+  }
+  function flushBoxRoofList(list) {
+    list.sort((a, b) => a.depth - b.depth);
+    for (const q of list) { ctx.fillStyle = q.fill; buildQuad(q.pts); }
+  }
+
+  // la grange : plus grande qu'une maison, bois roux/rustique — se lit
+  // comme un bâtiment agricole plutôt qu'une maison de plus
+  function drawGrange(b, rot) {
+    const list = [];
+    collectBoxRoof(list, b.x, b.z, 26, 18, 20, 16, rot, [150, 80, 45], '#6e2c1e');
+    flushBoxRoofList(list);
+  }
+
+  // l'église : nef allongée + petit clocher carré à une extrémité, croix
+  // simple au sommet — pierre grise plutôt que le bois des maisons/grange
+  function drawEglise(b, rot) {
+    const list = [];
+    collectBoxRoof(list, b.x, b.z, 16, 30, 24, 18, rot, [145, 145, 148], '#3f3f48');
+    const towerZ = b.z - 34, towerH = 40, towerRoofH = 14;
+    collectBoxRoof(list, b.x, towerZ, 9, 9, towerH, towerRoofH, rot, [140, 140, 143], '#33333c');
+    flushBoxRoofList(list);
+    // croix au sommet du clocher : deux petits traits qui se croisent,
+    // toujours face caméra (pas besoin de la faire tourner avec rot,
+    // trop petite pour que ça se remarque)
+    const apex = project(b.x, towerH + towerRoofH + 8, towerZ, rot);
+    ctx.strokeStyle = '#33333c';
+    ctx.lineWidth = Math.max(1, 1.4 * scale);
+    ctx.beginPath();
+    ctx.moveTo(apex.x, apex.y - 7 * scale); ctx.lineTo(apex.x, apex.y + 5 * scale);
+    ctx.moveTo(apex.x - 4 * scale, apex.y - 2 * scale); ctx.lineTo(apex.x + 4 * scale, apex.y - 2 * scale);
+    ctx.stroke();
+  }
+
+  // la fontaine : bassin bas (octogone, mêmes quads plats que tout le
+  // reste) + un peu d'eau scintillante au centre — rejoint le vocabulaire
+  // visuel des douves/du ruisseau (variation D choisie en session, voir
+  // BACKLOG.md) plutôt que de réinventer un effet d'eau différent ici
+  const FOUNTAIN_R = 20, FOUNTAIN_WALL_H = 6, FOUNTAIN_SEGS = 8;
+  const FOUNTAIN_GLINTS = [
+    { dx: 6, dz: -4, phase: 0.4, speed: 0.9 },
+    { dx: -7, dz: 3, phase: 3.1, speed: 1.1 },
+    { dx: 2, dz: 8, phase: 5.7, speed: 0.75 }
+  ];
+  function drawFontaine(b, rot) {
+    const list = [];
+    const baseC = [], topC = [];
+    for (let i = 0; i < FOUNTAIN_SEGS; i++) {
+      const a = (i / FOUNTAIN_SEGS) * Math.PI * 2;
+      const dx = FOUNTAIN_R * Math.cos(a), dz = FOUNTAIN_R * Math.sin(a);
+      baseC.push(project(b.x + dx, 0, b.z + dz, rot));
+      topC.push(project(b.x + dx, FOUNTAIN_WALL_H, b.z + dz, rot));
+    }
+    for (let i = 0; i < FOUNTAIN_SEGS; i++) {
+      const j = (i + 1) % FOUNTAIN_SEGS;
+      list.push({ depth: baseC[i].depth + baseC[j].depth, pts: [baseC[i], baseC[j], topC[j], topC[i]], fill: '#7c7c74' });
+    }
+    // petit pilier central (source) — mêmes quads que la grange/l'église,
+    // dans la même liste pour que le tri par profondeur reste correct
+    // vis-à-vis du rebord du bassin selon l'angle de vue
+    collectBoxRoof(list, b.x, b.z, 3, 3, FOUNTAIN_WALL_H + 10, 0, rot, [130, 130, 130], '#7c7c74');
+    flushBoxRoofList(list);
+    // le bassin d'eau lui-même, un peu en retrait du bord — toujours
+    // au-dessus du rebord (surface plane à l'intérieur), pas besoin de
+    // le mêler au tri par profondeur
+    const waterC = [];
+    for (let i = 0; i < FOUNTAIN_SEGS; i++) {
+      const a = (i / FOUNTAIN_SEGS) * Math.PI * 2;
+      waterC.push(project(b.x + FOUNTAIN_R * 0.78 * Math.cos(a), FOUNTAIN_WALL_H - 0.6, b.z + FOUNTAIN_R * 0.78 * Math.sin(a), rot));
+    }
+    ctx.fillStyle = '#4d7d99';
+    buildQuad(waterC);
+    // reflets scintillants — calcul direct par frame (pas de cache dédié
+    // comme glintSeeds : seulement 3 points fixes, pas besoin de la même
+    // infrastructure que douves/ruisseau)
+    for (const g of FOUNTAIN_GLINTS) {
+      const flick = Math.sin(state.time * g.speed + g.phase);
+      if (flick < GLINT_FLICKER_THRESHOLD) continue;
+      const alpha = (flick - GLINT_FLICKER_THRESHOLD) / (1 - GLINT_FLICKER_THRESHOLD);
+      const pos = project(b.x + g.dx, FOUNTAIN_WALL_H - 0.3, b.z + g.dz, rot);
+      ctx.fillStyle = `rgba(230,245,255,${(alpha * 0.85).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, (1.3 + alpha * 1.4) * scale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawVillageExtra(b, rot) {
+    if (b.type === 'grange') drawGrange(b, rot);
+    else if (b.type === 'eglise') drawEglise(b, rot);
+    else drawFontaine(b, rot);
+  }
+
   function drawStreamSeg(seg, rot) {
     const g = streamGeometry();
     const pts = [
@@ -4349,6 +4502,8 @@
     const nearRoadRuns = [...road0Runs.near, ...road1Runs.near];
     const farHouses = HOUSES.filter(h => Math.cos(h.angle - rot) < 0);
     const nearHouses = HOUSES.filter(h => Math.cos(h.angle - rot) >= 0);
+    const farVillageExtras = VILLAGE_EXTRAS.filter(b => Math.cos(b.angle - rot) < 0);
+    const nearVillageExtras = VILLAGE_EXTRAS.filter(b => Math.cos(b.angle - rot) >= 0);
     const streamRunsAll = streamRuns(rot);
     // the bridge/shimmer extras sit at d≈0 (the crossing point) — draw them
     // in whichever pass that point itself falls into
@@ -4375,6 +4530,7 @@
     if (streamExtrasFar) drawStreamExtras(rot);
     drawStreamGlints(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
+    for (const b of farVillageExtras) drawVillageExtra(b, rot);
     for (const b of farBushes) drawBush(b, rot);
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
@@ -4389,6 +4545,7 @@
     if (!streamExtrasFar) drawStreamExtras(rot);
     drawStreamGlints(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
+    for (const b of nearVillageExtras) drawVillageExtra(b, rot);
     for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
