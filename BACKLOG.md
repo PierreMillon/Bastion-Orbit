@@ -1192,3 +1192,29 @@ de suite plutôt que d'attendre le gros chantier centre-ville complet.
   la main, pas encore raccordé aux routes ("routes → centre-ville →
   donjon" de la grosse consigne, gros chantier de géométrie pas
   commencé).
+
+## Style Couleur mis en pause, neige = particules pas des cercles → fait en v0.56
+
+Deux demandes dictées dans la foulée de v0.55.
+
+1. **Style Couleur en pause** : "garde style phosphore et met en pause
+   le style couleur à l'avenir, on garde juste sous le coude au cas où".
+   Le bouton Style (menu) ne bascule plus qu'entre Phosphore et Filaire
+   pur — `STYLE_NEXT` ne propose plus `couleur`. Un ancien réglage
+   `bo_phosphorStyle=couleur` en localStorage retombe silencieusement sur
+   `phosphore` au chargement plutôt que d'être restauré. Le code de rendu
+   couleur lui-même (branche `phosphorStyle === 'couleur'` dans
+   `wrapPhosphor`, `drawCastle` vs `drawCastleSilhouette`...) n'a pas été
+   touché — juste rendu inatteignable depuis l'interface, comme demandé
+   ("sous le coude").
+2. **Neige = particules, pas des cercles confondus avec les ennemis** :
+   la neige passait par `drawBallSprite`, donc par le même wrapper
+   phosphore que n'importe quel personnage — en Phosphore/Filaire un
+   flocon devenait un petit **cercle creux** (fond + contour), à peu près
+   la même taille apparente qu'un ennemi lointain (lui aussi rendu en
+   cercle creux dans ces styles). Repéré par Pierre en jeu, pas à la
+   lecture du code. Fix : `drawSnow()` dessine maintenant directement sur
+   `rawCtx` (le contexte brut, PAS le wrapper phosphore) — un point plein
+   simple, dans tous les styles, jamais un contour. Vérifié en
+   Playwright : petits points blancs pleins, nettement différents des
+   cercles creux verts (ennemis/bâtiments), aucune erreur console.

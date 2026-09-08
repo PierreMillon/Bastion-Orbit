@@ -460,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.55</button>
+  <button id="versionBtn">v0.56</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.56</b> — style Couleur mis en pause (Phosphore/Filaire seulement dans le menu, le code reste en réserve) ; la neige redevient de simples particules pleines au lieu de petits cercles creux qu'on confondait avec des ennemis lointains</div>
   <div><b>v0.55</b> — village étendu : 5 maisons de plus (dont plusieurs bien plus loin), et un vrai cœur de village avec une grange, une église (clocher + croix) et une fontaine qui scintille</div>
   <div><b>v0.54</b> — le jeu parle anglais et français : détecté automatiquement selon l'appareil (anglais par défaut sinon), bouton "Langue" dans le menu pour forcer l'autre — interface, menu, écrans de fin traduits (le changelog reste en français, c'est un journal de développement)</div>
   <div><b>v0.53</b> — les maisons du village sont enfin de vraies cachettes : un ennemi qui approche peut s'y réfugier (intouchable au tir à distance/tourelles), seule une sortie chargée peut l'en déloger — corrige un bug de déclenchement quasi jamais atteint (voir BACKLOG.md)</div>
@@ -736,7 +737,14 @@
   let phosphorHue = 'vert';
   try {
     const stored = localStorage.getItem('bo_phosphorStyle');
-    if (stored === 'couleur' || stored === 'phosphore' || stored === 'filaire') phosphorStyle = stored;
+    // 'couleur' mis en pause (demandé en session, 2026-09-08) — le code de
+    // rendu couleur reste intact plus bas (drawCastle vs
+    // drawCastleSilhouette, wrapPhosphor qui laisse tout passer tel quel
+    // en mode 'couleur'...), "gardé sous le coude" au cas où, mais on ne
+    // le propose plus dans le cycle du bouton Style (voir STYLE_NEXT) ni
+    // au chargement — un ancien réglage sauvegardé en 'couleur' retombe
+    // silencieusement sur 'phosphore'.
+    if (stored === 'phosphore' || stored === 'filaire') phosphorStyle = stored;
     const storedHue = localStorage.getItem('bo_phosphorHue');
     if (storedHue === 'vert' || storedHue === 'ambre') phosphorHue = storedHue;
   } catch (e) { /* ignore */ }
@@ -1009,7 +1017,12 @@
   // itself, and its persistence, is declared up near the canvas/ctx setup) --
   const styleBtn = document.getElementById('styleBtn');
   const hueBtn = document.getElementById('hueBtn');
-  const STYLE_NEXT = { couleur: 'phosphore', phosphore: 'filaire', filaire: 'couleur' };
+  // 'couleur' mis en pause (voir le commentaire près de la lecture de
+  // bo_phosphorStyle plus haut) — le bouton Style ne fait plus que
+  // basculer phosphore <-> filaire ; l'entrée 'couleur' reste au cas où
+  // un vieux localStorage l'aurait encore, pour retomber proprement sur
+  // phosphore plutôt que de planter sur une clé manquante
+  const STYLE_NEXT = { couleur: 'phosphore', phosphore: 'filaire', filaire: 'phosphore' };
   const HUE_NEXT = { vert: 'ambre', ambre: 'vert' };
   const HUE_CSS = {
     vert: { line: '#46ffa0', text: '#8ffcc4', dim: 'rgba(70,255,160,0.4)', fill: '#0a1f16' },
@@ -4444,11 +4457,22 @@
       if (f.x < -20) f.x = W + 20; else if (f.x > W + 20) f.x = -20;
     }
   }
+  // signalé en session : la neige passait par drawBallSprite, donc par
+  // wrapPhosphor comme n'importe quel personnage — en phosphore/filaire
+  // ça donne un petit cercle CREUX (fond + contour) au lieu d'un flocon
+  // plein, et à cette taille ça se confondait avec un ennemi lointain
+  // (lui aussi un cercle creux). La neige doit rester lisiblement du
+  // décor, jamais une cible potentielle : dessinée ici directement sur
+  // rawCtx (le contexte brut, PAS le wrapper phosphore) — un point plein
+  // simple, dans tous les styles, jamais un contour.
   function drawSnow() {
     if (!snowOn) return;
     for (const f of snowflakes) {
       const layer = SNOW_LAYERS[f.li];
-      drawBallSprite(`snow${f.li}`, layer.size * scale, `rgba(255,255,255,${layer.alpha})`, 'rgba(255,255,255,0)', f);
+      rawCtx.beginPath();
+      rawCtx.arc(f.x, f.y, layer.size * scale * 0.5, 0, Math.PI * 2);
+      rawCtx.fillStyle = `rgba(255,255,255,${layer.alpha})`;
+      rawCtx.fill();
     }
   }
 
