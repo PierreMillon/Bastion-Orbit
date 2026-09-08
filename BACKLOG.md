@@ -1518,28 +1518,6 @@ correctif, aucune erreur console.
 ## Demandes en attente, pas commencées (trop grosses pour cette
 ## rafale) — détaillées ici pour ne rien perdre
 
-- **Mécanique des paysans** — chaque maison est "habitée". À la
-  première attaque, ~1 habitant par maison (celle la plus proche de
-  l'attaquant) sort se battre contre l'ennemi, avec 1 chance sur 3 de
-  gagner. Vagues suivantes : les paysans sortent, se battent (même 1/3
-  de chance chacun) ; 1/5 se réfugient dans l'église (disparaissent de
-  l'écran en y entrant — le joueur les a vus sortir de la maison puis
-  entrer dans l'église avant de disparaître, donc sait qu'ils y sont) ;
-  le reste fuit dans le château par la porte du bas (disparaissent de
-  l'écran sauf en ouvrant la vue "intérieur" — 🔥 — où on doit voir
-  exactement ce nombre de paysans près du feu). Avant toute attaque
-  (vague 1 et demie, précisé par Pierre : "à partir du deuxième et
-  demi qui rentre dans la zone"), les villageois vivent normalement :
-  1 à 5 par bâtiment se promènent, ~10% se promènent, ~10% changent de
-  maison, le reste saute en petits groupes sur la place ("une vie qui
-  grouille") avec une petite note de musique au-dessus de ceux qui
-  sont sur la place (ils dansent/font la fête) ; au début d'une
-  attaque, panique et dispersion. Chantier complet : nouvel état
-  "paysan" (spawn par maison, IA sortir/combattre/fuir/errer/danser),
-  résolution de combat (1/3 de chance), comptage de population (église
-  vs château), intégration à la vue cosy (même nombre visible par le
-  feu). Pas commencé — mérite son propre passage dédié, pas à faire en
-  vitesse au milieu d'une rafale de corrections visuelles.
 - **Moulin (watermill)** — une maison avec une roue à aubes posée sur
   l'eau, qui tourne dans le bon sens par rapport au courant (vrai
   mécanisme de moulin à eau à rechercher, pas inventé au hasard). Pas
@@ -1680,3 +1658,58 @@ marche pas, il faut presque attendre une seconde à chaque fois").
   vague qui allait de toute façon se terminer dans quelques secondes
   ne fait quasiment rien gagner) — jamais sous 1. Recalculé chaque
   frame (`updateNextWaveBonus`, dans `refreshBuyButtons()`).
+
+## Mécanique des paysans (1er des 6 gros chantiers de la liste de priorité) → fait en v0.66
+
+Travaillé en autonomie totale, sans repasser par des questions, comme
+demandé explicitement par Pierre ("tu fais un ordre de priorité, et tu
+avances de manière mécanique"). Version scopée pour rester réalisable
+en une passe (annoncé comme "au mieux, pas parfait, on corrigera plus
+tard si besoin") :
+
+- **Population** : chaque maison reçoit 1 à 5 paysans au chargement
+  (`initVillagers`), stockés dans `state.villagers`.
+- **Vie tranquille** (`state.villagePanic` faux) : par paysan, ~10%
+  errent près de chez eux, ~10% déménagent vers une autre maison
+  aléatoire, le reste marche jusqu'à la place et y "danse" sur place
+  (bobine verticale) avec une note "♪" flottante qui monte et
+  s'estompe périodiquement (`updateVillagerPeaceful`).
+- **Déclenchement** : au tout premier ennemi qui apparaît réellement
+  (`spawnEnemy`, pas juste un changement de vague) → `villageTriggerPanic()`.
+  Simplification assumée : pas d'animation de fuite séparée, tout le
+  monde passe directement en "à l'abri" (`sheltering`, invisible) d'un
+  coup plutôt que de courir jusque chez soi à l'écran.
+- **Mobilisation vague après vague** (`villageDispatchWave`, appelé
+  depuis `villageTriggerPanic` ET à chaque `startWave`/`callNextWaveEarly`
+  suivant) : un lot de 3 paysans encore à l'abri (les plus proches d'un
+  ennemi présent, si possible) est mobilisé : 1/3 partent se battre
+  (marchent vers l'ennemi le plus proche, bref clash, puis disparaissent
+  — cosmétique, ne touche pas à l'économie/l'équilibrage réel, pour ne
+  pas risquer de casser l'équilibre du jeu existant en fin de session) ;
+  parmi les 2/3 restants, 1/5 fuient vers l'église (comptés dans
+  `villagersHiddenChurch`) et le reste vers le château par la porte du
+  bas (`villagersHiddenCastle`).
+- **Vue cosy** : `state.villagersHiddenCastle` est redessiné près du
+  feu (`renderCosyScene`, même fonction `cosyPerson` que le seigneur/la
+  princesse, plus petits, en cercle autour du foyer) — "on verra
+  exactement le même nombre de paysans à côté du feu", plafonné à 10
+  affichés par simplicité d'agencement (le compte réel reste correct
+  au-delà, juste pas tous dessinés un par un).
+- **Rendu** dans la scène principale : un simple point (langage visuel
+  déjà utilisé pour les pips des maisons-cachettes), classé far/near
+  individuellement (`pointFar`) comme tout le reste depuis le correctif
+  des traits fantômes plus haut — pas de sprite détaillé, cohérent avec
+  le style filaire minimaliste du jeu.
+
+Vérifié en Playwright : dots visibles près des maisons peu après le
+chargement (vie tranquille), population visiblement dégarnie après le
+déclenchement du combat (dispatch en cours), petit groupe de paysans
+bien visible près du feu dans la vue cosy après plusieurs vagues,
+aucune erreur console sur 60s de jeu en continu.
+
+Reste pour plus tard si besoin d'affiner (noté, pas bloquant) : le
+"plus proche de l'attaquant" n'est qu'une approximation (tri par
+distance au premier ennemi de la liste, pas un vrai calcul par
+maison) ; la panique n'a pas d'animation de fuite visible ; le lot
+mobilisé par vague est une constante fixe (3) plutôt qu'une formule
+liée à la difficulté.

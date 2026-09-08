@@ -464,10 +464,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.65</button>
+  <button id="versionBtn">v0.66</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.66</b> — mécanique des paysans : le village vit (danse sur la place, notes de musique) tant qu'aucun ennemi n'est apparu, puis se met à l'abri dès la première attaque ; vague après vague, certains partent se battre, d'autres se réfugient à l'église ou au château (visibles près du feu dans la vue intérieure)</div>
   <div><b>v0.65</b> — pont en pierre : le tablier monte vraiment et redescend en arche (plus un simple trou décoratif dans un pilier plat) ; corrige une maison posée sur une route et une ferme posée dans le ruisseau (vérifié numériquement) ; corrige les bretelles place-route/porte qui coupaient tout droit à travers le donjon (chemins en arc de cercle autour de lui désormais) ; bouton "vague suivante" enfin utilisable en martelant vite (un vieux garde anti-zoom mobile avalait un clic sur deux) + affiche l'or gagné, dégressif en fin de vague</div>
   <div><b>v0.64</b> — le ruisseau reste visible jusqu'aux deux bords de l'écran, particules trois fois moins nombreuses mais qui ondulent légèrement d'un côté à l'autre, comme un poisson qui nage</div>
   <div><b>v0.63</b> — pont enfin orienté dans le bon sens (et en volume, avec arche) ; bretelles route-place propres (plus de croix) ; place du village agrandie avec la fontaine en son centre ; ruisseau encore plus dense (2200 particules) ; jardin écarté d'une route ; douves qui masquent enfin vraiment ce qu'il y a dessous ; tarif affiché + bouton grisé si pas assez d'or ; bouton "Vague" fusionné (affichage + action)</div>
@@ -1616,6 +1617,145 @@
   // dans render()) traite le cœur de village ET la ferme ensemble, sans
   // dupliquer le filtre/la boucle de dessin pour chacun
   const ALL_VILLAGE_EXTRAS = [...VILLAGE_EXTRAS, ...FARM_BUILDINGS];
+  const EGLISE_EXTRA = VILLAGE_EXTRAS.find(b => b.type === 'eglise');
+
+  // ---- mécanique des paysans (demandé en session, détail complet dans
+  // BACKLOG.md) ----
+  // chaque maison est habitée (1 à 5 paysans, tirés une fois au chargement).
+  // Tant qu'aucun ennemi n'est encore apparu (state.villagePanic faux), vie
+  // tranquille : la plupart dansent en petit groupe sur la place (avec une
+  // note de musique flottante), les autres errent près de leur maison ou en
+  // changent. Dès le tout premier ennemi (villageTriggerPanic, appelé
+  // depuis spawnEnemy), tout le monde rentre se mettre à l'abri d'un coup
+  // (simplification assumée : pas d'animation de fuite séparée, juste
+  // "disparu, à l'abri") — puis, vague après vague (villageDispatchWave,
+  // appelé depuis startWave ET callNextWaveEarly), un petit lot de paysans
+  // encore à l'abri est mobilisé : 1/3 partent se battre (marchent vers
+  // l'ennemi le plus proche, un bref clash, puis disparaissent — cosmétique,
+  // n'affecte pas l'économie/l'équilibrage réel du jeu), et parmi les 2/3
+  // restants, 1/5 se réfugient à l'église (comptés à part) et le reste dans
+  // le château par la porte du bas (compté dans villagersHiddenCastle,
+  // repris à l'identique près du feu dans la vue cosy — voir renderCosyScene).
+  const VILLAGER_WANDER_R = 28;
+  const VILLAGER_DANCE_R = 22;
+  const VILLAGER_SPEED = 20;
+  const VILLAGER_DISPATCH_BATCH = 3;   // combien de paysans à l'abri sont mobilisés à chaque vague
+  const VILLAGER_FIGHT_CHANCE = 1 / 3;
+  const VILLAGER_CHURCH_CHANCE = 1 / 5; // parmi ceux qui ne partent pas se battre
+
+  function rollVillagerSub() {
+    const r = Math.random();
+    if (r < 0.1) return 'wander';       // ~10% errent près de chez eux
+    if (r < 0.2) return 'move_house';   // ~10% déménagent
+    return 'dance';                     // le reste fait la fête sur la place
+  }
+  function initVillagers() {
+    HOUSES.forEach((h, hi) => {
+      const pop = 1 + Math.floor(Math.random() * 5);
+      for (let i = 0; i < pop; i++) {
+        state.villagers.push({
+          houseIdx: hi,
+          x: h.x + (Math.random() - 0.5) * 10,
+          z: h.z + (Math.random() - 0.5) * 10,
+          mode: 'peaceful', // peaceful | sheltering | sallying | fighting | fleeing_church | fleeing_castle
+          sub: rollVillagerSub(),
+          tx: undefined, tz: undefined,
+          moveTarget: undefined,
+          seed: Math.random() * 10,
+          timer: 0
+        });
+      }
+    });
+  }
+  function moveVillagerToward(v, tx, tz, dt, speed) {
+    const dx = tx - v.x, dz = tz - v.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.01) return d;
+    const step = Math.min((speed || VILLAGER_SPEED) * dt, d);
+    v.x += (dx / d) * step;
+    v.z += (dz / d) * step;
+    return d;
+  }
+  function updateVillagerPeaceful(v, h, dt) {
+    if (v.sub === 'wander') {
+      if (v.tx === undefined || Math.hypot(v.x - v.tx, v.z - v.tz) < 3) {
+        v.tx = h.x + (Math.random() - 0.5) * VILLAGER_WANDER_R * 2;
+        v.tz = h.z + (Math.random() - 0.5) * VILLAGER_WANDER_R * 2;
+      }
+      moveVillagerToward(v, v.tx, v.tz, dt, VILLAGER_SPEED * 0.5);
+    } else if (v.sub === 'move_house') {
+      if (v.moveTarget === undefined) {
+        let ni;
+        do { ni = Math.floor(Math.random() * HOUSES.length); } while (ni === v.houseIdx && HOUSES.length > 1);
+        v.moveTarget = ni;
+      }
+      const target = HOUSES[v.moveTarget];
+      const d = moveVillagerToward(v, target.x, target.z, dt, VILLAGER_SPEED * 0.6);
+      if (d < 6) { v.houseIdx = v.moveTarget; v.moveTarget = undefined; v.sub = rollVillagerSub(); v.tx = undefined; }
+    } else { // dance
+      if (v.tx === undefined) {
+        v.tx = PLAZA_X + (Math.random() - 0.5) * VILLAGER_DANCE_R * 2;
+        v.tz = PLAZA_Z + (Math.random() - 0.5) * VILLAGER_DANCE_R * 2;
+      }
+      moveVillagerToward(v, v.tx, v.tz, dt, VILLAGER_SPEED * 0.5); // s'arrête tout seul (d<0.01) une fois arrivé, reste sur place à danser
+    }
+  }
+  function villageDispatchWave() {
+    const pool = state.villagers.filter(v => v.mode === 'sheltering');
+    if (!pool.length) return;
+    // approxime "le plus proche de l'attaquant" : trie par distance au
+    // premier ennemi présent (s'il y en a un) plutôt que d'ordonner au
+    // hasard
+    if (state.enemies.length) {
+      const e0 = state.enemies[0];
+      const ex = e0.r * Math.cos(e0.angle), ez = e0.r * Math.sin(e0.angle);
+      pool.sort((a, b) => Math.hypot(a.x - ex, a.z - ez) - Math.hypot(b.x - ex, b.z - ez));
+    }
+    const n = Math.min(VILLAGER_DISPATCH_BATCH, pool.length);
+    for (let i = 0; i < n; i++) {
+      const v = pool[i];
+      if (Math.random() < VILLAGER_FIGHT_CHANCE) v.mode = 'sallying';
+      else v.mode = Math.random() < VILLAGER_CHURCH_CHANCE ? 'fleeing_church' : 'fleeing_castle';
+      v.timer = 0;
+    }
+  }
+  function villageTriggerPanic() {
+    state.villagePanic = true;
+    // simplification assumée (budget de session) : pas d'animation de fuite
+    // séparée — panique = tout le monde à l'abri d'un coup, "on sait qu'ils
+    // sont rentrés" sans avoir besoin de les voir courir
+    for (const v of state.villagers) if (v.mode === 'peaceful') v.mode = 'sheltering';
+    villageDispatchWave(); // "à la première attaque" — un lot part tout de suite aussi
+  }
+  function updateVillagers(dt) {
+    const doorX = R * Math.cos(DOOR_ANGLE), doorZ = R * Math.sin(DOOR_ANGLE);
+    for (let i = state.villagers.length - 1; i >= 0; i--) {
+      const v = state.villagers[i];
+      if (v.mode === 'peaceful') {
+        updateVillagerPeaceful(v, HOUSES[v.houseIdx], dt);
+      } else if (v.mode === 'sallying') {
+        let bestD = Infinity, ex = v.x, ez = v.z;
+        for (const e of state.enemies) {
+          const px = e.r * Math.cos(e.angle), pz = e.r * Math.sin(e.angle);
+          const d = Math.hypot(v.x - px, v.z - pz);
+          if (d < bestD) { bestD = d; ex = px; ez = pz; }
+        }
+        if (!state.enemies.length) { state.villagers.splice(i, 1); continue; } // plus d'ennemi visible, discrètement réabsorbé
+        const d = moveVillagerToward(v, ex, ez, dt);
+        if (d < 14) { v.mode = 'fighting'; v.timer = 0.5 + Math.random() * 0.4; }
+      } else if (v.mode === 'fighting') {
+        v.timer -= dt;
+        if (v.timer <= 0) state.villagers.splice(i, 1); // clash résolu (gagné ou perdu, cosmétique) — dans les deux cas, il quitte le village
+      } else if (v.mode === 'fleeing_church' && EGLISE_EXTRA) {
+        const d = moveVillagerToward(v, EGLISE_EXTRA.x, EGLISE_EXTRA.z, dt);
+        if (d < 20) { state.villagersHiddenChurch++; state.villagers.splice(i, 1); }
+      } else if (v.mode === 'fleeing_castle') {
+        const d = moveVillagerToward(v, doorX, doorZ, dt);
+        if (d < 16) { state.villagersHiddenCastle++; state.villagers.splice(i, 1); }
+      }
+      // 'sheltering' : à l'abri, rien à mettre à jour tant qu'il n'est pas mobilisé
+    }
+  }
 
   // a stream crossing one of the roads, with a little bridge over it
   // (demandé en session, puis précisé : "doit traverser la carte" — pas
@@ -1813,6 +1953,14 @@
     siegeTimer: SIEGE_CHECK_INTERVAL,
     wave: 1,
     waveState: 'prep', // prep | active | gameover
+    // mécanique des paysans (demandé en session, voir BACKLOG.md pour le
+    // détail complet) : population qui vit dans les maisons, tranquille
+    // tant qu'aucun ennemi n'est encore apparu, puis se met à l'abri et se
+    // fait mobiliser vague après vague — voir initVillagers/updateVillagers.
+    villagers: [],
+    villagePanic: false,       // devient vrai à la toute première apparition d'un ennemi
+    villagersHiddenChurch: 0,  // comptage seulement — ils disparaissent de l'écran en entrant
+    villagersHiddenCastle: 0,  // idem, mais repris dans la vue cosy (même nombre près du feu)
     toSpawn: 0,
     spawnTimer: 0,
     spawnInterval: 0.9,
@@ -1960,6 +2108,7 @@
   function enemyHp(wave) { return 2 + Math.floor(wave / DIFFICULTY_TIERS[difficultyIdx].hpDivisor); }
 
   function spawnEnemy() {
+    if (!state.villagePanic) villageTriggerPanic(); // tout premier ennemi qui apparaît — "à la première attaque"
     const builder = state.buildersToSpawn > 0;
     if (builder) state.buildersToSpawn--;
     const ladder = !builder && state.laddersToSpawn > 0; // never both at once
@@ -2024,6 +2173,7 @@
 
   function startWave() {
     state.waveState = 'active';
+    if (state.villagePanic) villageDispatchWave(); // "vagues suivantes" — un nouveau lot de paysans à l'abri est mobilisé
     state.toSpawn = waveSpawnCount(state.wave);
     // a quick "FIGHT!" banner up top, then the first enemy arrives just as
     // it's fading — instead of enemies spawning the instant the wave starts
@@ -2089,6 +2239,7 @@
     state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
     state.waveState = 'active';
     updateNextWaveBonus();
+    if (state.villagePanic) villageDispatchWave(); // même mobilisation que startWave() quand la vague est appelée en avance
   }
 
   function fire(from, target, dmg) {
@@ -2824,6 +2975,18 @@
     cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
     if (!state.princessDead) cosyPerson(6.4, 4.1, 15, '#f3d6e8', '#a4568c'); // la princesse, si vivante
 
+    // les paysans réfugiés dans le château (state.villagersHiddenCastle) —
+    // demandé en session : "on verra exactement le même nombre de paysans
+    // à côté du feu" — même recette cosyPerson, plus petits, en cercle
+    // autour du foyer ; plafonné pour ne pas déborder de la pièce si le
+    // nombre devient grand (le compte réel reste correct, juste pas tous
+    // dessinés un par un au-delà de ce plafond)
+    const shownVillagers = Math.min(state.villagersHiddenCastle, 10);
+    for (let i = 0; i < shownVillagers; i++) {
+      const ang = (i / Math.max(1, shownVillagers)) * Math.PI * 2;
+      cosyPerson(6.5 + Math.cos(ang) * 0.55, 5.1 + Math.sin(ang) * 0.4, 8, '#d9c48a', '#8a6a42');
+    }
+
     drawCosyCat(t);
   }
 
@@ -2911,6 +3074,8 @@
     const p = state.player;
 
     state.time += dt; // horloge simple, réutilisée par l'animation de l'eau (voir drawWaterGlints)
+
+    updateVillagers(dt); // mécanique des paysans, voir plus haut
 
     // écoulement du ruisseau : avance chaque particule le long de d,
     // boucle en ressortant par l'autre bout (voir drawStreamFlow)
@@ -4397,6 +4562,38 @@
     else drawFontaine(b, rot);
   }
 
+  // les paysans (voir state.villagers/updateVillagers plus haut) : un
+  // simple point (même langage visuel que les pips des maisons-cachettes)
+  // qui bobine sur place en dansant, avec une note de musique flottante —
+  // pas de sprite détaillé, cohérent avec le style filaire minimaliste du
+  // reste du jeu
+  function drawVillager(v, rot) {
+    const dancing = v.mode === 'peaceful' && v.sub === 'dance';
+    const bob = dancing ? Math.abs(Math.sin(state.time * 4 + v.seed)) * 3 : 0;
+    const pos = project(v.x, 1.5 + bob, v.z, rot);
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 2.4 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = (v.mode === 'sallying' || v.mode === 'fighting') ? '#c9503f' : '#d9c48a';
+    ctx.fill();
+    if (dancing) {
+      const cyc = (state.time * 0.5 + v.seed) % 3;
+      if (cyc < 1.2) {
+        const t = cyc / 1.2;
+        const notePos = project(v.x, 8 + bob + t * 10, v.z, rot);
+        ctx.font = `${Math.max(8, Math.round(11 * scale))}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(232,217,168,${(1 - t).toFixed(2)})`;
+        ctx.fillText('♪', notePos.x, notePos.y);
+      }
+    }
+  }
+  function drawVillagers(rot, wantFar) {
+    for (const v of state.villagers) {
+      if (pointFar(v.x, v.z, rot) !== wantFar) continue;
+      drawVillager(v, rot);
+    }
+  }
+
   function drawStreamSeg(seg, rot) {
     const g = streamGeometry();
     const pts = [
@@ -5317,6 +5514,7 @@
     drawStreamFlow(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
     for (const b of farVillageExtras) drawVillageExtra(b, rot);
+    drawVillagers(rot, true);
     for (const b of farBushes) drawBush(b, rot);
     // douves : signalé en session — dessinées en un seul anneau complet
     // AVANT tout le reste (pour l'astuce d'occlusion far/near "gratuite"
@@ -5347,6 +5545,7 @@
     drawStreamFlow(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
     for (const b of nearVillageExtras) drawVillageExtra(b, rot);
+    drawVillagers(rot, false);
     for (const b of nearBushes) drawBush(b, rot);
     if (state.moatLevel > 0) {
       const lvl = state.moatLevel;
@@ -5443,6 +5642,7 @@
     render();
     requestAnimationFrame(loop);
   }
+  initVillagers();
   startWave(); // wave 1 begins immediately, no waiting on an empty screen
   requestAnimationFrame(loop);
 })();
