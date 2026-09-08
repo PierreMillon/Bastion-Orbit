@@ -1423,3 +1423,149 @@ points ; musique coupée/reprise sur `visibilitychange` simulé ; pont
 avec grille de pierre visible sur tablier et murets ; place + bretelles
 + troisième chemin qui convergent clairement vers l'église. Aucune
 erreur console sur l'ensemble des captures.
+
+## Corrections routes/place/pont/ruisseau/douves/jardin + tarifs affichés → fait en v0.63
+
+Grosse rafale de retours après v0.62, certains corrigeant des bugs
+réels trouvés par Pierre en jouant (pas des préférences esthétiques).
+
+1. **Pont : orienté à l'envers** — bug réel. Le premier essai (v0.62)
+   avait les deux axes inversés : le tablier était large dans le sens
+   du COURANT au lieu du sens de la TRAVERSÉE, et les parapets
+   longeaient donc le courant plutôt que la route — "on dirait que
+   l'eau passe sur la route". Corrigé : `BRIDGE_SPAN_HALF` (traversée,
+   axe radial rx,rz) et `BRIDGE_WIDTH_HALF` (largeur de la chaussée,
+   axe tx,tz) au lieu de `BRIDGE_HALF_LEN`/`BRIDGE_HALF_WIDTH`. En
+   volume maintenant (un vrai pilier plein, plus des parois infiniment
+   fines) avec une arche en berceau découpée sur les deux faces amont/
+   aval (`bilerpQuad`, interpolation bilinéaire dans le quad déjà
+   projeté — pas un vrai calcul 3D d'arc, suffisant à cette échelle).
+2. **Bretelles route↔place : croix au lieu d'un raccord propre** — bug
+   réel. Un ruban à deux bords qui rejoint une route existante fait
+   croiser ses deux bords avec les deux bords de la route ("ça fait une
+   croix"). Fix : `drawSingleLinePath`, une ligne simple sans rien à
+   croiser, pour les deux bretelles. Le troisième chemin (place→porte)
+   garde un vrai ruban (il ne touche aucune route existante, pas de
+   risque de croix), avec une largeur alignée sur `DOOR_HALF_WIDTH`
+   (12, la même que le découpage réel de la porte) et un point de
+   départ au rayon R (le donjon lui-même) plutôt que BASE_R — "les
+   deux côtés du chemin doivent toucher les deux bords de la porte".
+3. **Place du village : trop petite, mal placée** — repositionnée et
+   agrandie : cherché numériquement (script à part) le point, dans le
+   vide ENTRE la grange et l'église (pas le premier grand espace vide
+   trouvé n'importe où — une première recherche non bornée dérivait à
+   200+ unités du village), qui maximise la marge par rapport aux deux
+   ET aux 8 maisons. `PLAZA_RADIUS` 46 → 80. "La fontaine c'est la
+   seule exception, elle doit être au centre de la place" — elle n'a
+   plus sa propre position dans `VILLAGE_EXTRAS`, elle utilise
+   `PLAZA_X/Z`.
+4. **Ruisseau : encore plus dense** — 110 → 2200 particules (demandé :
+   "20 fois plus"), et régularité : `d` n'est plus tiré au hasard sur
+   toute la portée mais réparti à intervalles réguliers (petit jitter
+   résiduel, pas une grille parfaitement mécanique). Vérifié : ~51 FPS
+   en jeu avec tout le reste (Playwright, `fpsNum` du menu) — pas de
+   souci de performance à cette densité.
+5. **Jardin (massifs) parfois sur une route** — bug réel trouvé en
+   vérifiant numériquement (pas au jugé) : un massif (a=4.1, r=163)
+   tombait à 15.7 unités du bord de la deuxième route, largement dans
+   sa largeur. Décalé à a=4.4 (>64 unités de marge). Le reste de la
+   remarque ("le jardin doit être entre la base du donjon et le début
+   des douves") n'est PAS appliqué tel quel — ça contredirait le
+   mécanisme d'inondation déjà en place (le jardin s'étend
+   délibérément au-delà des premiers paliers de douves, inondé
+   progressivement à mesure qu'elles grandissent) ; noté honnêtement
+   ici en cas de désaccord persistant une fois ce fix vu en jeu.
+6. **Douves : on voyait les chemins à travers** — bug réel, et pas
+   celui que ça semblait être. Les douves étaient un seul anneau
+   complet dessiné AVANT tout le reste (pour l'astuce d'occlusion
+   far/near "gratuite" du donjon) — donc les routes/la place/le
+   jardin, dessinés après, se repeignaient PAR-DESSUS l'eau. Pas un
+   problème de transparence (l'alpha est de toute façon ignoré par
+   `wrapPhosphor` en Phosphore/Filaire, voir plus haut dans ce
+   fichier) mais d'ORDRE de dessin. Fix : `drawRingHalf`, un demi-
+   anneau (far OU near, comme tout le reste du décor au sol) plutôt
+   qu'un anneau complet, positionné maintenant APRÈS les routes/la
+   place/le jardin mais AVANT les ennemis/engins de siège/ponts/joueur
+   (qui doivent rester visibles sur l'eau). Alpha remonté quand même
+   (0.5-0.8 → 0.85-0.96) pour Couleur (en pause) le jour où il revient.
+7. **Tarifs affichés + boutons grisés si pas assez d'or** — redemandé
+   ("déjà dit, pas fait"). `affordText()` ajoute `(coût)` sur
+   Tourelle/Douves/Jardin/Cheval ; `.unaffordable` (opacité 0.45,
+   choisie sur l'opacité plutôt que la couleur pour rester lisible
+   dans les 3 styles) togglée dès que l'or manque. `refreshBuyButtons()`
+   appelée une fois par frame dans `update()` plutôt que d'accrocher un
+   rafraîchissement à chacun des ~10 endroits qui touchent
+   `state.gold` — plus simple et sans risque d'en oublier un futur.
+8. **Bouton "Vague" fusionné** — l'ancien affichage ("Vague N") et le
+   bouton "Vague +" séparés deviennent un seul bouton : "Vague N → N+1".
+   `updateWaveNum()`, un seul point de mise à jour pour les deux span
+   imbriqués. **Bug trouvé en testant** (pas en relisant le code) :
+   `applyI18nStatic()` écrasait tout le `textContent` du bouton fusionné
+   à chaque bascule de langue ET au chargement, effaçant les span
+   imbriqués (`Cannot set properties of null` en cascade juste après,
+   sur `waveLabel`) — corrigé, ne touche plus que le span `waveLabel`
+   lui-même.
+9. **Icône de pièce d'or retirée** — juste le nombre en haut désormais.
+
+Vérifié en Playwright (style Filaire pur, plusieurs angles de caméra,
+achat/dépense d'or, changement de vague) : pont correctement orienté
+et en volume, bretelles sans croix, place agrandie avec la fontaine en
+son centre, ruisseau très dense sans chute de FPS mesurable, jardin
+écarté de la route, douves sans route visible à travers, boutons avec
+tarif et grisage corrects, bouton Vague fusionné fonctionnel après
+correctif, aucune erreur console.
+
+## Demandes en attente, pas commencées (trop grosses pour cette
+## rafale) — détaillées ici pour ne rien perdre
+
+- **Mécanique des paysans** — chaque maison est "habitée". À la
+  première attaque, ~1 habitant par maison (celle la plus proche de
+  l'attaquant) sort se battre contre l'ennemi, avec 1 chance sur 3 de
+  gagner. Vagues suivantes : les paysans sortent, se battent (même 1/3
+  de chance chacun) ; 1/5 se réfugient dans l'église (disparaissent de
+  l'écran en y entrant — le joueur les a vus sortir de la maison puis
+  entrer dans l'église avant de disparaître, donc sait qu'ils y sont) ;
+  le reste fuit dans le château par la porte du bas (disparaissent de
+  l'écran sauf en ouvrant la vue "intérieur" — 🔥 — où on doit voir
+  exactement ce nombre de paysans près du feu). Avant toute attaque
+  (vague 1 et demie, précisé par Pierre : "à partir du deuxième et
+  demi qui rentre dans la zone"), les villageois vivent normalement :
+  1 à 5 par bâtiment se promènent, ~10% se promènent, ~10% changent de
+  maison, le reste saute en petits groupes sur la place ("une vie qui
+  grouille") avec une petite note de musique au-dessus de ceux qui
+  sont sur la place (ils dansent/font la fête) ; au début d'une
+  attaque, panique et dispersion. Chantier complet : nouvel état
+  "paysan" (spawn par maison, IA sortir/combattre/fuir/errer/danser),
+  résolution de combat (1/3 de chance), comptage de population (église
+  vs château), intégration à la vue cosy (même nombre visible par le
+  feu). Pas commencé — mérite son propre passage dédié, pas à faire en
+  vitesse au milieu d'une rafale de corrections visuelles.
+- **Moulin (watermill)** — une maison avec une roue à aubes posée sur
+  l'eau, qui tourne dans le bon sens par rapport au courant (vrai
+  mécanisme de moulin à eau à rechercher, pas inventé au hasard). Pas
+  commencé.
+- **Ralentissement du seigneur dans les douves en sortie** — 30% de
+  ralentissement en traversant l'eau, réduit à seulement 10% (pas
+  annulé) avec le cheval — confirmé explicitement par Pierre. Pas
+  encore câblé dans `update()`/le mouvement de sortie.
+- **Petit cours d'eau secondaire vers les douves** — dès la
+  construction des douves, un petit cours d'eau (3x moins large que le
+  principal) part en amont du ruisseau existant et se déverse dans les
+  douves. Ses propres particules d'écoulement, réduites (3x moins),
+  qui diminuent PROGRESSIVEMENT jusqu'à zéro en approchant des douves
+  (l'eau y est stagnante — aucune particule ne doit bouger dans les
+  douves elles-mêmes). Pas commencé.
+- **Échiquier 8x8 dans la scène cosy** — le roi et la reine jouent aux
+  échecs : il faut un vrai damier 8x8 avec cases pleines/vides en
+  alternance, pas juste suggéré. Pas commencé (la scène cosy actuelle
+  n'a pas de table de jeu détaillée à ce niveau).
+- **Zoom pincé (pinch-to-zoom) tactile** — mécanique de caméra
+  entièrement nouvelle, décrite en détail par Pierre (zoom classique à
+  deux doigts, ancré sur le point pincé, reste zoomé au relâchement, la
+  rotation par glissement continue de fonctionner normalement mais se
+  sent "plus rapide" une fois zoomé, le centre de rotation reste
+  toujours le donjon, dézoom max = vue actuelle par défaut). Questions
+  restées ouvertes côté implémentation (niveau de zoom max, persistance
+  entre sessions, comportement souris/desktop en plus du tactile) — à
+  clarifier avant de s'y attaquer, chantier séparé (nouvelle gestion
+  multi-touch par-dessus le drag-to-rotate existant, à ne pas casser).

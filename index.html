@@ -164,6 +164,11 @@
      "retour visuel clair sur l'état débloqué/pas débloqué" (demandé) */
   #horseBtn { background: #5a4128; }
   #horseBtn.active { background: #a67c3d; }
+  /* demandé en session : "légèrement grisés... moins opaque" quand on n'a
+     pas assez d'or pour acheter — sur l'opacité du bouton entier plutôt
+     que sa couleur, pour rester lisible dans les 3 styles (couleur/
+     phosphore/filaire) sans dépendre de leurs propres teintes */
+  .unaffordable { opacity: 0.45; }
 
   #menu, #overlay {
     position: fixed;
@@ -455,15 +460,15 @@
 
 <div id="topbar">
   <button id="menuBtn" aria-label="Menu">☰</button>
-  <div class="stat"><span id="waveLabel">Vague</span> <span id="waveNum">1</span></div>
-  <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle">Vague +</button>
-  <div class="stat">🪙 <span id="goldNum">0</span></div>
+  <button id="nextWaveBtn" aria-label="Appeler la vague suivante par-dessus l'actuelle"><span id="waveLabel">Vague</span> <span id="waveNum">1</span> → <span id="waveNextNum">2</span></button>
+  <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.62</button>
+  <button id="versionBtn">v0.63</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.63</b> — pont enfin orienté dans le bon sens (et en volume, avec arche) ; bretelles route-place propres (plus de croix) ; place du village agrandie avec la fontaine en son centre ; ruisseau encore plus dense (2200 particules) ; jardin écarté d'une route ; douves qui masquent enfin vraiment ce qu'il y a dessous ; tarif affiché + bouton grisé si pas assez d'or ; bouton "Vague" fusionné (affichage + action)</div>
   <div><b>v0.62</b> — église deux fois plus grande (repositionnée, aucune collision) ; ruisseau bien plus dense en petites particules ; la musique se coupe enfin quand on quitte l'onglet ; pont en pierre imposant avec parapets et blocs visibles ; place du village + troisième chemin vers la porte ; une ferme au loin pour la profondeur</div>
   <div><b>v0.61</b> — la fontaine a de vrais jets d'eau qui giclent du pilier central ; le ruisseau a des particules qui coulent vraiment le long du chemin (plus de traits perpendiculaires) et des berges bien plus souples ; les nombres flottants (or) sont trois fois plus gros</div>
   <div><b>v0.60</b> — style par défaut : Filaire pur (vert) au lieu de Phosphore pour un nouveau chargement — les réglages déjà sauvegardés ne changent pas</div>
@@ -680,8 +685,11 @@
   function applyI18nStatic() {
     document.documentElement.lang = lang;
     document.getElementById('menuBtn').setAttribute('aria-label', t('menu_aria'));
+    // le bouton "Vague" a fusionné affichage+action (voir la fusion du
+    // bouton plus bas) : ne PLUS écraser tout son textContent ici (ça
+    // effaçait les spans waveNum/waveNextNum imbriqués dedans) — juste
+    // le label, qui est son propre span
     document.getElementById('waveLabel').textContent = t('wave_label');
-    document.getElementById('nextWaveBtn').textContent = t('nextwave_btn');
     document.getElementById('nextWaveBtn').setAttribute('aria-label', t('nextwave_aria'));
     document.getElementById('cosyBtn').setAttribute('aria-label', t('cosy_aria'));
     document.getElementById('repairBtn').textContent = t('repair_btn');
@@ -716,10 +724,12 @@
     updateDifficultyBtn();
     updateSnowBtn();
     updateCameraBtn();
+    updateTowerBtn();
     updateMoatBtn();
     updateGardenBtn();
     updateHorseBtn();
     updatePrincessBtn();
+    updateWaveNum();
   }
 
   // ---- mode phosphore: 'couleur' (rendu d'origine, en pause depuis v0.56)
@@ -1262,6 +1272,12 @@
 
   // the door (and the princess who uses it) sit at this fixed world angle
   const DOOR_ANGLE = 0;
+  // même demi-largeur que le découpage de la porte dans le mur (voir
+  // cutout(DOOR_ANGLE, 1, 12, 22) plus bas) — réutilisée pour que le
+  // troisième chemin (place -> porte) arrive pile à la largeur de la
+  // porte, "les deux côtés du chemin doivent toucher les deux bords de
+  // la porte" (demandé en session)
+  const DOOR_HALF_WIDTH = 12;
 
   // two roads winding in from far out and converging on the wall — a real
   // tactical choice for attackers (demandé en session) : take a road and
@@ -1376,6 +1392,16 @@
     { cost: 200, r: 148 },
     { cost: 500, r: 178 }
   ];
+  // demandé en session : "c'est de l'eau, plein, on ne voit rien en
+  // dessous par transparence" — alpha remonté (0.5-0.8 -> 0.85-0.96),
+  // même si l'essentiel du problème était en fait l'ordre de dessin
+  // (voir drawRingHalf) plutôt que la transparence elle-même
+  const MOAT_SHADES = [
+    'rgba(80,140,188,0.85)',
+    'rgba(52,110,168,0.89)',
+    'rgba(28,82,142,0.93)',
+    'rgba(14,52,102,0.96)'
+  ];
   const FLOODED_PER_TIER = 2; // bush clumps submerged per moat level (of 8)
 
   // a wave slowed by the moat sends a couple of builders next wave to lay
@@ -1432,9 +1458,13 @@
   // remaining visible bushes now sit strictly beyond that level's water
   // radius — the moat used to visually touch/overlap the garden even at
   // level 1, when nothing should be flooded yet.
+  // signalé en session : un massif tombait sur la deuxième route (a=4.1,
+  // r=163 -> à 15.7 unités du bord de la route, largement dans sa
+  // largeur) — vérifié numériquement (script à part) contre les deux
+  // ROAD_ANGLES à chaque rayon, décalé à 4.4 (>64 unités de marge).
   const BUSHES = [
     { a: 3.3, r: 135 }, { a: 1.7, r: 142 }, { a: 5.0, r: 149 }, { a: 0.2, r: 156 },
-    { a: 4.1, r: 163 }, { a: 2.6, r: 170 }, { a: 0.9, r: 177 }, { a: 5.7, r: 184 }
+    { a: 4.4, r: 163 }, { a: 2.6, r: 170 }, { a: 0.9, r: 177 }, { a: 5.7, r: 184 }
   ].map(b => {
     const x = b.r * Math.cos(b.a), z = b.r * Math.sin(b.a);
     const offs = [];
@@ -1528,30 +1558,34 @@
   // yaw modéré (pas complètement aléatoire comme HOUSES) : ce trio est
   // composé à la main avec un espacement calculé pour ne pas se toucher
   // à angle nul — une rotation franche pourrait les faire chevaucher
-  const VILLAGE_EXTRAS = [
-    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: 0.5 },
-    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: -0.35 },
-    { type: 'fontaine', x: VILLAGE_CENTER_X, z: VILLAGE_CENTER_Z - 180 }
-  ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
-
   // place du village + troisième chemin vers la porte (demandé en
   // session : "les deux chemins doivent se lier... arriver quasiment en
   // bas de l'église... sur une sorte de place... à partir de la place il
   // y a un troisième chemin qui va jusqu'en bas de la porte de la tour").
-  // Scope assumé et noté dans BACKLOG.md : purement visuel, superposé
-  // aux deux routes existantes SANS toucher à roadAngleAt/le pathing des
-  // ennemis dessus (déjà réglé/testé tout au long de la session) — le
-  // vrai raccordement du système de routes reste le "gros chantier
-  // routes → centre-ville → donjon" toujours pas commencé.
-  const EGLISE_WORLD_X = VILLAGE_CENTER_X + 120, EGLISE_WORLD_Z = VILLAGE_CENTER_Z + 30;
-  const _eglDist = Math.hypot(EGLISE_WORLD_X, EGLISE_WORLD_Z);
-  // la place est "au pied" de l'église, pas dessus — décalée vers le
-  // donjon le long de la même ligne radiale
-  const PLAZA_X = EGLISE_WORLD_X * (1 - 40 / _eglDist);
-  const PLAZA_Z = EGLISE_WORLD_Z * (1 - 40 / _eglDist);
+  // Repositionnée et agrandie après un premier essai trop petit et
+  // "sous" l'église : cherché numériquement (script à part) le point,
+  // dans le vide entre la grange et l'église (pas juste le plus grand
+  // espace ouvert n'importe où — ça dérivait loin du village), qui
+  // maximise la marge par rapport à la grange, l'église ET les 8
+  // maisons. "La fontaine c'est la seule exception, elle doit être au
+  // centre de la place" — elle n'a donc plus sa propre position, voir
+  // VILLAGE_EXTRAS plus bas.
+  const PLAZA_X = VILLAGE_CENTER_X - 11, PLAZA_Z = VILLAGE_CENTER_Z - 108;
   const PLAZA_R = Math.hypot(PLAZA_X, PLAZA_Z);
-  const PLAZA_RADIUS = 46; // taille de la place elle-même
+  const PLAZA_RADIUS = 80; // marge ~13 unités par rapport à la contrainte la plus proche (l'église)
   const PLAZA_ANGLE = Math.atan2(PLAZA_Z, PLAZA_X);
+
+  const VILLAGE_EXTRAS = [
+    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: 0.5 },
+    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: -0.35 },
+    { type: 'fontaine', x: PLAZA_X, z: PLAZA_Z } // au centre de la place, pas ailleurs
+  ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
+  // Scope assumé et noté dans BACKLOG.md : la place/les chemins vers
+  // elle sont purement visuels, superposés aux deux routes existantes
+  // SANS toucher à roadAngleAt/le pathing des ennemis dessus (déjà
+  // réglé/testé tout au long de la session) — le vrai raccordement du
+  // système de routes reste le "gros chantier routes → centre-ville →
+  // donjon" toujours pas commencé.
 
   // la ferme (demandé en session : "un gros bâtiment et un petit,
   // assez loin, quasiment en limite de vision pour donner de la
@@ -1579,13 +1613,17 @@
   const STREAM_CROSS_R = 180;
   const STREAM_HALF_WIDTH = 11;
   // pont en pierre (demandé en session : "deux fois plus imposant",
-  // "des gros blocs qui font les murs sur les côtés et le sol") — voir
-  // drawStoneBridge/drawStoneGrid plus bas. Tablier deux fois plus large
-  // ET deux fois plus long que l'ancien pont (simple plaque plate, sans
-  // parapets), plus deux murets latéraux texturés en pierre.
-  const BRIDGE_HALF_LEN = 18;                    // le long du chemin (était 9)
-  const BRIDGE_HALF_WIDTH = STREAM_HALF_WIDTH + 8; // en travers (était STREAM_HALF_WIDTH + 4)
-  const BRIDGE_DECK_Y = 2.5;
+  // "des gros blocs qui font les murs sur les côtés et le sol", "en
+  // volume... une sorte d'arche") — voir drawStoneBridge/drawStoneGrid
+  // plus bas. BRIDGE_SPAN_HALF : le sens où on le TRAVERSE (perpendi-
+  // culaire au ruisseau, l'axe radial rx,rz de la route) — doit dépasser
+  // la largeur du ruisseau (STREAM_HALF_WIDTH). BRIDGE_WIDTH_HALF : la
+  // largeur de la chaussée elle-même (l'axe tx,tz, le sens du courant) —
+  // à ne pas confondre avec le premier essai, qui avait les deux
+  // inversés (le pont lisait comme si l'eau passait sur la route).
+  const BRIDGE_SPAN_HALF = 24;   // était BRIDGE_HALF_WIDTH=19, sur le mauvais axe
+  const BRIDGE_WIDTH_HALF = 16;  // était BRIDGE_HALF_LEN=18, sur le mauvais axe
+  const BRIDGE_DECK_Y = 6;       // relevé (2.5 -> 6) pour laisser de la place à l'arche en dessous
   const BRIDGE_WALL_H = 7;
   // demandé en session : le ruisseau doit vraiment serpenter (contrairement
   // aux routes, qu'on veut désormais plus droites) — un simple décalage
@@ -1643,18 +1681,22 @@
   // Même portée fixe que glintSeeds.stream (±400, pas streamHalfLen()) —
   // pas besoin de suivre SPAWN_R, une particule hors de la portion
   // visible ne coûte rien, elle est juste hors-écran.
-  // demandé en session : "beaucoup plus petites et beaucoup plus
-  // nombreuses... partout sur la longueur du cours d'eau, une sorte de
-  // flot infini" — 16 -> 110, rayon de dessin réduit d'autant (voir
-  // drawStreamFlow)
-  const STREAM_FLOW_COUNT = 110;
+  // demandé en session, deux passages : "beaucoup plus petites et
+  // beaucoup plus nombreuses... partout sur la longueur, un flot infini"
+  // (16 -> 110), puis "20 fois plus, une sorte de régularité" (110 ->
+  // 2200) — rayon de dessin déjà réduit en conséquence (drawStreamFlow).
+  // Régularité : `d` n'est plus tiré au hasard sur toute la portée mais
+  // réparti à intervalles réguliers (un petit jitter résiduel pour ne
+  // pas avoir une grille parfaitement mécanique), pareil pour `lat`.
+  const STREAM_FLOW_COUNT = 2200;
   const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
   const STREAM_FLOW_RANGE = 400;
   let streamFlowSeeds = null;
   function ensureStreamFlowSeeds() {
     if (streamFlowSeeds) return;
-    streamFlowSeeds = Array.from({ length: STREAM_FLOW_COUNT }, () => ({
-      d: (Math.random() * 2 - 1) * STREAM_FLOW_RANGE,
+    const step = (2 * STREAM_FLOW_RANGE) / STREAM_FLOW_COUNT;
+    streamFlowSeeds = Array.from({ length: STREAM_FLOW_COUNT }, (_, i) => ({
+      d: -STREAM_FLOW_RANGE + i * step + (Math.random() - 0.5) * step * 0.6,
       lat: (Math.random() * 2 - 1) * STREAM_HALF_WIDTH * 0.7
     }));
   }
@@ -1979,6 +2021,14 @@
   // worth queue up) and pays half of the wave being superseded, valued at
   // its full size (1 kill = 1 gold, so "what it could have paid out") —
   // available from wave 1, no gating
+  // le bouton "Vague" fusionne l'affichage (vague courante) et l'action
+  // (appeler la suivante) — demandé en session : "on a un bouton qui va
+  // dire vague quatre [flèche] cinq". Un seul point de mise à jour pour
+  // les deux span, appelé partout où state.wave change.
+  function updateWaveNum() {
+    document.getElementById('waveNum').textContent = state.wave;
+    document.getElementById('waveNextNum').textContent = state.wave + 1;
+  }
   function callNextWaveEarly() {
     if (state.waveState === 'gameover') return;
     const supersededSize = 3 + state.wave * 2;
@@ -1988,7 +2038,7 @@
     const pw = playerWorld();
     spawnFloatingGold(pw.x, pw.y, pw.z, bonus);
     state.wave++;
-    document.getElementById('waveNum').textContent = state.wave;
+    updateWaveNum();
     state.toSpawn += 3 + state.wave * 2;
     state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
     state.waveState = 'active';
@@ -2374,17 +2424,35 @@
 
   document.getElementById('nextWaveBtn').addEventListener('click', callNextWaveEarly);
 
+  // demandé en session (déjà demandé une fois avant, pas fait) : le
+  // tarif affiché en chiffres sur chaque bouton d'achat, ET le bouton
+  // visiblement grisé (opacité réduite, voir .unaffordable dans le CSS)
+  // quand on n'a pas assez d'or — "rien ne se passe en silence"
+  // s'applique aussi à "pourquoi ce bouton ne fait rien".
+  function affordText(label, cost) { return `${label} (${cost})`; }
+  const TOWER_COST = 5;
+  function updateTowerBtn() {
+    towerBtn.textContent = affordText(t('tower_btn'), TOWER_COST);
+    towerBtn.classList.toggle('unaffordable', state.gold < TOWER_COST);
+  }
   towerBtn.addEventListener('click', () => {
-    if (state.gold < 5 || state.player.behavior !== 'combat') return;
-    state.gold -= 5;
+    if (state.gold < TOWER_COST || state.player.behavior !== 'combat') return;
+    state.gold -= TOWER_COST;
     goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
     oilBtn.disabled = false; // huile bouillante needs an actual turret to pour from
+    updateTowerBtn();
   });
+  updateTowerBtn();
 
   function updateMoatBtn() {
-    if (state.moatLevel >= MOAT_TIERS.length) { moatBtn.textContent = t('moat_max'); moatBtn.disabled = true; }
-    else moatBtn.textContent = t('moat_btn');
+    if (state.moatLevel >= MOAT_TIERS.length) {
+      moatBtn.textContent = t('moat_max'); moatBtn.disabled = true; moatBtn.classList.remove('unaffordable');
+      return;
+    }
+    const cost = MOAT_TIERS[state.moatLevel].cost;
+    moatBtn.textContent = affordText(t('moat_btn'), cost);
+    moatBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   moatBtn.addEventListener('click', () => {
     if (state.moatLevel >= MOAT_TIERS.length) return;
@@ -2398,7 +2466,11 @@
   });
   updateMoatBtn();
 
-  function updateGardenBtn() { gardenBtn.textContent = t('garden_btn'); } // no cap any more, always buyable (funds permitting)
+  function updateGardenBtn() {
+    const cost = gardenCost(state.gardenLevel + 1);
+    gardenBtn.textContent = affordText(t('garden_btn'), cost);
+    gardenBtn.classList.toggle('unaffordable', state.gold < cost);
+  } // no cap any more, always buyable (funds permitting)
   gardenBtn.addEventListener('click', () => {
     const cost = gardenCost(state.gardenLevel + 1);
     if (state.gold < cost) return;
@@ -2413,8 +2485,11 @@
   // explicitement) — "Cheval" avant tout achat, "Cheval N" une fois
   // débloqué, retour visuel immédiat sur l'état débloqué/pas débloqué
   function updateHorseBtn() {
-    horseBtn.textContent = state.horseLevel > 0 ? t('horse_btn') + ' ' + state.horseLevel : t('horse_btn');
+    const cost = horseCost(state.horseLevel + 1);
+    const label = state.horseLevel > 0 ? t('horse_btn') + ' ' + state.horseLevel : t('horse_btn');
+    horseBtn.textContent = affordText(label, cost);
     horseBtn.classList.toggle('active', state.horseLevel > 0);
+    horseBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   horseBtn.addEventListener('click', () => {
     const cost = horseCost(state.horseLevel + 1);
@@ -2426,6 +2501,16 @@
     updateHorseBtn();
   });
   updateHorseBtn();
+  // l'affordabilité (grisé/pas grisé) dépend de l'or, qui change à plein
+  // d'endroits différents (kills, revenu du jardin, achats...) — plutôt
+  // que d'accrocher un rafraîchissement à chacun, un seul endroit qui
+  // tourne déjà à chaque frame (voir l'appel dans update())
+  function refreshBuyButtons() {
+    updateTowerBtn();
+    updateMoatBtn();
+    updateGardenBtn();
+    updateHorseBtn();
+  }
 
   function updatePrincessBtn() {
     if (state.princessDead) { princessBtn.textContent = '†'; princessBtn.disabled = true; return; }
@@ -2788,6 +2873,7 @@
     }
 
     updateSnow(dt);
+    refreshBuyButtons(); // affordabilité (tarif + grisé) — voir le commentaire à sa définition
 
     if (state.fightBanner > 0) state.fightBanner = Math.max(0, state.fightBanner - dt);
 
@@ -3169,7 +3255,7 @@
       // be broken (ranged, slowly, or sortied against, faster) before the
       // wave is truly over.
       state.wave++;
-      document.getElementById('waveNum').textContent = state.wave;
+      updateWaveNum();
       // a breather between waves: half of whatever's missing comes back,
       // never a full reset — for the lord and, if she's still alive, the
       // princess too. Only on an actual clear, not a manual early call
@@ -3556,31 +3642,42 @@
     }
   }
 
-  // a flat ring of water: two concentric polygons filled with the
-  // even-odd rule, which punches the inner one out as a hole regardless
-  // of winding — used for both the active moat and the next-tier preview
-  function drawRingBand(innerR, outerR, rot, color) {
-    const outerPts = circlePts.map(c => project(outerR * c.cx, 0, outerR * c.cz, rot));
-    const innerPts = circlePts.map(c => project(innerR * c.cx, 0, innerR * c.cz, rot));
+  // demi-anneau (far OU near, pas les deux) — signalé en session : les
+  // douves étaient dessinées en un seul anneau complet, TOUJOURS avant
+  // les routes/la place/le jardin (pour profiter du même tour de passe-
+  // passe d'occlusion que le donjon), donc leur moitié PROCHE se faisait
+  // ensuite repeindre par-dessus par tout ce qui se dessine après —
+  // "on voit les chemins à travers l'eau". Un anneau plein ne peut pas
+  // se découper proprement en deux — un demi-anneau ("C") tracé arc
+  // extérieur (aller) + arc intérieur (retour), un seul contour fermé,
+  // se remplit directement (pas besoin d'evenodd).
+  function drawRingHalf(innerR, outerR, rot, color, wantFar) {
+    const startA = wantFar ? rot + Math.PI / 2 : rot - Math.PI / 2;
+    const endA = wantFar ? rot + Math.PI * 1.5 : rot + Math.PI / 2;
+    const pts = [];
+    for (let i = 0; i <= N_SEG; i++) {
+      const a = startA + (endA - startA) * (i / N_SEG);
+      pts.push(project(outerR * Math.cos(a), 0, outerR * Math.sin(a), rot));
+    }
+    for (let i = N_SEG; i >= 0; i--) {
+      const a = startA + (endA - startA) * (i / N_SEG);
+      pts.push(project(innerR * Math.cos(a), 0, innerR * Math.sin(a), rot));
+    }
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(outerPts[0].x, outerPts[0].y);
-    for (let i = 1; i < outerPts.length; i++) ctx.lineTo(outerPts[i].x, outerPts[i].y);
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
-    ctx.moveTo(innerPts[0].x, innerPts[0].y);
-    for (let i = 1; i < innerPts.length; i++) ctx.lineTo(innerPts[i].x, innerPts[i].y);
-    ctx.closePath();
-    ctx.fill('evenodd');
+    ctx.fill();
   }
-
-  // reflets scintillants sur les douves — dessinés juste après le
-  // remplissage de l'anneau (même endroit, avant le donjon), pour
-  // profiter du même tour de passe-passe d'occlusion que drawRingBand :
-  // le donjon, opaque, dessiné plus tard par-dessus, masque naturellement
-  // la moitié éloignée sans avoir besoin de split far/near explicite ici.
-  function drawMoatGlints(innerR, outerR, rot) {
+  // reflets scintillants sur les douves — même split far/near que le
+  // demi-anneau ci-dessus désormais (wantFar), pour rester du bon côté
+  // de la moitié d'eau à laquelle ils appartiennent
+  function drawMoatGlints(innerR, outerR, rot, wantFar) {
     ensureGlintSeeds();
     for (const g of glintSeeds.moat) {
+      const isFar = Math.cos(g.angle - rot) < 0;
+      if (isFar !== wantFar) continue;
       const flick = Math.sin(state.time * g.speed + g.phase);
       if (flick < GLINT_FLICKER_THRESHOLD) continue;
       const alpha = (flick - GLINT_FLICKER_THRESHOLD) / (1 - GLINT_FLICKER_THRESHOLD);
@@ -4315,41 +4412,94 @@
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
   }
-  // pont en pierre (demandé en session, voir BRIDGE_* plus haut) : un
-  // tablier (sol) plus large/plus long qu'avant, plus deux murets
-  // latéraux — tablier et murets texturés en gros blocs (drawStoneGrid)
-  // plutôt qu'un aplat uni, pour qu'on voie vraiment les pierres.
+  // interpolation bilinéaire à l'intérieur d'un quad déjà projeté à
+  // l'écran (mêmes 4 coins que drawStoneGrid, p00=u0v0 bas-gauche,
+  // p10=u1v0 bas-droit, p01=u0v1 haut-gauche, p11=u1v1 haut-droit) —
+  // sert à placer l'arche du pont (voir plus bas) en suivant la
+  // perspective/l'axonométrie du quad plutôt qu'à plat.
+  function bilerpQuad(p00, p10, p01, p11, u, v) {
+    const top = { x: p00.x + (p10.x - p00.x) * u, y: p00.y + (p10.y - p00.y) * u };
+    const bot = { x: p01.x + (p11.x - p01.x) * u, y: p01.y + (p11.y - p01.y) * u };
+    return { x: top.x + (bot.x - top.x) * v, y: top.y + (bot.y - top.y) * v };
+  }
+  // pont en pierre (demandé en session, voir BRIDGE_* plus haut) —
+  // corrigé après un premier essai qui avait les deux axes inversés :
+  // le tablier doit être LONG dans le sens où on le traverse (perpen-
+  // diculaire au ruisseau — rx,rz, l'axe radial de la route) et
+  // relativement ÉTROIT dans l'autre sens (tx,tz, le sens du courant —
+  // c'est la largeur de la chaussée, pas celle du ruisseau). L'inverse
+  // donnait un tablier large aligné avec le courant et des parapets
+  // dans le mauvais sens, qui lisait comme si l'eau passait SUR la
+  // route. Maintenant en volume (un vrai pilier plein, pas des parois
+  // infiniment fines) avec une arche en pierre grossière — la même
+  // idée que collectBoxRoof (4 murs + tri par profondeur) mais avec
+  // une ouverture en berceau découpée sur les deux faces amont/aval
+  // (là où on peut voir sous le pont), pas juste un bloc plein.
   function drawStoneBridge(rot) {
     const g = streamGeometry();
     const { cx, cz, tx, tz, rx, rz } = g;
     const toWorld = (lr, lt) => ({ x: cx + rx * lr + tx * lt, z: cz + rz * lr + tz * lt });
-    const deckCorners = [
-      [-BRIDGE_HALF_WIDTH, -BRIDGE_HALF_LEN], [BRIDGE_HALF_WIDTH, -BRIDGE_HALF_LEN],
-      [BRIDGE_HALF_WIDTH, BRIDGE_HALF_LEN], [-BRIDGE_HALF_WIDTH, BRIDGE_HALF_LEN]
-    ];
-    const deckPts = deckCorners.map(([lr, lt]) => {
-      const w = toWorld(lr, lt);
-      return project(w.x, BRIDGE_DECK_Y, w.z, rot);
-    });
+    const spanHalf = BRIDGE_SPAN_HALF, widthHalf = BRIDGE_WIDTH_HALF;
+
+    // le pilier : un bloc plein de l'eau (y=0) jusqu'au tablier
+    const corners = [[-spanHalf, -widthHalf], [spanHalf, -widthHalf], [spanHalf, widthHalf], [-spanHalf, widthHalf]];
+    const base = corners.map(([lr, lt]) => { const w = toWorld(lr, lt); return project(w.x, 0, w.z, rot); });
+    const top = corners.map(([lr, lt]) => { const w = toWorld(lr, lt); return project(w.x, BRIDGE_DECK_Y, w.z, rot); });
+    const pierQuads = [];
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      pierQuads.push({ depth: base[i].depth + base[j].depth, pts: [base[i], base[j], top[j], top[i]], side: i });
+    }
+    pierQuads.sort((a, b) => a.depth - b.depth);
+    for (const q of pierQuads) { ctx.fillStyle = '#7c766a'; buildQuad(q.pts); }
+
+    // l'arche : découpée sur les deux faces amont/aval (i=1 et i=3 dans
+    // `corners`, celles qui longent le ruisseau) — une forme en
+    // berceau (départs droits + demi-cercle) dans la couleur de l'eau,
+    // pour qu'on voie vraiment à travers plutôt qu'un bloc plein
+    for (const i of [1, 3]) {
+      const j = (i + 1) % 4;
+      const p00 = base[i], p10 = base[j], p01 = top[i], p11 = top[j];
+      const archPts = [];
+      const ARCH_INSET = 0.22, ARCH_SPRING = 0.5, ARCH_STEPS = 10;
+      archPts.push(bilerpQuad(p00, p10, p01, p11, ARCH_INSET, 0));
+      archPts.push(bilerpQuad(p00, p10, p01, p11, ARCH_INSET, ARCH_SPRING));
+      for (let s = 0; s <= ARCH_STEPS; s++) {
+        const ang = Math.PI - (s / ARCH_STEPS) * Math.PI;
+        const u = 0.5 + Math.cos(ang) * (0.5 - ARCH_INSET);
+        const v = ARCH_SPRING + Math.sin(ang) * (1 - ARCH_SPRING) * 0.85;
+        archPts.push(bilerpQuad(p00, p10, p01, p11, u, v));
+      }
+      archPts.push(bilerpQuad(p00, p10, p01, p11, 1 - ARCH_INSET, ARCH_SPRING));
+      archPts.push(bilerpQuad(p00, p10, p01, p11, 1 - ARCH_INSET, 0));
+      ctx.fillStyle = '#3a5266';
+      buildQuad(archPts);
+    }
+    // grille de joints sur les faces amont/aval restantes (autour de
+    // l'arche, comme une vraie culée) et sur les deux extrémités
+    for (const q of pierQuads) drawStoneGrid(q.pts[0], q.pts[1], q.pts[2], q.pts[3], q.side % 2 === 0 ? 5 : 3, 3, 'rgba(45,40,35,0.5)');
+
+    // le tablier : long dans le sens où on le traverse (rx,rz)
+    const deckCorners = [[-spanHalf, -widthHalf], [spanHalf, -widthHalf], [spanHalf, widthHalf], [-spanHalf, widthHalf]];
+    const deckPts = deckCorners.map(([lr, lt]) => { const w = toWorld(lr, lt); return project(w.x, BRIDGE_DECK_Y, w.z, rot); });
     ctx.fillStyle = '#8f8a7c';
     buildQuad(deckPts);
-    drawStoneGrid(deckPts[0], deckPts[1], deckPts[2], deckPts[3], 3, 9, 'rgba(55,50,44,0.55)');
+    drawStoneGrid(deckPts[0], deckPts[1], deckPts[2], deckPts[3], 9, 3, 'rgba(55,50,44,0.55)');
 
-    // parapets : un muret de chaque côté, du niveau du tablier jusqu'à
-    // BRIDGE_WALL_H plus haut — un seul quad par côté (pas d'épaisseur
-    // simulée en 3D, comme le reste du décor plat du jeu), texturé
-    // pierre comme le tablier
+    // parapets : le long du sens de traversée (rx,rz), un de chaque
+    // côté de la chaussée (tx=±widthHalf) — dans le bon axe cette
+    // fois, superposés au pilier/à l'arche juste en dessous
     const topY = BRIDGE_DECK_Y + BRIDGE_WALL_H;
     for (const side of [-1, 1]) {
-      const lr = side * BRIDGE_HALF_WIDTH;
-      const wBase0 = toWorld(lr, -BRIDGE_HALF_LEN), wBase1 = toWorld(lr, BRIDGE_HALF_LEN);
+      const lt = side * widthHalf;
+      const wBase0 = toWorld(-spanHalf, lt), wBase1 = toWorld(spanHalf, lt);
       const p0 = project(wBase0.x, BRIDGE_DECK_Y, wBase0.z, rot);
       const p1 = project(wBase1.x, BRIDGE_DECK_Y, wBase1.z, rot);
       const p2 = project(wBase1.x, topY, wBase1.z, rot);
       const p3 = project(wBase0.x, topY, wBase0.z, rot);
       ctx.fillStyle = '#7c766a';
       buildQuad([p0, p1, p2, p3]);
-      drawStoneGrid(p0, p1, p2, p3, 6, 2, 'rgba(45,40,35,0.6)');
+      drawStoneGrid(p0, p1, p2, p3, 9, 2, 'rgba(45,40,35,0.6)');
     }
   }
   function drawStreamExtras(rot) {
@@ -4573,6 +4723,23 @@
   // bretelles place<->routes et le troisième chemin place->porte, qui
   // n'ont pas besoin du serpentage/cache des deux routes principales
   // (voir roadSegs/roadRuns), juste deux points reliés.
+  // bretelle route<->place : une SEULE ligne (pas un ruban à deux bords)
+  // — signalé en session : un ruban qui rejoint une route existante fait
+  // croiser ses deux bords avec les deux bords de la route, ça dessine
+  // une croix au lieu d'un raccord propre. Une ligne simple n'a rien à
+  // croiser, elle rejoint juste le bord de la place, lisible comme un
+  // vrai embranchement plutôt qu'un carrefour en X.
+  function drawSingleLinePath(x0, z0, x1, z1, rot) {
+    const p0 = project(x0, 0.5, z0, rot), p1 = project(x1, 0.5, z1, rot);
+    ctx.lineWidth = Math.max(1, 1.2 * scale);
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+  }
+  // le troisième chemin (place -> porte), lui, garde un vrai ruban à
+  // deux bords : demandé explicitement que "les deux côtés du chemin
+  // doivent toucher les deux bords de la porte" — largeur alignée sur
+  // celle de la porte elle-même (voir DOOR_HALF_WIDTH), pas la largeur
+  // générique des routes (ROAD_WIDTH). N'entre en contact avec aucune
+  // des deux routes existantes, donc pas de risque de croix ici.
   function drawSimpleRoadPath(x0, z0, x1, z1, halfWidth, rot) {
     const dx = x1 - x0, dz = z1 - z0;
     const len = Math.hypot(dx, dz) || 1;
@@ -4593,19 +4760,31 @@
 
   // place du village + troisième chemin vers la porte (voir PLAZA_*/
   // "place du village" plus haut pour le contexte et le scope assumé) :
-  // une bretelle depuis chacune des deux routes existantes (prise au
-  // même rayon que la place — le point le plus proche par construction),
-  // la place elle-même (un N-gone, même langage que la fontaine), et le
-  // troisième chemin qui continue jusqu'au pied de la porte.
+  // une bretelle (ligne simple) depuis chacune des deux routes
+  // existantes jusqu'au BORD de la place (pas son centre — la fontaine y
+  // est, on ne veut pas qu'une bretelle la traverse), la place elle-même
+  // (un N-gone, même langage que l'ancienne fontaine), et le troisième
+  // chemin qui continue du bord de la place jusqu'à la porte PILE POIL
+  // (rayon R, pas BASE_R — R est le rayon du donjon lui-même, là où la
+  // porte est vraiment découpée dans le mur, voir cutout(DOOR_ANGLE...)
+  // plus bas ; largeur alignée sur DOOR_HALF_WIDTH).
+  function plazaEdgePoint(towardAngle) {
+    return { x: PLAZA_X + PLAZA_RADIUS * Math.cos(towardAngle), z: PLAZA_Z + PLAZA_RADIUS * Math.sin(towardAngle) };
+  }
   function drawPlazaAndPaths(rot) {
     for (let idx = 0; idx < 2; idx++) {
       const a = roadAngleAt(idx, PLAZA_R);
-      drawSimpleRoadPath(PLAZA_R * Math.cos(a), PLAZA_R * Math.sin(a), PLAZA_X, PLAZA_Z, ROAD_WIDTH, rot);
+      const roadPt = { x: PLAZA_R * Math.cos(a), z: PLAZA_R * Math.sin(a) };
+      const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
+      const edge = plazaEdgePoint(edgeAngle);
+      drawSingleLinePath(roadPt.x, roadPt.z, edge.x, edge.z, rot);
     }
-    const doorX = BASE_R * Math.cos(DOOR_ANGLE), doorZ = BASE_R * Math.sin(DOOR_ANGLE);
-    drawSimpleRoadPath(PLAZA_X, PLAZA_Z, doorX, doorZ, ROAD_WIDTH, rot);
+    const doorX = R * Math.cos(DOOR_ANGLE), doorZ = R * Math.sin(DOOR_ANGLE);
+    const doorEdgeAngle = Math.atan2(doorZ - PLAZA_Z, doorX - PLAZA_X);
+    const startEdge = plazaEdgePoint(doorEdgeAngle);
+    drawSimpleRoadPath(startEdge.x, startEdge.z, doorX, doorZ, DOOR_HALF_WIDTH, rot);
 
-    const N = 10, pts = [];
+    const N = 14, pts = [];
     for (let i = 0; i < N; i++) {
       const a = (i / N) * Math.PI * 2;
       pts.push(project(PLAZA_X + PLAZA_RADIUS * Math.cos(a), 0.5, PLAZA_Z + PLAZA_RADIUS * Math.sin(a), rot));
@@ -4891,18 +5070,9 @@
 
     // active moat: real water filling the whole slowed zone, once at least
     // one tier is bought — darkens/deepens with level (also stronger slow
-    // and, from level 3, a slow chip of damage — see update())
-    if (state.moatLevel > 0) {
-      const lvl = state.moatLevel;
-      const shade = [
-        'rgba(90,150,195,0.5)',
-        'rgba(60,120,175,0.58)',
-        'rgba(35,90,150,0.68)',
-        'rgba(18,60,110,0.8)'
-      ][lvl - 1];
-      drawRingBand(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, shade);
-      drawMoatGlints(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot);
-    }
+    // and, from level 3, a slow chip of damage — see update()). Dessinée
+    // plus bas en deux demi-anneaux far/near (voir drawRingHalf) — plus
+    // ici en un seul anneau complet, voir le commentaire sur place.
 
     // building/extending the moat floods the garden: it submerges the
     // first FLOODED_PER_TIER*moatLevel clumps outright (they're just not
@@ -4964,6 +5134,19 @@
     for (const h of farHouses) drawHouse(h, rot);
     for (const b of farVillageExtras) drawVillageExtra(b, rot);
     for (const b of farBushes) drawBush(b, rot);
+    // douves : signalé en session — dessinées en un seul anneau complet
+    // AVANT tout le reste (pour l'astuce d'occlusion far/near "gratuite"
+    // du donjon), ce qui faisait que les routes/le jardin, dessinés
+    // après, se repeignaient PAR-DESSUS l'eau — "on voit les chemins à
+    // travers". Maintenant en demi-anneau (drawRingHalf), placé ici :
+    // après tout ce qui doit disparaître sous l'eau (routes, place,
+    // jardin, maisons), avant tout ce qui doit rester visible dessus
+    // (ennemis, engins de siège, ponts, joueur).
+    if (state.moatLevel > 0) {
+      const lvl = state.moatLevel;
+      drawRingHalf(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, MOAT_SHADES[lvl - 1], true);
+      drawMoatGlints(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, true);
+    }
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
     for (const br of farBridges) drawBridge(br, rot);
@@ -4980,8 +5163,13 @@
     drawStreamFlow(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
     for (const b of nearVillageExtras) drawVillageExtra(b, rot);
-    for (const e of near) drawEnemy(e, rot);
     for (const b of nearBushes) drawBush(b, rot);
+    if (state.moatLevel > 0) {
+      const lvl = state.moatLevel;
+      drawRingHalf(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, MOAT_SHADES[lvl - 1], false);
+      drawMoatGlints(BASE_R + 4, MOAT_TIERS[lvl - 1].r, rot, false);
+    }
+    for (const e of near) drawEnemy(e, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
     for (const br of nearBridges) drawBridge(br, rot);
     if (princessNear) drawPrincess(rot);
