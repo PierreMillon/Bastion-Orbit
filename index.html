@@ -309,62 +309,29 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 22px;
-    background: radial-gradient(ellipse at 50% 65%, #3a2415 0%, #1c1108 60%, #0c0704 100%);
+    gap: 16px;
+    background: #0c0704;
   }
   #cosyOverlay[hidden] { display: none; }
-  #cosyRoom {
-    position: relative;
-    width: min(320px, 86vw);
-    height: 220px;
+  /* la vraie scène isométrique (v0.49) — dessinée en direct sur ce
+     canvas, même recette que le donjon extérieur (dégradés radiaux,
+     quadrilatères facettés triés en profondeur) plutôt qu'en emoji.
+     Toujours en couleurs chaudes, même en phosphore/filaire dehors —
+     l'opposition de ton (repos à l'intérieur / urgence dehors, notée
+     dans BACKLOG) ne fonctionnerait pas en vert monochrome. */
+  #cosyCanvas {
+    width: min(560px, 92vw);
+    height: min(380px, 58vh);
+    border-radius: 6px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   }
-  .cosyFireGlow {
-    position: absolute;
-    left: 50%;
-    bottom: 18px;
-    width: 180px;
-    height: 180px;
-    transform: translateX(-50%);
-    background: radial-gradient(circle, rgba(255,150,60,0.55) 0%, rgba(255,150,60,0) 70%);
-    animation: cosyFlicker 2.4s ease-in-out infinite;
-  }
-  .cosyFire {
-    position: absolute;
-    left: 50%;
-    bottom: 20px;
-    transform: translateX(-50%);
-    font-size: 34px;
-    animation: cosyFlicker 1.6s ease-in-out infinite;
-  }
-  .cosyChessTable {
-    position: absolute;
-    left: 50%;
-    bottom: 78px;
-    transform: translateX(-50%);
-    font-size: 15px;
-    opacity: 0.8;
-    color: #d9b98a;
-  }
-  .cosyKing, .cosyPrincess {
-    position: absolute;
-    bottom: 55px;
-    font-size: 30px;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
-  }
-  .cosyKing { left: 32%; transform: translateX(-50%) scaleX(-1); }
-  .cosyPrincess { left: 68%; transform: translateX(-50%); }
   .cosyCaption {
-    position: absolute;
-    left: 50%;
-    bottom: 0;
-    transform: translateX(-50%);
-    width: 100%;
-    text-align: center;
     color: #d9b98a;
     font-size: 12px;
     font-style: italic;
+    text-align: center;
+    max-width: 90vw;
   }
-  @keyframes cosyFlicker { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
   #cosyClose {
     padding: 10px 22px;
     border-radius: 10px;
@@ -462,10 +429,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.48</button>
+  <button id="versionBtn">v0.49</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.49</b> — la vue "cosy" (bouton 🔥) devient la vraie scène d'intérieur : escalier, tonneaux, foyer qui vacille, roi/princesse dessinés comme le reste du jeu — plus d'emoji ; un chat s'y promène et ronronne</div>
   <div><b>v0.48</b> — l'eau (douves, ruisseau) scintille : reflets qui clignotent au hasard à la surface, choisis parmi 5 maquettes comparées</div>
   <div><b>v0.47</b> — donjon à 12 facettes (au lieu de 24) ; tir du seigneur depuis les remparts ×2 ("dans l'axe", pas la sortie) — difficulté rééquilibrée en conséquence ; écran de fin (fausse alerte + défaite) enfin dans le thème phosphore, plus de jaune/rouge criard</div>
   <div><b>v0.46</b> — courbe de difficulté retravaillée (simulateur headless à l'appui, voir sim/) : les ennemis gagnent des PV avec les vagues au lieu de rester à 2 PV plat pour toujours, une vague sur cinq est allégée (répit avant chaque poussée)</div>
@@ -542,14 +510,8 @@
 <audio id="bgMusic" src="music.wav" loop preload="none"></audio>
 
 <div id="cosyOverlay" hidden>
-  <div id="cosyRoom">
-    <div class="cosyFireGlow"></div>
-    <div class="cosyFire">🔥</div>
-    <div class="cosyChessTable">♟</div>
-    <div class="cosyKing">🤴</div>
-    <div class="cosyPrincess" id="cosyPrincess">👸</div>
-    <div class="cosyCaption">Un instant de calme au coin du feu — dehors, la bataille continue.</div>
-  </div>
+  <canvas id="cosyCanvas" width="1400" height="950"></canvas>
+  <div class="cosyCaption">Un instant de calme au coin du feu — dehors, la bataille continue.</div>
   <button id="cosyClose">Retour au mur</button>
 </div>
 
@@ -901,6 +863,33 @@
   // higher-pitched, metallic — deliberately distinct from the low wooden
   // hammer thud, so it reads as "nothing to fix here" rather than a hit
   const playRepairMaxed = () => beep({ freq: 900, freqEnd: 620, dur: 0.1, type: 'square', vol: 0.28 });
+  // ronronnement du chat de la vue "cosy" (demandé en session) : beep()
+  // ne fait qu'une seule enveloppe simple, pas assez pour un vrai
+  // ronron — ici une porteuse grave (sawtooth) modulée en amplitude par
+  // un second oscillateur à ~26Hz, la cadence caractéristique d'un
+  // ronronnement de chat (modulation d'amplitude standard en Web Audio :
+  // la sortie du LFO, via un gain, alimente directement le paramètre
+  // .gain de la porteuse plutôt que sa propre destination).
+  function playPurr() {
+    if (!actx) return;
+    const t0 = actx.currentTime, dur = 1.5;
+    const carrier = actx.createOscillator();
+    carrier.type = 'sawtooth';
+    carrier.frequency.setValueAtTime(105, t0);
+    const mainGain = actx.createGain();
+    mainGain.gain.setValueAtTime(0.0001, t0);
+    mainGain.gain.exponentialRampToValueAtTime(0.05, t0 + 0.3);
+    mainGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const lfo = actx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(26, t0);
+    const lfoGain = actx.createGain();
+    lfoGain.gain.value = 0.04;
+    lfo.connect(lfoGain).connect(mainGain.gain);
+    carrier.connect(mainGain).connect(actx.destination);
+    carrier.start(t0); lfo.start(t0);
+    carrier.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+  }
 
   // ---- world constants ----
   const R = 49;                 // donjon (main tower) radius
@@ -2033,16 +2022,190 @@
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
 
-  // vue "cosy" : un rideau purement visuel — pas de pause, pas de règles à
-  // part (voir le commentaire CSS sur #cosyOverlay). La princesse n'y
-  // apparaît que si elle est encore vivante.
+  // vue "cosy" : un rideau visuel — pas de pause, pas de règles à part
+  // (voir le commentaire CSS sur #cosyOverlay), le jeu continue derrière.
+  // v0.49 : la vraie scène isométrique (style "B" choisi par Pierre parmi
+  // 3 maquettes comparées — voir BACKLOG.md), dessinée en direct sur son
+  // propre petit canvas, indépendant du jeu extérieur (pas de couplage à
+  // project()/scale/rot du donjon — juste un repère local à cette pièce).
   const cosyOverlay = document.getElementById('cosyOverlay');
-  const cosyPrincess = document.getElementById('cosyPrincess');
+  const cosyCanvas = document.getElementById('cosyCanvas');
+  const cosyCtx = cosyCanvas.getContext('2d');
+  const COSY_W = cosyCanvas.width, COSY_H = cosyCanvas.height;
+  const cosyCosIso = Math.cos(Math.PI / 6), cosySinIso = Math.sin(Math.PI / 6);
+  const COSY_OX = COSY_W * 0.42, COSY_OY = COSY_H * 0.3, COSY_SCALE = 62;
+  function cosyIso(x, y, z) {
+    return {
+      x: COSY_OX + (x - z) * cosyCosIso * COSY_SCALE,
+      y: COSY_OY + (x + z) * cosySinIso * COSY_SCALE - y * COSY_SCALE
+    };
+  }
+  function cosyQuad(pts, fill) {
+    cosyCtx.beginPath();
+    cosyCtx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) cosyCtx.lineTo(pts[i].x, pts[i].y);
+    cosyCtx.closePath();
+    cosyCtx.fillStyle = fill;
+    cosyCtx.fill();
+  }
+  function cosyPerson(x, z, rad, cA, cB) {
+    const pos = cosyIso(x, 0.35, z);
+    cosyCtx.shadowColor = 'rgba(0,0,0,0.5)';
+    cosyCtx.shadowBlur = 16;
+    const g = cosyCtx.createRadialGradient(pos.x - rad * 0.35, pos.y - rad * 0.4, 1, pos.x, pos.y, rad);
+    g.addColorStop(0, cA); g.addColorStop(1, cB);
+    cosyCtx.fillStyle = g;
+    cosyCtx.beginPath(); cosyCtx.arc(pos.x, pos.y, rad, 0, Math.PI * 2); cosyCtx.fill();
+    cosyCtx.shadowBlur = 0;
+  }
+
+  // le chat : erre sur le sol de la pièce, s'arrête de temps en temps et
+  // ronronne (demandé en session) — même vocabulaire d'IA simple que la
+  // patrouille de créneaux du seigneur (cible aléatoire, ease, pause)
+  const cosyCat = { x: 3.2, z: 3.4, tx: 3.2, tz: 3.4, pauseTimer: 1.5, purrCooldown: 3 };
+  function cosyPickCatTarget() {
+    cosyCat.tx = 0.9 + Math.random() * 5.2;
+    cosyCat.tz = 0.9 + Math.random() * 5.2;
+  }
+  function updateCosyCat(dt) {
+    if (cosyCat.pauseTimer > 0) {
+      cosyCat.pauseTimer -= dt;
+      if (cosyCat.pauseTimer <= 0) cosyPickCatTarget();
+    } else {
+      const dx = cosyCat.tx - cosyCat.x, dz = cosyCat.tz - cosyCat.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.12) {
+        cosyCat.pauseTimer = 2.5 + Math.random() * 3.5;
+      } else {
+        const sp = 0.85;
+        cosyCat.x += (dx / d) * sp * dt;
+        cosyCat.z += (dz / d) * sp * dt;
+      }
+    }
+    // ronronne pendant les pauses (assis), pas en marchant — cadence
+    // propre, pas liée au minuteur de pause lui-même
+    cosyCat.purrCooldown -= dt;
+    if (cosyCat.pauseTimer > 0 && cosyCat.purrCooldown <= 0) {
+      playPurr();
+      cosyCat.purrCooldown = 5 + Math.random() * 4;
+    }
+  }
+  function drawCosyCat(t) {
+    const sitting = cosyCat.pauseTimer > 0;
+    const bob = sitting ? Math.sin(t * 8) * 0.025 : Math.abs(Math.sin(t * 7)) * 0.05;
+    const pos = cosyIso(cosyCat.x, 0.13 + bob, cosyCat.z);
+    const rad = 15;
+    const g = cosyCtx.createRadialGradient(pos.x - rad * 0.3, pos.y - rad * 0.3, 1, pos.x, pos.y, rad);
+    g.addColorStop(0, '#e8a94f'); g.addColorStop(1, '#8a5a24');
+    cosyCtx.fillStyle = g;
+    cosyCtx.beginPath(); cosyCtx.arc(pos.x, pos.y, rad, 0, Math.PI * 2); cosyCtx.fill();
+    cosyCtx.fillStyle = '#8a5a24';
+    cosyCtx.beginPath(); cosyCtx.moveTo(pos.x - 10, pos.y - 11); cosyCtx.lineTo(pos.x - 4, pos.y - 22); cosyCtx.lineTo(pos.x, pos.y - 11); cosyCtx.fill();
+    cosyCtx.beginPath(); cosyCtx.moveTo(pos.x, pos.y - 11); cosyCtx.lineTo(pos.x + 4, pos.y - 22); cosyCtx.lineTo(pos.x + 10, pos.y - 11); cosyCtx.fill();
+    cosyCtx.strokeStyle = '#8a5a24'; cosyCtx.lineWidth = 4; cosyCtx.lineCap = 'round';
+    cosyCtx.beginPath();
+    cosyCtx.moveTo(pos.x + rad * 0.7, pos.y + 3);
+    cosyCtx.quadraticCurveTo(pos.x + rad * 1.7, pos.y - 6 + Math.sin(t * 3) * 4, pos.x + rad * 1.35, pos.y - 20);
+    cosyCtx.stroke();
+  }
+
+  function renderCosyScene(t) {
+    cosyCtx.clearRect(0, 0, COSY_W, COSY_H);
+    const bg = cosyCtx.createLinearGradient(0, 0, 0, COSY_H);
+    bg.addColorStop(0, '#2a1d14'); bg.addColorStop(1, '#140d09');
+    cosyCtx.fillStyle = bg;
+    cosyCtx.fillRect(0, 0, COSY_W, COSY_H);
+    cosyCtx.shadowColor = 'rgba(0,0,0,0.35)'; cosyCtx.shadowBlur = 14;
+    for (let tz = 0; tz < 7; tz++) {
+      for (let tx = 0; tx < 7; tx++) {
+        const p = [cosyIso(tx, 0, tz), cosyIso(tx + 1, 0, tz), cosyIso(tx + 1, 0, tz + 1), cosyIso(tx, 0, tz + 1)];
+        const cxp = (p[0].x + p[2].x) / 2, cyp = (p[0].y + p[2].y) / 2;
+        const rg = cosyCtx.createRadialGradient(cxp, cyp, 4, cxp, cyp, 60);
+        const lvl = 60 + 24 * Math.cos((tx - tz) * 0.4);
+        rg.addColorStop(0, `rgb(${lvl + 40},${lvl + 14},${lvl - 10})`);
+        rg.addColorStop(1, `rgb(${lvl + 10},${lvl - 6},${lvl - 24})`);
+        cosyQuad(p, rg);
+      }
+    }
+    cosyCtx.shadowBlur = 0;
+
+    const wallGrad = cosyCtx.createLinearGradient(0, COSY_OY - 140, 0, COSY_OY + 20);
+    wallGrad.addColorStop(0, '#5a4230'); wallGrad.addColorStop(1, '#332417');
+    cosyQuad([cosyIso(0, 0, 0), cosyIso(7, 0, 0), cosyIso(7, 3.4, 0), cosyIso(0, 3.4, 0)], wallGrad);
+    cosyQuad([cosyIso(0, 0, 0), cosyIso(0, 0, 7), cosyIso(0, 3.4, 7), cosyIso(0, 3.4, 0)], '#25190f');
+
+    const archPos = cosyIso(3.3, 1.4, 0);
+    const archGlow = cosyCtx.createRadialGradient(archPos.x, archPos.y, 6, archPos.x, archPos.y, 130);
+    archGlow.addColorStop(0, 'rgba(255,220,170,0.5)'); archGlow.addColorStop(1, 'rgba(255,220,170,0)');
+    cosyCtx.fillStyle = archGlow; cosyCtx.fillRect(0, 0, COSY_W, COSY_H);
+    cosyQuad([cosyIso(2.6, 0.4, 0), cosyIso(4, 0.4, 0), cosyIso(4, 2.4, 0), cosyIso(2.6, 2.4, 0)], '#100a05');
+
+    cosyCtx.shadowColor = 'rgba(0,0,0,0.4)'; cosyCtx.shadowBlur = 10;
+    for (let s = 0; s < 6; s++) {
+      const sy = s * 0.42, sz = 6.4 - s * 0.75;
+      const top = [cosyIso(0.2, sy + 0.42, sz), cosyIso(2.2, sy + 0.42, sz), cosyIso(2.2, sy + 0.42, sz - 0.8), cosyIso(0.2, sy + 0.42, sz - 0.8)];
+      const stepGrad = cosyCtx.createLinearGradient(top[0].x, top[0].y, top[2].x, top[2].y);
+      stepGrad.addColorStop(0, '#8f7454'); stepGrad.addColorStop(1, '#6b5236');
+      cosyQuad(top, stepGrad);
+    }
+    cosyCtx.shadowBlur = 0;
+
+    function barrel(bx, bz) {
+      const base = cosyIso(bx, 0, bz), topC = cosyIso(bx, 0.9, bz);
+      const rw = 0.55 * COSY_SCALE * 0.55, rh = 0.22 * COSY_SCALE * 0.55;
+      const grad = cosyCtx.createLinearGradient(base.x - rw, 0, base.x + rw, 0);
+      grad.addColorStop(0, '#241608'); grad.addColorStop(0.5, '#8a6538'); grad.addColorStop(1, '#2e1c0d');
+      cosyCtx.fillStyle = grad;
+      cosyCtx.beginPath();
+      cosyCtx.moveTo(base.x - rw, topC.y);
+      cosyCtx.quadraticCurveTo(base.x - rw * 1.12, (topC.y + base.y) / 2, base.x - rw, base.y);
+      cosyCtx.lineTo(base.x + rw, base.y);
+      cosyCtx.quadraticCurveTo(base.x + rw * 1.12, (topC.y + base.y) / 2, base.x + rw, topC.y);
+      cosyCtx.closePath(); cosyCtx.fill();
+      cosyCtx.beginPath(); cosyCtx.ellipse(topC.x, topC.y, rw, rh, 0, 0, Math.PI * 2); cosyCtx.fillStyle = '#a3814f'; cosyCtx.fill();
+    }
+    barrel(5.6, 1.4); barrel(6.3, 2.1); barrel(1.2, 5.6);
+
+    const fireCenter = cosyIso(6.7, 0.5, 4.6);
+    cosyQuad([cosyIso(6.4, 0, 4.6), cosyIso(7, 0, 4.6), cosyIso(7, 2.6, 4.6), cosyIso(6.4, 2.6, 4.6)], '#160c04');
+    const flicker = 0.85 + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
+    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 120 * flicker);
+    fg.addColorStop(0, `rgba(255,160,60,${0.95 * flicker})`);
+    fg.addColorStop(0.5, `rgba(255,120,40,${0.35 * flicker})`);
+    fg.addColorStop(1, 'rgba(255,120,40,0)');
+    cosyCtx.fillStyle = fg; cosyCtx.fillRect(0, 0, COSY_W, COSY_H);
+    const flame = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 1, fireCenter.x, fireCenter.y, 11 * flicker);
+    flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
+    cosyCtx.fillStyle = flame;
+    cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x, fireCenter.y, 11 * flicker, 0, Math.PI * 2); cosyCtx.fill();
+
+    const tableP = cosyIso(5.9, 0.15, 4.3);
+    cosyCtx.fillStyle = '#6b5236';
+    cosyCtx.fillRect(tableP.x - 20, tableP.y - 6, 40, 12);
+    cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
+    if (!state.princessDead) cosyPerson(6.4, 4.1, 15, '#f3d6e8', '#a4568c'); // la princesse, si vivante
+
+    drawCosyCat(t);
+  }
+
+  let cosyRAF = null, cosyLastT = 0, cosyClock = 0;
+  function cosyFrame(now) {
+    const dt = cosyLastT ? Math.min(0.1, (now - cosyLastT) / 1000) : 0;
+    cosyLastT = now;
+    cosyClock += dt;
+    updateCosyCat(dt);
+    renderCosyScene(cosyClock);
+    cosyRAF = requestAnimationFrame(cosyFrame);
+  }
   document.getElementById('cosyBtn').addEventListener('click', () => {
-    cosyPrincess.style.display = state.princessDead ? 'none' : '';
     cosyOverlay.hidden = false;
+    ensureAudio();
+    if (cosyRAF === null) { cosyLastT = 0; cosyRAF = requestAnimationFrame(cosyFrame); }
   });
-  document.getElementById('cosyClose').addEventListener('click', () => { cosyOverlay.hidden = true; });
+  document.getElementById('cosyClose').addEventListener('click', () => {
+    cosyOverlay.hidden = true;
+    if (cosyRAF !== null) { cancelAnimationFrame(cosyRAF); cosyRAF = null; }
+  });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
 
   const versionBtn = document.getElementById('versionBtn');

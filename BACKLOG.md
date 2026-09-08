@@ -990,7 +990,7 @@ ajouté (horloge simple en secondes) pour piloter le clignotement.
 Vérifié en Playwright (couleur + phosphore, douves et ruisseau,
 plusieurs captures rapprochées confirmant l'animation, pas d'erreur).
 
-## Intérieur du donjon : 3 maquettes de traitement visuel → publiées, en attente du choix de Pierre
+## Intérieur du donjon : la vraie scène, style B → fait en v0.49
 
 Suite à sa question sur le rendu jamais livré (image de référence
 retrouvée dans les fichiers reçus — capture Pinterest "Fline Arts",
@@ -1001,8 +1001,32 @@ de pierre, tonneaux, foyer, roi + princesse aux échecs) : A — pixel art
 fidèle à la référence (asset peint une fois, fond fixe) ; B — style
 procédural du jeu (dégradés radiaux + quads facettés, calculé en direct,
 caméra orbitale possible, cohérent avec le reste) ; C — illustration
-peinte low-poly, entre les deux (asset fixe, plus doux que A). Rien
-intégré au jeu, en attente du choix de Pierre.
+peinte low-poly, entre les deux (asset fixe, plus doux que A).
+
+**Choix de Pierre : style B**, intégré. Le bouton 🔥 ouvre désormais un
+`<canvas id="cosyCanvas">` dédié (repère isométrique local, indépendant
+du donjon extérieur — pas de couplage à `project()`/`scale`/`rot`) au
+lieu de l'ancien décor emoji : sol en dalles, escalier, tonneaux, arche
+éclairée, foyer qui vacille (bruit sinusoïdal sur l'intensité/le rayon),
+roi + princesse (si vivante) assis à une table d'échecs — mêmes recettes
+que le reste du jeu (dégradés radiaux façon `drawBallSprite`, quads
+facettés triés en profondeur). Boucle d'animation dédiée
+(`requestAnimationFrame`), démarrée à l'ouverture et annulée à la
+fermeture — indépendante de la boucle de jeu principale. Volontairement
+toujours en couleurs chaudes, même quand l'extérieur est en phosphore/
+filaire : l'opposition de ton (repos à l'intérieur / urgence dehors,
+déjà notée plus haut) ne fonctionnerait pas en vert monochrome.
+
+**Chat ajouté** (demandé en session) : erre sur le sol (cible aléatoire,
+ease, pause 2.5-6s) puis ronronne pendant les pauses — `playPurr()`,
+porteuse grave (sawtooth, 105Hz) modulée en amplitude par un second
+oscillateur à ~26Hz (la cadence caractéristique d'un vrai ronronnement),
+même famille technique que `beep()` mais une vraie modulation plutôt
+qu'une simple enveloppe.
+
+Vérifié en Playwright : ouverture/fermeture/réouverture (pas de fuite de
+boucle d'animation), plusieurs captures espacées confirmant le
+déplacement du chat et le vacillement du feu — aucune erreur console.
 
 ## Village étendu : plus de maisons, grange, fontaine, église, ruisseau animé — pas fait
 
