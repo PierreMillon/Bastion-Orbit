@@ -160,6 +160,10 @@
   #princessBtn { background: #a4568c; }
   #princessBtn.active { background: #e2a0cc; }
   #gardenBtn { background: #4f6b2e; }
+  /* cheval : brun cuir tant qu'il n'est pas débloqué, doré une fois pris —
+     "retour visuel clair sur l'état débloqué/pas débloqué" (demandé) */
+  #horseBtn { background: #5a4128; }
+  #horseBtn.active { background: #a67c3d; }
 
   #menu, #overlay {
     position: fixed;
@@ -403,7 +407,8 @@
   body.phosphor #repairBtn.active,
   body.phosphor #sortieBtn.active,
   body.phosphor #oilBtn.active,
-  body.phosphor #princessBtn.active {
+  body.phosphor #princessBtn.active,
+  body.phosphor #horseBtn.active {
     background: var(--ph-fill);
     border-color: var(--ph-line);
     color: #fff;
@@ -455,10 +460,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.51</button>
+  <button id="versionBtn">v0.52</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.52</b> — cheval du seigneur : en sortie, ×2 vitesse/dégâts au palier 1 (débloqué par paliers sans plafond, bouton dédié), monture dessinée sous le seigneur</div>
   <div><b>v0.51</b> — curseurs de volume séparés pour la musique et les bruitages (0-100%, menu), remplacent l'ancien bouton ON/OFF</div>
   <div><b>v0.50</b> — 4 paliers de difficulté (Facile/Normal/Difficile/Très difficile, menu), calibrés au simulateur pour les cibles de survie visées</div>
   <div><b>v0.49</b> — la vue "cosy" (bouton 🔥) devient la vraie scène d'intérieur : escalier, tonneaux, foyer qui vacille, roi/princesse dessinés comme le reste du jeu — plus d'emoji ; un chat s'y promène et ronronne</div>
@@ -515,6 +521,7 @@
     <button id="towerBtn">Tourelle</button>
     <button id="gardenBtn">Jardin</button>
     <button id="moatBtn">Douves</button>
+    <button id="horseBtn">Cheval</button>
   </div>
 </div>
 
@@ -1157,6 +1164,16 @@
   const TOWER_DANGER_H = 3;       // tall enough to start hitting the platform directly
   const SORTIE_DMG = 4;
   const SORTIE_TICK = 0.4;
+  // cheval du seigneur (demandé en session) : en sortie seulement (pas la
+  // marche normale), débloqué par paliers sans plafond — même formule
+  // géométrique que le jardin (coût ×1.35^(n-1)) — chaque palier suivant
+  // rend le cheval plus rapide/plus fort. Palier 1 = ×2 vitesse/dégâts
+  // "au minimum", exigé par Pierre ; horseMul(n) = 1+n donne exactement
+  // ça (palier 1 → ×2, palier 2 → ×3, ...).
+  const HORSE_BASE_COST = 40;
+  const HORSE_GROWTH = 1.35;
+  function horseCost(n) { return Math.round(HORSE_BASE_COST * Math.pow(HORSE_GROWTH, n - 1)); }
+  function horseMul(level) { return level <= 0 ? 1 : 1 + level; }
   // huile bouillante: hold-to-act like Réparer/Sortie, but needs a turret
   // to pour from — the lord walks over and, once there, it periodically
   // scalds every attacker stalled at the wall near that turret's angle
@@ -1375,6 +1392,7 @@
     gold: 0,
     moatLevel: 0,
     gardenLevel: 0,
+    horseLevel: 0,
     gardenTimer: GARDEN_TICK,
     princess: {
       pos: 0, target: 0, hp: 5, maxHp: 5, dmgTimer: PRINCESS_DMG_TICK,
@@ -1976,6 +1994,7 @@
   const oilBtn = document.getElementById('oilBtn');
   const moatBtn = document.getElementById('moatBtn');
   const gardenBtn = document.getElementById('gardenBtn');
+  const horseBtn = document.getElementById('horseBtn');
   const princessBtn = document.getElementById('princessBtn');
   const overlay = document.getElementById('overlay');
   const fakeAd = document.getElementById('fakeAd');
@@ -2019,6 +2038,24 @@
     updateGardenBtn();
   });
   updateGardenBtn();
+
+  // cheval du seigneur : palier courant affiché sur le bouton (demandé
+  // explicitement) — "Cheval" avant tout achat, "Cheval N" une fois
+  // débloqué, retour visuel immédiat sur l'état débloqué/pas débloqué
+  function updateHorseBtn() {
+    horseBtn.textContent = state.horseLevel > 0 ? 'Cheval ' + state.horseLevel : 'Cheval';
+    horseBtn.classList.toggle('active', state.horseLevel > 0);
+  }
+  horseBtn.addEventListener('click', () => {
+    const cost = horseCost(state.horseLevel + 1);
+    if (state.gold < cost) return;
+    state.gold -= cost;
+    goldNum.textContent = state.gold;
+    state.horseLevel++;
+    playHammer();
+    updateHorseBtn();
+  });
+  updateHorseBtn();
 
   function updatePrincessBtn() {
     if (state.princessDead) { princessBtn.textContent = '†'; princessBtn.disabled = true; return; }
@@ -2512,7 +2549,10 @@
     if (Math.abs(rDelta) < 0.4) p.r = targetR;
     else {
       const eased = rDelta * (1 - Math.exp(-RADIAL_EASE_RATE * dt));
-      const cap = PLAYER_WALK_SPEED * dt;
+      // le cheval n'accélère que la charge en sortie, pas la marche
+      // normale (réparer, câlin, etc.) — "quand il sort charger"
+      const speedMul = p.behavior === 'sortie' ? horseMul(state.horseLevel) : 1;
+      const cap = PLAYER_WALK_SPEED * speedMul * dt;
       p.r += Math.abs(eased) > cap ? Math.sign(eased) * cap : eased;
     }
 
@@ -2542,12 +2582,16 @@
         if (p.sortieTimer <= 0) {
           playHammer();
           p.sortieTimer = SORTIE_TICK;
+          // cheval : "dégâts ×2" en sortie — un coup abat plusieurs
+          // membres d'équipage à la fois plutôt qu'un seul, même
+          // multiplicateur que sur les PV ci-dessous
+          const hitMul = Math.round(horseMul(state.horseLevel));
           if (sortieTarget.tierIdx !== undefined) {
             // équipage vivant: sortie kills crew one at a time, not a
             // shared hp pool — ranged fire alone only chips hp, and living
             // crew heals it right back (see the regen in the enemies
             // loop), so this is the only thing that actually ends one
-            sortieTarget.crew = Math.max(0, sortieTarget.crew - 1);
+            sortieTarget.crew = Math.max(0, sortieTarget.crew - hitMul);
             spawnBurst(sortieTarget.r * Math.cos(sortieTarget.angle), 0,
               sortieTarget.r * Math.sin(sortieTarget.angle), 'smoke');
             if (sortieTarget.crew <= 0) {
@@ -2558,7 +2602,7 @@
                 sortieTarget.r * Math.sin(sortieTarget.angle), 'sparkle');
             }
           } else {
-            sortieTarget.hp -= SORTIE_DMG;
+            sortieTarget.hp -= SORTIE_DMG * horseMul(state.horseLevel);
             if (sortieTarget.hp <= 0) {
               if (sortieTarget.isBridge) state.bridges = state.bridges.filter(b => b !== sortieTarget);
               else killEnemy(sortieTarget);
@@ -3695,9 +3739,31 @@
     const w = playerWorld();
     const pos = project(w.x, w.y, w.z, rot);
     const rad = 11 * scale;
+    const p = state.player;
+    // cheval : "retour visuel clair" demandé — une monture dessinée sous
+    // le seigneur, seulement quand il charge réellement en sortie (pas
+    // débloqué, ou juste en train de marcher/réparer → pas de cheval)
+    if (state.horseLevel > 0 && p.behavior === 'sortie' && p.groundPos > 0.85) {
+      const hRad = rad * 1.55;
+      const hPos = { x: pos.x, y: pos.y + rad * 0.55 };
+      const g = ctx.createRadialGradient(hPos.x - hRad * 0.3, hPos.y - hRad * 0.3, 1, hPos.x, hPos.y, hRad);
+      g.addColorStop(0, '#a9713f'); g.addColorStop(1, '#5c3a1e');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(hPos.x, hPos.y, hRad * 1.15, hRad * 0.68, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // crinière/queue : deux petits traits, assez pour lire "cheval"
+      // sans dessiner d'articulation de jambes
+      ctx.strokeStyle = '#3a2410';
+      ctx.lineWidth = Math.max(1, 2 * scale);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hPos.x - hRad * 1.05, hPos.y - hRad * 0.3);
+      ctx.lineTo(hPos.x - hRad * 1.35, hPos.y + hRad * 0.25);
+      ctx.stroke();
+    }
     drawBallSprite('player', rad, '#7fa0c9', '#28405e', pos);
 
-    const p = state.player;
     const bw = 30;
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fillRect(pos.x - bw / 2, pos.y - rad - 12, bw, 4);

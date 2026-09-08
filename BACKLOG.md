@@ -966,13 +966,27 @@ tenir compte des maisons-cachettes et du cheval une fois codés.
    devient intouchable (tourelles, tir à distance) — SEULE une sortie
    chargée du seigneur peut l'en déloger ; la maison elle-même ne se
    détruit jamais. *Pas fait.*
-6. **Cheval du seigneur** : en sortie, monte un cheval — palier 1 donne
-   au minimum ×2 vitesse et ×2 dégâts. Déblocage par PALIERS de
-   progression sans plafond (même formule que le jardin : coût ×
-   1.35^(n-1) ou équivalent à caler), chaque palier suivant rend le
-   cheval plus rapide/plus fort. Bouton dédié dans le bandeau, affichant
-   le palier courant, retour visuel clair (cheval dessiné + état
-   débloqué/pas débloqué). *Pas fait.*
+6. **Cheval du seigneur** → fait en v0.52. `horseMul(level) = 1 + level`
+   (palier 1 → ×2 exactement, comme exigé "au minimum" ; palier 2 → ×3,
+   etc. — sans plafond). Coût : `horseCost(n) = 40 × 1.35^(n-1)`, même
+   formule géométrique que le jardin. S'applique UNIQUEMENT pendant
+   `p.behavior === 'sortie'` (le déplacement radial et les dégâts de
+   sortie), jamais à la marche normale (réparer, câlin...) — "quand il
+   sort charger", pas en temps normal. Dégâts : ×horseMul sur les PV
+   (ennemis/ponts) ET sur le nombre de membres d'équipage retirés d'un
+   coup pour un engin de siège (`Math.round(horseMul(...))`), pour que
+   "dégâts ×2" veuille dire la même chose sur les deux types de cibles.
+   Bouton dédié dans le bandeau ("Cheval" → "Cheval N" une fois
+   débloqué, couleur dorée), monture dessinée sous le seigneur (ellipse
+   brune + crinière) uniquement quand `state.horseLevel > 0` et qu'il
+   est effectivement sorti et en charge (`p.groundPos > 0.85`).
+   **Non modélisé dans le simulateur de difficulté** (`sim/`) : les
+   politiques "correct"/"bon" utilisent déjà la sortie mais n'achètent
+   pas explicitement de cheval — en jeu réel, un joueur qui l'achète est
+   donc probablement un peu plus fort que ce que les cibles de
+   difficulté mesurées prévoient. Pas re-réglé pour l'instant (aurait
+   demandé de retendre `enemyHp` une troisième fois) — à surveiller si
+   Pierre trouve le jeu trop facile une fois le cheval acheté.
 
 ## Écran de défaite / fausse pub hors thème → fait en v0.47
 
