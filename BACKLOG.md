@@ -878,10 +878,36 @@ difficile, ~15-20% très difficile. **Implication concrète** : Bastion
 Orbit doit donc bien avoir de vrais **paliers de difficulté
 sélectionnables** — je m'étais trompé plus haut en disant que le jeu
 n'en avait pas besoin/n'en aurait pas ; Pierre confirme qu'il en veut.
-**Pas fait** : ajouter un sélecteur facile/normal/difficile/très
-difficile (probablement un multiplicateur sur `enemyHp`/`waveSpawnCount`
-par palier, à caler avec le simulateur — `--check` devra tester les 4
-paliers, pas qu'un seul). Prochaine étape du chantier difficulté.
+
+**Fait en v0.50** : bouton "Difficulté" dans le menu (cycle Facile→
+Normal→Difficile→Très difficile→Facile, même mécanisme que Style/
+Teinte, persisté en `localStorage`). Un seul levier par palier —
+`hpDivisor` dans `DIFFICULTY_TIERS` (`enemyHp(wave) = 2 +
+⌊wave/hpDivisor⌋`) — plutôt que plusieurs constantes différentes par
+palier : plus simple à garder cohérent avec le simulateur, et la
+cadence/vitesse des vagues ne change pas d'un palier à l'autre. Valeurs
+calibrées au simulateur (`node sim/balance-sim.js --check`, qui teste
+maintenant les 4 paliers séparément — voir `REGRESSION_TARGETS` dans
+`sim/balance-sim.js`) :
+
+| Palier | hpDivisor | Mesuré (v27-29, correct) | Cible |
+|---|---|---|---|
+| Facile | 6.4 | ~82-90% | ~85% |
+| Normal | 4.5 | ~57-72% | ~55-65% |
+| Difficile | 3.2 | ~39-47% | ~30-40% |
+| Très difficile | 2.9 | ~19-28%, **forte pente** (40% à v27 → 0% à v30) | ~15-20% |
+
+Le palier "Très difficile" mérite une note honnête : la courbe y devient
+très raide sur seulement 3-4 vagues (v27→v30) — la mesure exacte au
+palier 28 varie beaucoup d'un lot de runs à l'autre (23% à 100 runs,
+19-28% selon l'échantillon à 300). Le nombre exact est donc moins fiable
+que pour les autres paliers, mais la zone (nettement le palier le plus
+dur, cohérent avec "on perd presque toujours") est confirmée. À revoir
+si Pierre trouve ce palier trop abrupt en jeu réel plutôt que
+progressivement plus dur.
+
+Vérifié en Playwright : les 4 paliers s'enchaînent au clic (cycle
+complet + retour au premier), aucune erreur console/page.
 
 ## Réponses de Pierre à la grosse consigne (reçues le 2026-09-08, notées avant tout travail)
 

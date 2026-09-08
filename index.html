@@ -429,10 +429,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.49</button>
+  <button id="versionBtn">v0.50</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.50</b> — 4 paliers de difficulté (Facile/Normal/Difficile/Très difficile, menu), calibrés au simulateur pour les cibles de survie visées</div>
   <div><b>v0.49</b> — la vue "cosy" (bouton 🔥) devient la vraie scène d'intérieur : escalier, tonneaux, foyer qui vacille, roi/princesse dessinés comme le reste du jeu — plus d'emoji ; un chat s'y promène et ronronne</div>
   <div><b>v0.48</b> — l'eau (douves, ruisseau) scintille : reflets qui clignotent au hasard à la surface, choisis parmi 5 maquettes comparées</div>
   <div><b>v0.47</b> — donjon à 12 facettes (au lieu de 24) ; tir du seigneur depuis les remparts ×2 ("dans l'axe", pas la sortie) — difficulté rééquilibrée en conséquence ; écran de fin (fausse alerte + défaite) enfin dans le thème phosphore, plus de jaune/rouge criard</div>
@@ -494,6 +495,7 @@
   <a href="https://pierremillon.github.io/Forge-Line/">→ Forge Line</a>
   <a href="https://pierremillon.github.io/knight-wars/">→ Knight Wars</a>
   <button id="menuRestartBtn">Recommencer depuis le début</button>
+  <button id="difficultyBtn">Difficulté : Normal</button>
   <button id="styleBtn">Style : Phosphore</button>
   <button id="hueBtn">Teinte : Vert</button>
   <button id="snowBtn">Neige : ON</button>
@@ -563,6 +565,28 @@
     if (storedHue === 'vert' || storedHue === 'ambre') phosphorHue = storedHue;
   } catch (e) { /* ignore */ }
   function phosphorLine() { return `rgb(${PHOSPHOR_HUES[phosphorHue]})`; }
+
+  // paliers de difficulté (demandé et validé en session, priorité n°1
+  // sur les 3 jeux) : hpDivisor est LE levier réglé au simulateur de
+  // difficulté (sim/balance-sim.js) — voir enemyHp() plus bas et
+  // BACKLOG.md pour la méthode et les résultats mesurés. Cibles visées,
+  // validées par Pierre (joueur "correct", mesuré vers la vague 28) :
+  // facile ~85%, normal ~55-65%, difficile ~30-40%, très difficile
+  // ~15-20%. Le reste (cadence des vagues, vitesse des ennemis, dégâts)
+  // ne change pas d'un palier à l'autre — un seul levier, plus simple à
+  // garder cohérent avec le simulateur.
+  const DIFFICULTY_TIERS = [
+    { key: 'facile', label: 'Facile', hpDivisor: 6.4 },
+    { key: 'normal', label: 'Normal', hpDivisor: 4.5 },
+    { key: 'difficile', label: 'Difficile', hpDivisor: 3.2 },
+    { key: 'tresDifficile', label: 'Très difficile', hpDivisor: 2.9 }
+  ];
+  let difficultyIdx = 1; // Normal par défaut
+  try {
+    const storedDiff = localStorage.getItem('bo_difficulty');
+    const idx = DIFFICULTY_TIERS.findIndex(t => t.key === storedDiff);
+    if (idx >= 0) difficultyIdx = idx;
+  } catch (e) { /* ignore */ }
 
   function wrapPhosphor(real) {
     return new Proxy(real, {
@@ -812,6 +836,15 @@
     try { localStorage.setItem('bo_phosphorHue', phosphorHue); } catch (e) { /* ignore */ }
     applyPhosphorStyle();
     spriteCache.clear(); // cached sprites were baked in the old hue
+  });
+  const difficultyBtn = document.getElementById('difficultyBtn');
+  difficultyBtn.textContent = 'Difficulté : ' + DIFFICULTY_TIERS[difficultyIdx].label;
+  difficultyBtn.addEventListener('click', () => {
+    difficultyIdx = (difficultyIdx + 1) % DIFFICULTY_TIERS.length;
+    difficultyBtn.textContent = 'Difficulté : ' + DIFFICULTY_TIERS[difficultyIdx].label;
+    try { localStorage.setItem('bo_difficulty', DIFFICULTY_TIERS[difficultyIdx].key); } catch (e) { /* ignore */ }
+    // s'applique à partir du prochain ennemi qui apparaît — pas de reset
+    // nécessaire, seul enemyHp(wave) en dépend
   });
   const snowBtn = document.getElementById('snowBtn');
   snowBtn.textContent = 'Neige : ' + (snowOn ? 'ON' : 'OFF');
@@ -1429,15 +1462,13 @@
   // suffisait pour toujours (le taux de kill par tourelle ne dépend que
   // du nombre de tourelles, jamais battu par un ennemi à PV fixe), soit
   // elle ne suffisait jamais — aucun entre-deux, pas de vraie courbe. Un
-  // point de PV toutes les ~4.5 vagues change ça sans neutraliser aucune
-  // mécanique existante (tourelles/jardin/douves/princesse restent tous
-  // utiles, juste plus nécessaires ensemble avec le temps). Calibré au
-  // simulateur pour que le joueur "correct" tienne ~55-65% du temps
-  // autour de la vague 28-30, le "bon" quasiment toujours jusque-là —
-  // retendu (était /7) après PLAYER_RAMPART_ATK_MUL qui a doublé le DPS
-  // du seigneur et cassait la cible du premier réglage (89% au lieu de
-  // 55-65% à la vague 28).
-  function enemyHp(wave) { return 2 + Math.floor(wave / 4.5); }
+  // point de PV toutes les quelques vagues change ça sans neutraliser
+  // aucune mécanique existante (tourelles/jardin/douves/princesse restent
+  // tous utiles, juste plus nécessaires ensemble avec le temps). Le
+  // diviseur vient du palier de difficulté choisi (DIFFICULTY_TIERS,
+  // plus haut) — chacun calibré séparément au simulateur pour tenir sa
+  // propre cible (voir BACKLOG.md).
+  function enemyHp(wave) { return 2 + Math.floor(wave / DIFFICULTY_TIERS[difficultyIdx].hpDivisor); }
 
   function spawnEnemy() {
     const builder = state.buildersToSpawn > 0;

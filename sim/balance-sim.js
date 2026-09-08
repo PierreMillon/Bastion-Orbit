@@ -76,7 +76,12 @@ const K = {
   // vague 28-30, bon quasiment toujours jusque-là) puis reporté dans
   // index.html:enemyHp() — GARDER LES DEUX SYNCHRONISÉS.
   ENEMY_HP: 2,
-  enemyHp: (wave) => 2 + Math.floor(wave / 4.5), // == index.html enemyHp() — retendu après PLAYER_RAMPART_ATK_MUL (était /7)
+  // hpDivisor mutable : change-le (K.hpDivisor = X) pour tester un autre
+  // palier de difficulté sans réassigner toute la fonction — voir
+  // DIFFICULTY_TIERS plus bas, == DIFFICULTY_TIERS/enemyHp() dans
+  // index.html. 4.5 = palier "Normal" par défaut.
+  hpDivisor: 4.5,
+  enemyHp: (wave) => 2 + Math.floor(wave / K.hpDivisor),
   ENEMY_WALL_DMG: 6,           // attackBase: castleH -= 6
   ENEMY_WALL_TICK: 1.2,        // attackBase: e.timer = 1.2
   ONTOP_TICK: 1.4,             // onTop: attaque toutes les 1.4s
@@ -202,6 +207,16 @@ const POLICIES = {
     usesOil: true,
   },
 };
+
+// paliers de difficulté == DIFFICULTY_TIERS dans index.html — GARDER
+// SYNCHRONISÉS. Un seul levier par palier (hpDivisor, via K.hpDivisor),
+// calibré séparément pour chacun (voir BACKLOG.md, section difficulté).
+const DIFFICULTY_TIERS = [
+  { key: 'facile', label: 'Facile', hpDivisor: 6.4 },
+  { key: 'normal', label: 'Normal', hpDivisor: 4.5 },
+  { key: 'difficile', label: 'Difficile', hpDivisor: 3.2 },
+  { key: 'tresDifficile', label: 'Très difficile', hpDivisor: 2.9 }
+];
 
 // ---------------------------------------------------------------------
 // Simulation d'une partie, jusqu'à `maxWaves` vagues ou la défaite.
@@ -537,29 +552,41 @@ function runBatch(policyName, runs, maxWaves, checkpoints) {
 // resserre-les si tu veux un test plus strict une fois le nombre de
 // runs augmenté. Sort avec un code non-zéro si une cible est ratée.
 // ---------------------------------------------------------------------
+// chaque cible précise son palier de difficulté (tier, une clé de
+// DIFFICULTY_TIERS) — sans ça, un seul K.hpDivisor global ne peut pas
+// représenter les 4 paliers à la fois. "naïf" et "bon" ne sont testés
+// qu'au palier Normal (leur profil ne dépend pas vraiment du palier :
+// naïf perd partout, bon gagne presque partout aux waves testées).
 const REGRESSION_TARGETS = [
-  { policy: 'naive', wave: 10, max: 0.15, label: 'naïf doit perdre (≤15% encore en vie à la vague 10)' },
-  { policy: 'correct', wave: 28, min: 0.45, max: 0.80, label: 'correct doit être dans la zone de tension (45-80% à la vague 28)' },
-  { policy: 'correct', wave: 30, min: 0.35, max: 0.75, label: 'correct : ~55-65% visé à la vague 30 (bornes élargies pour le bruit)' },
-  { policy: 'good', wave: 25, min: 0.85, label: 'bon doit gagner presque toujours (≥85% à la vague 25)' },
+  { policy: 'naive', tier: 'normal', wave: 10, max: 0.15, label: 'naïf doit perdre (≤15% encore en vie à la vague 10, Normal)' },
+  { policy: 'good', tier: 'normal', wave: 25, min: 0.85, label: 'bon doit gagner presque toujours (≥85% à la vague 25, Normal)' },
+  { policy: 'correct', tier: 'facile', wave: 28, min: 0.70, label: 'correct en Facile (~85% visé, ≥70% à la vague 28)' },
+  { policy: 'correct', tier: 'normal', wave: 28, min: 0.45, max: 0.80, label: 'correct en Normal (~55-65% visé, zone de tension 45-80% à la vague 28)' },
+  { policy: 'correct', tier: 'normal', wave: 30, min: 0.35, max: 0.75, label: 'correct en Normal (~55-65% visé, bornes élargies à la vague 30)' },
+  { policy: 'correct', tier: 'difficile', wave: 28, min: 0.20, max: 0.55, label: 'correct en Difficile (~30-40% visé, 20-55% à la vague 28)' },
+  { policy: 'correct', tier: 'tresDifficile', wave: 28, max: 0.30, label: 'correct en Très difficile (~15-20% visé, ≤30% à la vague 28)' },
 ];
 
 function runRegressionCheck(runs) {
   console.log(`Vérification de régression (${runs} parties/politique)...\n`);
   let ok = true;
-  // un seul run par politique, couvrant TOUS les paliers que ses cibles
-  // référencent (sinon un palier absent de la première cible rencontrée
-  // pour cette politique ressort en NaN sur les cibles suivantes)
-  const byPolicy = {};
+  // un run par (politique, palier), couvrant tous les paliers que ses
+  // cibles référencent — le hpDivisor du palier est posé juste avant
+  // chaque lot, puis restauré (Normal) à la fin
+  const byKey = {};
   for (const target of REGRESSION_TARGETS) {
-    (byPolicy[target.policy] = byPolicy[target.policy] || []).push(target.wave);
+    const k = target.policy + ':' + target.tier;
+    (byKey[k] = byKey[k] || { policy: target.policy, tier: target.tier, waves: [] }).waves.push(target.wave);
   }
   const cache = {};
-  for (const [policy, waves] of Object.entries(byPolicy)) {
-    cache[policy] = runBatch(policy, runs, Math.max(...waves) + 5, waves);
+  for (const [k, { policy, tier, waves }] of Object.entries(byKey)) {
+    const tierDef = DIFFICULTY_TIERS.find(t => t.key === tier);
+    K.hpDivisor = tierDef.hpDivisor;
+    cache[k] = runBatch(policy, runs, Math.max(...waves) + 5, waves);
   }
+  K.hpDivisor = DIFFICULTY_TIERS.find(t => t.key === 'normal').hpDivisor;
   for (const target of REGRESSION_TARGETS) {
-    const s = cache[target.policy];
+    const s = cache[target.policy + ':' + target.tier];
     const rate = s.survivalAt[target.wave];
     const passMin = target.min === undefined || rate >= target.min;
     const passMax = target.max === undefined || rate <= target.max;
@@ -567,7 +594,7 @@ function runRegressionCheck(runs) {
     ok = ok && pass;
     console.log(`${pass ? '✓' : '✗'} ${target.label} — mesuré: ${Math.round(rate * 100)}%`);
   }
-  console.log(ok ? '\nOK — dans les cibles.' : '\nÉCHEC — hors cibles, revoir les constantes (voir enemyHp()/waveSpawnCount() dans index.html).');
+  console.log(ok ? '\nOK — dans les cibles.' : '\nÉCHEC — hors cibles, revoir les constantes (voir enemyHp()/waveSpawnCount()/DIFFICULTY_TIERS dans index.html).');
   return ok;
 }
 
@@ -610,4 +637,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { simulateRun, runBatch, POLICIES, K };
+module.exports = { simulateRun, runBatch, POLICIES, K, DIFFICULTY_TIERS };
