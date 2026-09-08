@@ -716,9 +716,14 @@ demandée plus largement en partie 2.4).
 
 ### Partie 2 — uniformisation des 3 jeux (même consigne envoyée à Knight Wars et Forge Line — ces deux-là ne sont pas dans ce dépôt/cette session)
 
-1. **Audio** — *pas fait*. Musique ET bruitages fonctionnels (déjà le
-   cas ici) + curseurs de volume séparés (musique / bruitages) dans le
-   menu, 0 à 100%.
+1. **Audio** → fait en v0.51. Musique ET bruitages fonctionnels (déjà le
+   cas) + curseurs de volume séparés (musique / bruitages) dans le menu,
+   0 à 100%, persistés en `localStorage`. L'ancien bouton "Musique :
+   ON/OFF" a disparu — un curseur à 0% fait exactement la même chose,
+   pas besoin d'un état séparé. `beep()`/`playPurr()` sautent carrément
+   l'appel si bruitages=0 (une rampe exponentielle Web Audio vers 0 lève
+   une `RangeError` — testé, un achat de tourelle bruitages=0 ne plante
+   pas).
 2. **Langue** — *pas fait*. Anglais + français minimum, jeu ouvert PAR
    DÉFAUT en anglais (menu Réglages compris), français choisi dans les
    options. Point en attente de confirmation Pierre : anglais fixe par

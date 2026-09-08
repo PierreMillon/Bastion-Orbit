@@ -199,6 +199,32 @@
     opacity: 0.65;
   }
 
+  /* curseurs de volume (demandé en session, partie 2.1 de l'uniformisation
+     des 3 jeux) : même carte pilule que les autres boutons du menu, juste
+     avec un curseur à la place du texte */
+  .volumeRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    border-radius: 10px;
+    background: #b5482e;
+    color: #f2ead9;
+    font-size: 13px;
+    width: 100%;
+    max-width: 240px;
+    box-sizing: border-box;
+  }
+  .volumeRow label { flex: none; width: 68px; text-align: left; }
+  .volumeRow input[type="range"] { flex: 1; accent-color: #f2ead9; }
+  .volumeRow .volumeVal { flex: none; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  body.phosphor .volumeRow {
+    background: var(--ph-fill);
+    border: 1px solid var(--ph-dim);
+    color: var(--ph-text);
+  }
+  body.phosphor .volumeRow input[type="range"] { accent-color: var(--ph-line); }
+
   /* fausse pub à la défaite : gag volontairement criard, aux antipodes du
      reste de l'interface (fond parchemin sobre) — c'est le but */
   #fakeAd {
@@ -429,10 +455,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.50</button>
+  <button id="versionBtn">v0.51</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.51</b> — curseurs de volume séparés pour la musique et les bruitages (0-100%, menu), remplacent l'ancien bouton ON/OFF</div>
   <div><b>v0.50</b> — 4 paliers de difficulté (Facile/Normal/Difficile/Très difficile, menu), calibrés au simulateur pour les cibles de survie visées</div>
   <div><b>v0.49</b> — la vue "cosy" (bouton 🔥) devient la vraie scène d'intérieur : escalier, tonneaux, foyer qui vacille, roi/princesse dessinés comme le reste du jeu — plus d'emoji ; un chat s'y promène et ronronne</div>
   <div><b>v0.48</b> — l'eau (douves, ruisseau) scintille : reflets qui clignotent au hasard à la surface, choisis parmi 5 maquettes comparées</div>
@@ -500,7 +527,16 @@
   <button id="hueBtn">Teinte : Vert</button>
   <button id="snowBtn">Neige : ON</button>
   <button id="cameraBtn">Caméra : Axonométrique</button>
-  <button id="musicBtn">Musique : ON</button>
+  <div class="volumeRow">
+    <label for="musicVolumeInput">Musique</label>
+    <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
+    <span class="volumeVal" id="musicVolumeVal">35%</span>
+  </div>
+  <div class="volumeRow">
+    <label for="sfxVolumeInput">Bruitages</label>
+    <input type="range" id="sfxVolumeInput" min="0" max="100" value="100">
+    <span class="volumeVal" id="sfxVolumeVal">100%</span>
+  </div>
   <div id="fpsLine">FPS : <span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
 </div>
@@ -761,6 +797,13 @@
 
   // ---- sound: tiny synthesized effects, no external assets ----
   let actx = null;
+  // curseur de bruitages (0-100%, voir sfxVolumeInput plus bas) — déclaré
+  // ici, avant beep()/playPurr() qui le lisent à chaque appel
+  let sfxVolume = 100;
+  try {
+    const v = parseInt(localStorage.getItem('bo_sfxVolume'), 10);
+    if (!isNaN(v) && v >= 0 && v <= 100) sfxVolume = v;
+  } catch (e) { /* ignore */ }
   function ensureAudio() {
     if (!actx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -779,26 +822,47 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureAudio(); });
 
   // ---- background music: a real audio loop this time, not synthesized —
-  // starts on the same first-gesture unlock as the sfx, on by default, with
-  // an ON/OFF toggle in the menu (remembered across sessions)
+  // starts on the same first-gesture unlock as the sfx. v0.51 : l'ancien
+  // bouton ON/OFF devient un curseur 0-100% (demandé en session, partie
+  // uniformisation des 3 jeux) — 0% se comporte comme l'ancien OFF, pas
+  // besoin d'un état séparé.
   const bgMusic = document.getElementById('bgMusic');
-  const musicBtn = document.getElementById('musicBtn');
-  bgMusic.volume = 0.35;
-  let musicOn = true;
-  try { musicOn = localStorage.getItem('bo_musicOn') !== 'off'; } catch (e) { /* ignore */ }
-  function updateMusicBtn() { musicBtn.textContent = 'Musique : ' + (musicOn ? 'ON' : 'OFF'); }
-  updateMusicBtn();
+  const musicVolumeInput = document.getElementById('musicVolumeInput');
+  const musicVolumeVal = document.getElementById('musicVolumeVal');
+  let musicVolume = 35;
+  try {
+    const v = parseInt(localStorage.getItem('bo_musicVolume'), 10);
+    if (!isNaN(v) && v >= 0 && v <= 100) musicVolume = v;
+  } catch (e) { /* ignore */ }
+  function applyMusicVolume() {
+    musicVolumeInput.value = musicVolume;
+    musicVolumeVal.textContent = musicVolume + '%';
+    bgMusic.volume = musicVolume / 100;
+  }
+  applyMusicVolume();
   function tryPlayMusic() {
-    if (!musicOn) return;
+    if (musicVolume <= 0) return;
     bgMusic.play().catch(() => { /* still blocked, next gesture retries via ensureAudio */ });
   }
   addEventListener('pointerdown', tryPlayMusic, { capture: true });
   addEventListener('touchstart', tryPlayMusic, { capture: true, passive: true });
-  musicBtn.addEventListener('click', () => {
-    musicOn = !musicOn;
-    try { localStorage.setItem('bo_musicOn', musicOn ? 'on' : 'off'); } catch (e) { /* ignore */ }
-    updateMusicBtn();
-    if (musicOn) tryPlayMusic(); else bgMusic.pause();
+  musicVolumeInput.addEventListener('input', () => {
+    musicVolume = parseInt(musicVolumeInput.value, 10);
+    applyMusicVolume();
+    try { localStorage.setItem('bo_musicVolume', String(musicVolume)); } catch (e) { /* ignore */ }
+    if (musicVolume > 0) tryPlayMusic(); else bgMusic.pause();
+  });
+
+  // bruitages : même principe, curseur 0-100% appliqué dans beep()/
+  // playPurr() (voir sfxVolume plus haut, déclaré avant ces fonctions)
+  const sfxVolumeInput = document.getElementById('sfxVolumeInput');
+  const sfxVolumeVal = document.getElementById('sfxVolumeVal');
+  sfxVolumeInput.value = sfxVolume;
+  sfxVolumeVal.textContent = sfxVolume + '%';
+  sfxVolumeInput.addEventListener('input', () => {
+    sfxVolume = parseInt(sfxVolumeInput.value, 10);
+    sfxVolumeVal.textContent = sfxVolume + '%';
+    try { localStorage.setItem('bo_sfxVolume', String(sfxVolume)); } catch (e) { /* ignore */ }
   });
 
   // ---- style : Couleur → Phosphore → Filaire → Couleur (phosphorStyle
@@ -877,15 +941,18 @@
     lastTouchEnd = now;
   }, { passive: false, capture: true });
   function beep({ freq, freqEnd = freq, dur = 0.12, type = 'triangle', vol = 0.3 }) {
-    if (!actx) return;
+    // sfxVolume à 0 : pas juste inaudible, on saute carrément l'appel —
+    // exponentialRampToValueAtTime refuse une cible à 0 (RangeError)
+    if (!actx || sfxVolume <= 0) return;
     const t0 = actx.currentTime;
     const osc = actx.createOscillator();
     const gain = actx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 20), t0 + dur);
+    const v = vol * (sfxVolume / 100);
     gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+    gain.gain.exponentialRampToValueAtTime(v, t0 + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     osc.connect(gain).connect(actx.destination);
     osc.start(t0);
@@ -904,20 +971,21 @@
   // la sortie du LFO, via un gain, alimente directement le paramètre
   // .gain de la porteuse plutôt que sa propre destination).
   function playPurr() {
-    if (!actx) return;
+    if (!actx || sfxVolume <= 0) return;
+    const sv = sfxVolume / 100;
     const t0 = actx.currentTime, dur = 1.5;
     const carrier = actx.createOscillator();
     carrier.type = 'sawtooth';
     carrier.frequency.setValueAtTime(105, t0);
     const mainGain = actx.createGain();
     mainGain.gain.setValueAtTime(0.0001, t0);
-    mainGain.gain.exponentialRampToValueAtTime(0.05, t0 + 0.3);
+    mainGain.gain.exponentialRampToValueAtTime(0.05 * sv, t0 + 0.3);
     mainGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     const lfo = actx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.setValueAtTime(26, t0);
     const lfoGain = actx.createGain();
-    lfoGain.gain.value = 0.04;
+    lfoGain.gain.value = 0.04 * sv; // même proportion que la porteuse — garde le taux de modulation constant
     lfo.connect(lfoGain).connect(mainGain.gain);
     carrier.connect(mainGain).connect(actx.destination);
     carrier.start(t0); lfo.start(t0);
