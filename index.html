@@ -31,12 +31,19 @@
     z-index: 10;
     background: #3b3222;
     color: #f2ead9;
-    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    padding: calc(8px + env(safe-area-inset-top)) 8px 8px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 6px;
     font-size: 13px;
+    overflow: hidden; /* a phone narrower than the test viewport used to push versionBtn clean off the right edge */
   }
+  /* every direct child gets to shrink and ellipsize rather than forcing
+     the row wider than the screen — menuBtn/nextWaveBtn/cosyBtn/versionBtn
+     are short enough that flex-shrink alone keeps them intact; .stat is
+     the one that actually needs the ellipsis if things get tight */
+  #topbar > * { flex-shrink: 1; min-width: 0; }
+  #topbar .stat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* both rows of bottom buttons live in one fixed stack now — Jardin/
      Princesse used to be their own position:fixed buttons at the same
@@ -422,10 +429,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.41</button>
+  <button id="versionBtn">v0.42</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.42</b> — corrige le débordement de la barre du haut sur petit écran, le changelog se ferme en tapant à côté</div>
   <div><b>v0.41</b> — douves : niveau 1 deux fois moins large, plus jamais de noyade (ralentit seulement) ; routes largeur physique constante (pas d'élargissement en axonométrie) ; porte/fenêtres vraiment plaquées sur le mur en phosphore ; occlusion correcte en filaire ; escalier à vis (déco) ; engins de siège plus variés</div>
   <div><b>v0.40</b> — routes : contour seul en phosphore/filaire (plus d'échelle), portée jusqu'à l'écran quel que soit l'angle</div>
   <div><b>v0.39</b> — vraie caméra en perspective (bouton menu), base du donjon elliptique en phosphore</div>
@@ -1761,8 +1769,17 @@
   document.getElementById('cosyClose').addEventListener('click', () => { cosyOverlay.hidden = true; });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
 
-  document.getElementById('versionBtn').addEventListener('click', () => {
+  const versionBtn = document.getElementById('versionBtn');
+  versionBtn.addEventListener('click', () => {
     changelog.hidden = !changelog.hidden;
+  });
+  // tapping the game area (or anywhere outside the panel) while it's open
+  // closes it — signalé en session, il n'y avait aucun moyen de le
+  // refermer sans re-taper précisément le bouton
+  document.addEventListener('click', (e) => {
+    if (changelog.hidden) return;
+    if (changelog.contains(e.target) || e.target === versionBtn) return;
+    changelog.hidden = true;
   });
 
   /* ---------- MISE À JOUR AUTOMATIQUE (pas de service worker, cf. Knight
