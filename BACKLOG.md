@@ -1522,10 +1522,6 @@ correctif, aucune erreur console.
   l'eau, qui tourne dans le bon sens par rapport au courant (vrai
   mécanisme de moulin à eau à rechercher, pas inventé au hasard). Pas
   commencé.
-- **Ralentissement du seigneur dans les douves en sortie** — 30% de
-  ralentissement en traversant l'eau, réduit à seulement 10% (pas
-  annulé) avec le cheval — confirmé explicitement par Pierre. Pas
-  encore câblé dans `update()`/le mouvement de sortie.
 - **Petit cours d'eau secondaire vers les douves** — dès la
   construction des douves, un petit cours d'eau (3x moins large que le
   principal) part en amont du ruisseau existant et se déverse dans les
@@ -1913,3 +1909,29 @@ holyHits=1, holyInside=true ; sort → holyInside=false ; rentre à
 nouveau → mort (retiré du tableau), exactement conforme à la règle.
 Tarif/paliers vérifiés (25 puis 55, coûts exacts déduits de l'or).
 Bouton suit la caméra en tournant. Aucune erreur console.
+
+## Ralentissement du seigneur dans les douves (4e des 6 gros chantiers) → fait en v0.71
+
+Confirmé explicitement par Pierre en session (question posée via
+AskUserQuestion) : "30% ralenti en traversant l'eau, réduit à
+seulement 10% avec le cheval — pas annulé". Câblé dans le même point
+du mouvement du seigneur que le boost du cheval lui-même
+(`speedMul`, juste avant le calcul du pas radial capé) : dans la bande
+BASE_R → `MOAT_TIERS[niveau-1].r` (même bande que le ralentissement
+déjà appliqué aux ennemis), `speedMul *= 0.7` sans cheval, `×0.9` avec
+— multiplicatif avec le boost du cheval (`horseMul`), pas remplacé
+par lui, donc "réduit à 10%" plutôt qu'annulé comme demandé.
+
+Vérifié en Playwright (hooks de debug temporaires, retirés avant
+commit) : trace haute résolution (`requestAnimationFrame`, pas de
+sondage à intervalles fixes qui aurait ajouté du bruit d'aller-retour
+réseau) de `state.player.r` pendant une sortie tenue, filtrée sur la
+bande 74-87 des douves. Sans cheval : 98.4 unités/s mesurées contre
+140×0.7=98 attendu. Avec cheval : 252.8 unités/s mesurées contre
+140×2×0.9=252 attendu — correspondance quasi exacte dans les deux cas.
+Aucune erreur console.
+
+Pas fait (scope assumé, comme noté pour le ruisseau infranchissable) :
+n'affecte que le seigneur, pas les paysans qui fuient au château (ils
+ne traversent pas les douves de toute façon, leur trajet passe par la
+porte).

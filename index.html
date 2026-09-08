@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.70</button>
+  <button id="versionBtn">v0.71</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.71</b> — le seigneur est ralenti dans les douves en sortie (30%, seulement 10% avec le cheval), comme confirmé en session</div>
   <div><b>v0.70</b> — zone sacrée de l'église : le toucher fait apparaître un bouton d'achat par palier qui agrandit une ellipse au sol, no-man's-land pour les ennemis (moitié de vie perdue à l'entrée, l'autre moitié à la ré-entrée)</div>
   <div><b>v0.69</b> — économie du moulin : le toucher fait apparaître un bouton d'achat par palier (bouton flottant qui suit la rotation de la caméra), revenu passif ensuite</div>
   <div><b>v0.68</b> — le ruisseau est enfin infranchissable ("très important") : ennemis bloqués par une berge invisible, obligés de longer l'eau jusqu'au pont pour passer</div>
@@ -3493,7 +3494,14 @@
       const eased = rDelta * (1 - Math.exp(-RADIAL_EASE_RATE * dt));
       // le cheval n'accélère que la charge en sortie, pas la marche
       // normale (réparer, câlin, etc.) — "quand il sort charger"
-      const speedMul = p.behavior === 'sortie' ? horseMul(state.horseLevel) : 1;
+      let speedMul = p.behavior === 'sortie' ? horseMul(state.horseLevel) : 1;
+      // ralentissement dans les douves (demandé en session, confirmé
+      // explicitement par Pierre : "30% ralenti, réduit à 10% avec le
+      // cheval, pas annulé") — même bande de rayon que le ralentissement
+      // déjà appliqué aux ennemis (BASE_R à MOAT_TIERS[...].r)
+      if (state.moatLevel > 0 && p.r > BASE_R && p.r <= MOAT_TIERS[state.moatLevel - 1].r) {
+        speedMul *= state.horseLevel > 0 ? 0.9 : 0.7;
+      }
       const cap = PLAYER_WALK_SPEED * speedMul * dt;
       p.r += Math.abs(eased) > cap ? Math.sign(eased) * cap : eased;
     }
