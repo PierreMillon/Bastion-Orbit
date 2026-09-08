@@ -422,10 +422,11 @@
   <div class="stat">🪙 <span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.40</button>
+  <button id="versionBtn">v0.41</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.41</b> — douves : niveau 1 deux fois moins large, plus jamais de noyade (ralentit seulement) ; routes largeur physique constante (pas d'élargissement en axonométrie) ; porte/fenêtres vraiment plaquées sur le mur en phosphore ; occlusion correcte en filaire ; escalier à vis (déco) ; engins de siège plus variés</div>
   <div><b>v0.40</b> — routes : contour seul en phosphore/filaire (plus d'échelle), portée jusqu'à l'écran quel que soit l'angle</div>
   <div><b>v0.39</b> — vraie caméra en perspective (bouton menu), base du donjon elliptique en phosphore</div>
   <div><b>v0.38</b> — vue "cosy" (bouton 🔥) : roi/princesse au coin du feu, purement visuel</div>
@@ -556,7 +557,16 @@
           return function (...args) {
             if (phosphorStyle === 'couleur') return target.fill(...args);
             const fs = target.fillStyle, ss = target.strokeStyle, lw = target.lineWidth;
-            if (phosphorStyle === 'phosphore') { target.fillStyle = PHOSPHOR_BG; target.fill(...args); }
+            // 'filaire' used to skip the fill entirely (pure line network,
+            // nothing opaque) — signalé en session : with no opaque castle
+            // body, anything standing behind it (the lord on the platform,
+            // an enemy on the far side) stayed fully visible straight
+            // through the wireframe walls, which read as "windows/things
+            // that never disappear". Filling in the background colour here
+            // too keeps 'filaire' properly opaque/occluding — the only
+            // real difference from 'phosphore' is which castle renderer
+            // draws it (every facet vs. just the outer silhouette).
+            target.fillStyle = PHOSPHOR_BG; target.fill(...args);
             target.strokeStyle = phosphorLine();
             target.lineWidth = Math.max(1, 1.2 * (scale || 1));
             // stroke() only ever takes an optional Path2D — never a fill
@@ -571,7 +581,7 @@
           return function (x, y, w, h) {
             if (phosphorStyle === 'couleur') return target.fillRect(x, y, w, h);
             const fs = target.fillStyle, ss = target.strokeStyle, lw = target.lineWidth;
-            if (phosphorStyle === 'phosphore') { target.fillStyle = PHOSPHOR_BG; target.fillRect(x, y, w, h); }
+            target.fillStyle = PHOSPHOR_BG; target.fillRect(x, y, w, h);
             target.strokeStyle = phosphorLine();
             target.lineWidth = Math.max(1, 1.1 * (scale || 1));
             target.strokeRect(x, y, w, h);
@@ -853,6 +863,13 @@
   const PLAYER_WALK_SPEED = 140; // world units/s, lord's own two feet
   const PLATFORM_R = R * 1.4;   // wide walkway on top of the donjon — player and turrets actually stand here, not on the bare donjon rim
   const PLATFORM_H = 7;         // platform thickness
+  // a dark opening at the very centre of the platform, standing in for a
+  // spiral staircase down through the donjon (demandé en session, une
+  // idée dite plus tôt et perdue avant d'être notée) — purely decorative
+  // for now: the lord/princess still transit via the door/wall radius as
+  // before, this just makes the platform read as connected to something
+  // below rather than a solid disc
+  const STAIR_HOLE_R = R * 0.22;
   const PLAYER_R = PLATFORM_R * 0.8; // stand a bit inside the platform's edge, not hanging off it
   // turrets sit one notch further out than the lord's own ring — previously
   // both were at the exact same radius, so a fast camera spin (his angle
@@ -894,7 +911,17 @@
   // several angles at once (encercler). Fixed world angles, well clear of
   // the door itself so they don't visually compete with it.
   const ROAD_ANGLES = [DOOR_ANGLE + 2.1, DOOR_ANGLE - 2.3];
-  const ROAD_WIDTH = 0.11;            // angular half-width of the lane
+  // a real road has a fixed physical width, not a fixed ANGLE — signalé en
+  // session : with a constant angular half-width, the actual world-space
+  // width grows with radius (arc length ≈ radius × angle), so in
+  // axonométrie (no perspective foreshortening, world size = screen size)
+  // the road visibly widened as it went out, which is wrong — axonometric
+  // projection is supposed to keep a constant physical size constant on
+  // screen everywhere. Perspective mode narrowing it with distance is
+  // correct there and unaffected by this — that's genuine foreshortening
+  // on a now-genuinely-constant world width, not an artifact.
+  const ROAD_WIDTH = 8;               // linear half-width, world units — convert to angle via /r where used
+  function roadHalfAngle(r) { return ROAD_WIDTH / Math.max(1, r); }
   const ROAD_WIND_AMP = 0.55;         // how far the road snakes off its base angle at its widest
   const ROAD_WIND_FREQ = 0.011;       // how tightly it winds per world unit of radius
   const ROAD_CHANCE = 0.4;            // fraction of new spawns that pick a road
@@ -946,7 +973,7 @@
     { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2 },
     { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true }
   ];
-  const SIEGE_GROUP_RADIUS = 45;  // how close stalled enemies must be to combine
+  const SIEGE_GROUP_RADIUS = 68;  // how close stalled enemies must be to combine — raised (était 45) : les tiers 2/3 (trébuchet, tour) demandent 4-5 attaquants au même endroit, trop rare pour jamais apparaître avec un rayon aussi serré
   const SIEGE_CHECK_INTERVAL = 1.2;
   const SIEGE_HP_REGEN_PER_CREW = 1.5; // hp/s per living crew member — fast enough that ranged fire alone can't wear one down
   const TOWER_GROW_RATE = 0.28;   // height gained per second, capped at TOWER_MAX_H
@@ -966,13 +993,16 @@
   const FIGHT_BANNER_SPAWN_DELAY = 0.75; // enemies start arriving just before it's fully gone
 
   // moat upgrade tiers: each purchase extends how far out the slowing water
-  // reaches (enemies inside move at half speed, more so at deeper tiers)
-  // and, from tier 3, chips a little HP off anything lingering in it.
+  // reaches — deeper tiers slow more, but the water never damages anyone
+  // lingering in it (signalé en session : ralentir seulement, pas noyer).
+  // Tier 1's own band is half the width of the others (13 units instead of
+  // ~22-30) — a soft, cheap first step rather than the same width as the
+  // pricier tiers (signalé en session).
   // Building/extending the moat floods the garden — `r` deliberately grows
   // into the bush band (max radius ~118), not around it: each tier
   // submerges another couple of bush clumps (see FLOODED_PER_TIER).
   const MOAT_TIERS = [
-    { cost: 20, r: 100 },
+    { cost: 20, r: 87 },
     { cost: 50, r: 122 },
     { cost: 200, r: 148 },
     { cost: 500, r: 178 }
@@ -980,8 +1010,8 @@
   const FLOODED_PER_TIER = 2; // bush clumps submerged per moat level (of 8)
 
   // a wave slowed by the moat sends a couple of builders next wave to lay
-  // a crossing — once up, every wave after ignores the slow (and the
-  // tier-3+ chip damage) at that angle, until it's destroyed
+  // a crossing — once up, every wave after ignores the slow at that
+  // angle, until it's destroyed
   const BRIDGE_BUILD_TIME = 2.5;
   const BRIDGE_HP = 20;               // ~10x a soldier's 2 hp
   const BRIDGE_ANGULAR_WIDTH = 0.16;  // how wide a crossing lane it covers
@@ -2169,7 +2199,7 @@
           const rd = angDiff(e.angle, roadTarget);
           const rStep = ROAD_SNAP_RATE * dt;
           e.angle += Math.max(-rStep, Math.min(rStep, rd));
-          if (Math.abs(rd) < ROAD_WIDTH * 1.5) speedMul *= ROAD_SPEED_MUL;
+          if (Math.abs(rd) < roadHalfAngle(e.r) * 1.5) speedMul *= ROAD_SPEED_MUL;
         } else if (!e.fleeing) {
           // a gentle side-to-side sway so the approach doesn't read as a
           // laser-straight line — skipped while fleeing (walks straight out)
@@ -2185,15 +2215,11 @@
             e.buildTimer = BRIDGE_BUILD_TIME;
             continue;
           }
-          // deeper water (higher level) slows more, and from level 3 the
-          // water itself is deep/dark enough to chip away a little health
-          // on anything that lingers in it
+          // deeper water (higher level) slows more — no damage at any
+          // level (signalé en session : les douves ne doivent que
+          // ralentir, pas noyer les ennemis)
           state.moatSlowedThisWave = true;
           speedMul *= Math.max(0.15, 0.55 - 0.1 * (state.moatLevel - 1));
-          if (state.moatLevel >= 3) {
-            e.hp -= 0.15 * dt;
-            if (e.hp <= 0) killEnemy(e);
-          }
         }
         const rotNow = state.theta - Math.PI / 4;
         const sp0 = project(ex0, 0, ez0, rotNow);
@@ -2661,17 +2687,35 @@
     // background-coloured notch, then outline it) but simplified — one
     // shape per opening instead of per-facet, no N_SEG quantization needed
     // now that there are no facets to quantize against
-    const cutout = (angle, y, w, h) => {
+    // signalé en session : la porte/fenêtre était un "autocollant" — une
+    // forme 2D toujours face caméra, juste rétrécie en largeur (cosinus)
+    // pour suggérer la rotation, sans jamais être vraiment un panneau plat
+    // posé sur le mur qui tourne avec lui. Corrigé : chaque point du
+    // contour de l'arche est un vrai point du monde (angle réel autour du
+    // cylindre, hauteur réelle), projeté individuellement — exactement
+    // comme les facettes du mur elles-mêmes. Le panneau est donc plat sur
+    // le mur et tourne avec lui pour de vrai, pas par approximation.
+    const cutout = (angle, yBase, halfWidth, height) => {
       if (Math.cos(angle - rot) < 0.05) return; // facing away, skip
-      const p = project(R * 0.99 * Math.cos(angle), y, R * 0.99 * Math.sin(angle), rot);
-      const f = Math.max(0.15, Math.cos(angle - rot));
-      // this function only ever runs in 'phosphore' style, so the wrapped
-      // ctx already does exactly what's wanted here: a background-colour
-      // notch with a phosphor outline, in one fill() call
-      archPath(p.x, p.y, w * scale * f, h * scale);
+      const topV = height - halfWidth; // where the straight sides end and the round top begins
+      const pts = [[-halfWidth, 0], [-halfWidth, topV]];
+      const ARCH_STEPS = 10;
+      for (let i = 0; i <= ARCH_STEPS; i++) {
+        const t = Math.PI - (i / ARCH_STEPS) * Math.PI;
+        pts.push([Math.cos(t) * halfWidth, topV + Math.sin(t) * halfWidth]);
+      }
+      pts.push([halfWidth, 0]);
+      const screenPts = pts.map(([u, v]) => {
+        const a = angle + u / R;
+        return project(R * 0.99 * Math.cos(a), yBase + v, R * 0.99 * Math.sin(a), rot);
+      });
+      ctx.beginPath();
+      ctx.moveTo(screenPts[0].x, screenPts[0].y);
+      for (let i = 1; i < screenPts.length; i++) ctx.lineTo(screenPts[i].x, screenPts[i].y);
+      ctx.closePath();
       ctx.fill();
     };
-    cutout(DOOR_ANGLE, 12, 12, 22);
+    cutout(DOOR_ANGLE, 1, 12, 22);
     const windowY = state.castleH * 0.55;
     if (windowY > 0 && windowY < wallTopY) for (const wa of WINDOW_ANGLES) cutout(wa, windowY, 6, 14);
   }
@@ -2768,6 +2812,37 @@
     ctx.fill();
     ctx.strokeStyle = '#8c7d61';
     ctx.lineWidth = 1;
+    ctx.stroke();
+
+    drawStairHole(y1, rot);
+  }
+
+  // the spiral stairwell opening — a dark disc plus a short spiral hint,
+  // drawn last so it sits on top of the platform surface
+  function drawStairHole(y, rot) {
+    const holePts = circlePts.map(c => project(STAIR_HOLE_R * c.cx, y, STAIR_HOLE_R * c.cz, rot));
+    ctx.fillStyle = '#241a10';
+    ctx.beginPath();
+    ctx.moveTo(holePts[0].x, holePts[0].y);
+    for (let i = 1; i <= N_SEG; i++) ctx.lineTo(holePts[i].x, holePts[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#0f0a06';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // a short spiral, just enough to read as stairs curling down rather
+    // than a plain hole
+    const center = project(0, y, 0, rot);
+    ctx.strokeStyle = 'rgba(140,120,95,0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      const a = t * Math.PI * 2.4;
+      const rr = STAIR_HOLE_R * 0.75 * t;
+      const p = project(rr * Math.cos(a), y, rr * Math.sin(a), rot);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    }
     ctx.stroke();
   }
 
@@ -2882,12 +2957,12 @@
     return segs;
   }
   function drawRoadSeg(seg, rot) {
-    const hw = ROAD_WIDTH;
+    const hw0 = roadHalfAngle(seg.r0), hw1 = roadHalfAngle(seg.r1);
     const pts = [
-      [seg.r0 * Math.cos(seg.a0 - hw), seg.r0 * Math.sin(seg.a0 - hw)],
-      [seg.r0 * Math.cos(seg.a0 + hw), seg.r0 * Math.sin(seg.a0 + hw)],
-      [seg.r1 * Math.cos(seg.a1 + hw), seg.r1 * Math.sin(seg.a1 + hw)],
-      [seg.r1 * Math.cos(seg.a1 - hw), seg.r1 * Math.sin(seg.a1 - hw)]
+      [seg.r0 * Math.cos(seg.a0 - hw0), seg.r0 * Math.sin(seg.a0 - hw0)],
+      [seg.r0 * Math.cos(seg.a0 + hw0), seg.r0 * Math.sin(seg.a0 + hw0)],
+      [seg.r1 * Math.cos(seg.a1 + hw1), seg.r1 * Math.sin(seg.a1 + hw1)],
+      [seg.r1 * Math.cos(seg.a1 - hw1), seg.r1 * Math.sin(seg.a1 - hw1)]
     ].map(([x, z]) => project(x, 0.5, z, rot));
     ctx.fillStyle = '#9c8360';
     buildQuad(pts);
@@ -2913,15 +2988,16 @@
   // route. Juste les deux bords, en continu sur tout le run, sans remplir.
   function drawRoadRun(run, rot) {
     if (phosphorStyle === 'couleur') { for (const seg of run) drawRoadSeg(seg, rot); return; }
-    const hw = ROAD_WIDTH;
     const leftPts = [], rightPts = [];
     for (const seg of run) {
-      leftPts.push(project(seg.r0 * Math.cos(seg.a0 - hw), 0.5, seg.r0 * Math.sin(seg.a0 - hw), rot));
-      rightPts.push(project(seg.r0 * Math.cos(seg.a0 + hw), 0.5, seg.r0 * Math.sin(seg.a0 + hw), rot));
+      const hw0 = roadHalfAngle(seg.r0);
+      leftPts.push(project(seg.r0 * Math.cos(seg.a0 - hw0), 0.5, seg.r0 * Math.sin(seg.a0 - hw0), rot));
+      rightPts.push(project(seg.r0 * Math.cos(seg.a0 + hw0), 0.5, seg.r0 * Math.sin(seg.a0 + hw0), rot));
     }
     const last = run[run.length - 1];
-    leftPts.push(project(last.r1 * Math.cos(last.a1 - hw), 0.5, last.r1 * Math.sin(last.a1 - hw), rot));
-    rightPts.push(project(last.r1 * Math.cos(last.a1 + hw), 0.5, last.r1 * Math.sin(last.a1 + hw), rot));
+    const hw1 = roadHalfAngle(last.r1);
+    leftPts.push(project(last.r1 * Math.cos(last.a1 - hw1), 0.5, last.r1 * Math.sin(last.a1 - hw1), rot));
+    rightPts.push(project(last.r1 * Math.cos(last.a1 + hw1), 0.5, last.r1 * Math.sin(last.a1 + hw1), rot));
     ctx.lineWidth = Math.max(1, 1.2 * scale);
     for (const pts of [leftPts, rightPts]) {
       ctx.beginPath();
