@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.71</button>
+  <button id="versionBtn">v0.72</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.72</b> — un petit cours d'eau secondaire (3x moins large) part du ruisseau et se déverse dans les douves dès leur construction, avec des particules qui s'éteignent avant d'atteindre l'eau stagnante</div>
   <div><b>v0.71</b> — le seigneur est ralenti dans les douves en sortie (30%, seulement 10% avec le cheval), comme confirmé en session</div>
   <div><b>v0.70</b> — zone sacrée de l'église : le toucher fait apparaître un bouton d'achat par palier qui agrandit une ellipse au sol, no-man's-land pour les ennemis (moitié de vie perdue à l'entrée, l'autre moitié à la ré-entrée)</div>
   <div><b>v0.69</b> — économie du moulin : le toucher fait apparaître un bouton d'achat par palier (bouton flottant qui suit la rotation de la caméra), revenu passif ensuite</div>
@@ -2004,6 +2005,52 @@
     const off = Math.sin(d * STREAM_WIND_FREQ) * STREAM_WIND_AMP;
     return { x: g.cx + g.tx * d + g.rx * off, z: g.cz + g.tz * d + g.rz * off };
   }
+
+  // petit cours d'eau secondaire vers les douves (demandé en session, dès
+  // la construction des douves) : "part en amont du cours d'eau existant,
+  // trois fois moins large, se déverse dans les douves" — particules
+  // réduites trois fois, qui diminuent GRADUELLEMENT jusqu'à zéro en
+  // approchant des douves (l'eau y est stagnante, pas de particules qui
+  // bougent dans les douves elles-mêmes). N'existe que si state.moatLevel>0.
+  const TRIBUTARY_D = -150;              // point sur le ruisseau principal, en amont du pont (d=0)
+  const TRIBUTARY_HALF_WIDTH = STREAM_HALF_WIDTH / 3;
+  const TRIBUTARY_ANGLE_OFFSET = 0.45;   // rad, décale le point d'arrivée sur les douves loin du pont/du croisement
+  const TRIBUTARY_FLOW_COUNT = Math.round(STREAM_FLOW_COUNT / 9); // largeur/3 ET densité/3, comme demandé
+  const TRIBUTARY_FLOW_SPEED = 0.35;     // "td" (0..1 sur toute la longueur) parcouru par seconde
+  // extrémités du petit cours d'eau — recalculées à chaque appel (le point
+  // d'arrivée dépend du niveau des douves, qui change en jeu)
+  function tributaryGeometry() {
+    const g = streamGeometry();
+    const start = streamPointAt(g, TRIBUTARY_D);
+    const moatR = state.moatLevel > 0 ? MOAT_TIERS[state.moatLevel - 1].r : 0;
+    const endAngle = g.angle + TRIBUTARY_ANGLE_OFFSET;
+    const end = { x: moatR * Math.cos(endAngle), z: moatR * Math.sin(endAngle) };
+    return { start, end };
+  }
+  // point continu le long du petit cours d'eau (td: 0=amont, 1=douves) —
+  // même interpolation polaire que bowedPathPoints plus bas (angle/rayon
+  // autour du donjon plutôt qu'une ligne droite x/z), pour la même raison
+  // que celle qui a corrigé les bretelles de la place en v0.65 : les deux
+  // extrémités sont à des rayons/angles très différents, une corde droite
+  // couperait près du donjon.
+  function tributaryPointAt(td) {
+    const g = tributaryGeometry();
+    const a0 = Math.atan2(g.start.z, g.start.x), r0 = Math.hypot(g.start.x, g.start.z);
+    const a1raw = Math.atan2(g.end.z, g.end.x), r1 = Math.hypot(g.end.x, g.end.z);
+    let da = a1raw - a0;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    const a = a0 + da * td, r = r0 + (r1 - r0) * td;
+    return { x: r * Math.cos(a), z: r * Math.sin(a) };
+  }
+  let tributaryFlowSeeds = null;
+  function ensureTributaryFlowSeeds() {
+    if (tributaryFlowSeeds) return;
+    tributaryFlowSeeds = Array.from({ length: TRIBUTARY_FLOW_COUNT }, () => ({
+      td: Math.random(),
+      lat: (Math.random() * 2 - 1) * TRIBUTARY_HALF_WIDTH * 0.7
+    }));
+  }
   // audité en session : même chose que _roadSegsCache — cette géométrie ne
   // dépend que de constantes et de streamHalfLen() (=roadMaxR()=SPAWN_R,
   // ne change qu'au resize), inutile de la reconstruire 60 fois/seconde.
@@ -3349,6 +3396,18 @@
     for (const fl of streamFlowSeeds) {
       fl.d += STREAM_FLOW_SPEED * dt;
       if (fl.d > streamFlowRange) fl.d -= 2 * streamFlowRange;
+    }
+
+    // idem pour le petit cours d'eau secondaire, une fois les douves
+    // construites — reboucle en amont (td=0) une fois arrivé aux douves
+    // (td>=1), pas de "particules qui bougent dans les douves" (voir
+    // drawTributaryFlow, l'alpha s'éteint bien avant d'atteindre 1)
+    if (state.moatLevel > 0) {
+      ensureTributaryFlowSeeds();
+      for (const fl of tributaryFlowSeeds) {
+        fl.td += TRIBUTARY_FLOW_SPEED * dt;
+        if (fl.td > 1) fl.td -= 1;
+      }
     }
 
     updateSnow(dt);
@@ -5259,6 +5318,49 @@
     }
   }
 
+  // les berges du petit cours d'eau secondaire — même ruban courbé (en
+  // coordonnées polaires autour du donjon) déjà utilisé pour le troisième
+  // chemin de la place, réutilisé tel quel : les deux extrémités sont à
+  // des rayons/angles très différents (l'amont du ruisseau, les douves
+  // près du donjon), une corde droite couperait près du donjon — même
+  // bug que celui corrigé en v0.65.
+  function drawTributaryBanks(rot, wantFar) {
+    if (state.moatLevel <= 0) return;
+    const g = tributaryGeometry();
+    drawBowedSplitRoadPath(g.start.x, g.start.z, g.end.x, g.end.z, TRIBUTARY_HALF_WIDTH, rot, wantFar);
+  }
+  // particules du petit cours d'eau — s'éteignent GRADUELLEMENT avant
+  // d'atteindre les douves (rayon qui rétrécit vers 0, pas juste un arrêt
+  // net) plutôt que de vraiment "entrer" dans l'eau stagnante — cohérent
+  // avec "pas de particules qui bougent dans les douves elles-mêmes".
+  // Rayon plutôt qu'alpha pour le fondu : wrapPhosphor force fillStyle en
+  // Phosphore/Filaire (voir plus haut), l'alpha seul n'y serait pas
+  // visible, mais un rayon qui rétrécit fonctionne dans tous les styles.
+  const TRIBUTARY_FADE_START = 0.75; // td à partir duquel ça commence à rétrécir
+  function drawTributaryFlow(rot, wantFar) {
+    if (state.moatLevel <= 0) return;
+    ensureTributaryFlowSeeds();
+    for (const fl of tributaryFlowSeeds) {
+      const p = tributaryPointAt(fl.td);
+      const angle = Math.atan2(p.z, p.x);
+      const isFar = Math.cos(angle - rot) < 0;
+      if (isFar !== wantFar) continue;
+      // décalage latéral approximatif le long de l'axe radial (depuis le
+      // donjon) — suffisant à cette échelle (largeur ~3.7 unités), le
+      // cours d'eau tend de toute façon vers le donjon près des douves
+      const rdx = Math.cos(angle), rdz = Math.sin(angle);
+      const x = p.x + rdx * fl.lat, z = p.z + rdz * fl.lat;
+      const fadeT = Math.max(0, (fl.td - TRIBUTARY_FADE_START) / (1 - TRIBUTARY_FADE_START));
+      const rad = 0.6 * (1 - fadeT) * scale;
+      if (rad < 0.15 * scale) continue;
+      const pos = project(x, 0.4, z, rot);
+      ctx.fillStyle = 'rgba(225,242,255,0.55)';
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // jauge circulaire générique pour toute attente silencieuse qui va
   // déclencher un effet (Partie 2.4 : "rien ne se passe en silence") —
   // un anneau fin autour du personnage/de l'engin, pas au-dessus, pour
@@ -5957,6 +6059,8 @@
     if (pointFar(moulinGeometry().houseX, moulinGeometry().houseZ, rot)) drawMoulin(rot);
     drawStreamGlints(rot, true);
     drawStreamFlow(rot, true);
+    drawTributaryBanks(rot, true);
+    drawTributaryFlow(rot, true);
     for (const h of farHouses) drawHouse(h, rot);
     for (const b of farVillageExtras) drawVillageExtra(b, rot);
     drawEgliseZone(rot, true);
@@ -5990,6 +6094,8 @@
     if (!pointFar(moulinGeometry().houseX, moulinGeometry().houseZ, rot)) drawMoulin(rot);
     drawStreamGlints(rot, false);
     drawStreamFlow(rot, false);
+    drawTributaryBanks(rot, false);
+    drawTributaryFlow(rot, false);
     for (const h of nearHouses) drawHouse(h, rot);
     for (const b of nearVillageExtras) drawVillageExtra(b, rot);
     drawEgliseZone(rot, false);

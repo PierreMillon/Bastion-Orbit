@@ -1522,13 +1522,6 @@ correctif, aucune erreur console.
   l'eau, qui tourne dans le bon sens par rapport au courant (vrai
   mécanisme de moulin à eau à rechercher, pas inventé au hasard). Pas
   commencé.
-- **Petit cours d'eau secondaire vers les douves** — dès la
-  construction des douves, un petit cours d'eau (3x moins large que le
-  principal) part en amont du ruisseau existant et se déverse dans les
-  douves. Ses propres particules d'écoulement, réduites (3x moins),
-  qui diminuent PROGRESSIVEMENT jusqu'à zéro en approchant des douves
-  (l'eau y est stagnante — aucune particule ne doit bouger dans les
-  douves elles-mêmes). Pas commencé.
 - **Échiquier 8x8 dans la scène cosy** — le roi et la reine jouent aux
   échecs : il faut un vrai damier 8x8 avec cases pleines/vides en
   alternance, pas juste suggéré. Pas commencé (la scène cosy actuelle
@@ -1935,3 +1928,39 @@ Pas fait (scope assumé, comme noté pour le ruisseau infranchissable) :
 n'affecte que le seigneur, pas les paysans qui fuient au château (ils
 ne traversent pas les douves de toute façon, leur trajet passe par la
 porte).
+
+## Cours d'eau secondaire vers les douves (5e des 6 gros chantiers) → fait en v0.72
+
+Dès `state.moatLevel > 0` : un petit cours d'eau part d'un point en
+amont du ruisseau principal (`TRIBUTARY_D=-150`, avant le pont à d=0)
+et se déverse dans les douves. Largeur = `STREAM_HALF_WIDTH/3`
+(`TRIBUTARY_HALF_WIDTH`), particules = `STREAM_FLOW_COUNT/9`
+(largeur/3 ET densité/3, comme demandé littéralement).
+
+- Géométrie (`tributaryGeometry`/`tributaryPointAt`) : point d'arrivée
+  sur les douves recalculé chaque frame à partir de
+  `MOAT_TIERS[niveau-1].r` (suit l'agrandissement des douves), décalé
+  angulairement du pont (`TRIBUTARY_ANGLE_OFFSET`) pour ne pas se
+  déverser exactement dessus. Trajet interpolé en COORDONNÉES POLAIRES
+  autour du donjon (même principe que `bowedPathPoints`, réutilisé tel
+  quel pour les berges via `drawBowedSplitRoadPath`) plutôt qu'une
+  corde droite — les deux extrémités sont à des rayons/angles très
+  différents, une ligne droite couperait près du donjon (même bug que
+  celui corrigé sur les bretelles de la place en v0.65).
+- Particules (`drawTributaryFlow`) : s'éteignent PROGRESSIVEMENT avant
+  d'atteindre les douves (`TRIBUTARY_FADE_START=0.75`, le rayon
+  rétrécit vers 0) plutôt que de vraiment entrer dans l'eau stagnante.
+  Fondu par RAYON plutôt que par alpha : `wrapPhosphor` force
+  `fillStyle` en Phosphore/Filaire (voir plus haut dans ce fichier),
+  un fondu en alpha n'y serait pas visible, mais un rayon qui rétrécit
+  fonctionne dans tous les styles.
+- Dessiné dans le même ordre que les routes/la place par rapport aux
+  douves (avant l'anneau d'eau) pour qu'il disparaisse visuellement
+  sous la surface des douves à son point d'arrivée, comme un vrai
+  affluent.
+
+Vérifié en Playwright : capture zoomée après achat des douves — petit
+affluent visible partant du ruisseau principal près du pont, courbant
+vers l'anneau des douves, particules visibles le long du trajet.
+Aucune erreur console sur plusieurs vagues jouées avec les douves
+actives.
