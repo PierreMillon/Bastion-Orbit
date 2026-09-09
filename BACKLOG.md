@@ -2806,3 +2806,21 @@ proportionnellement à ce qu'il rapporte, contrairement à un vrai piège
 d'investissement) mais ça mériterait d'être vérifié en jeu réel sur
 plusieurs vagues avant d'y toucher — pas de changement fait ici,
 noté pour la suite.
+
+## Idée en attente : mode à deux, sans serveur (question du 2026-09-09)
+
+Pas commencé — gardé en mémoire, à la demande explicite de Pierre
+("garde en mémoire juste"), pour plus tard plutôt que maintenant.
+
+Piste technique retenue si on s'y met : WebRTC pour la connexion de
+jeu (pair-à-pair, aucun serveur pendant la partie), avec un échange
+initial manuel (code ou QR code affiché/scanné) pour l'appariement —
+zéro infrastructure à héberger, marche même sur wifi local sans
+internet. AirDrop/Bluetooth écartés (transfert ponctuel ou pas adapté
+à deux pages web qui se parlent en direct). Alternative plus fluide
+mais avec une dépendance externe : un petit service public gratuit
+(type PeerJS) pour un code de partie plus simple à l'appariement.
+
+Reste à trancher le jour où on s'y met : coopératif (un château à
+deux) ou versus (un attaquant contrôlé par un joueur) — question de
+game design séparée du choix réseau ci-dessus.
