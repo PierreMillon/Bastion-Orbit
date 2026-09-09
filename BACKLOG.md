@@ -1734,9 +1734,23 @@ combien de temps ça reste affiché).
   était différente.
 - **Zone sacrée de l'église** : toujours en attente, voir la section
   précédente pour le détail complet.
-- **Vrais curseurs de volume (0-100%)** — les réglages son actuels sont
-  de simples on/off ; il faut deux vraies glissières précises, une pour
-  la musique et une pour les bruitages, séparément.
+- **Vrais curseurs de volume — vérifié, déjà fait, rien à faire.**
+  Signalé comme "juste en off" par Pierre, mais testé en Playwright :
+  `#musicVolumeInput`/`#sfxVolumeInput` sont déjà de vraies glissières
+  `<input type="range" min="0" max="100">`, avec pourcentage affiché à
+  côté, persistées en `localStorage`, et une glissière testée en
+  direct répond bien à une valeur intermédiaire précise (39%, pas
+  juste 0 ou 100). Capture à l'appui : deux glissières bien visibles et
+  étiquetées dans le menu, aucun bouton on/off à cet endroit. Cette
+  fonctionnalité semble déjà présente depuis avant le début de cette
+  session (aucune trace d'un ajout récent dans le changelog). Piste la
+  plus probable : Pierre testait une version mise en cache (page pas
+  rafraîchie après un déploiement) ou pensait à un autre réglage
+  binaire du même menu (ex. "Snow: ON/OFF", juste au-dessus, qui LUI
+  est un vrai bouton on/off). Pas de changement fait — modifier un
+  mécanisme déjà correct sans reproduire le problème risquerait de
+  casser quelque chose qui marche. À revoir si Pierre confirme encore
+  le souci après avoir rafraîchi/rechargé la page.
 
 ## Le moulin — bâtiment + roue (2e des 6 gros chantiers) → fait en v0.67 ; économie (bouton/tarifs) → fait en v0.69
 
