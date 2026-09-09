@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.86</button>
+  <button id="versionBtn">v0.87</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.87</b> — la neige tombait toujours tout droit vers le bas de l'écran, vers le joueur, quelle que soit l'orientation de la caméra ; elle suit maintenant le sens réel du courant du ruisseau, et tourne avec la caméra plutôt que de rester figée à l'écran</div>
   <div><b>v0.86</b> — rentabilité : détruire un engin de siège rapportait un forfait fixe (5 or) qu'il ait 2 ou 6 soldats à bord ; chaque soldat abattu en sortie rapporte maintenant 1 or, immédiatement, comme n'importe quel ennemi — plus un bonus de 3 or au coup de grâce</div>
   <div><b>v0.85</b> — les engins de siège ont maintenant un vrai équipage de soldats individuels visibles (postés autour de l'engin, se balançant sur place), plutôt qu'une simple rangée de pips abstraite — la sortie les abat toujours un par un</div>
   <div><b>v0.84</b> — nouvelle section "Astuces" dans le menu : explique toutes les mécaniques du jeu avec les vrais chiffres (dégâts, coûts, seuils, timings), en français et en anglais</div>
@@ -6769,15 +6770,62 @@
       }
     });
   }
+  // direction du vent (demandé en session, 2026-09-09) : la neige tombait
+  // toujours tout droit vers le bas de l'écran, donc "vers le joueur" quel
+  // que soit l'angle de vue — un artefact extra-diégétique (figé à l'écran,
+  // ignore l'orientation du monde). Alignée maintenant sur le sens réel du
+  // courant du ruisseau (g.tx/g.tz — le même vecteur que l'écoulement de
+  // l'eau, voir fl.d += STREAM_FLOW_SPEED plus haut), tourné par la même
+  // transformation que project() (rotation caméra + skew iso, sans la
+  // hauteur ni la translation — un vecteur, pas une position) : tourne la
+  // caméra autour du donjon, le vent tourne avec elle, toujours dans le
+  // même sens du courant. "Garde l'actuel" pour tout le reste (vitesses,
+  // tailles, sway, densité par couche) — seul l'axe de la dérive change.
+  function windScreenDir() {
+    const rot = state.theta - Math.PI / 4;
+    const g = streamGeometry();
+    const rx = g.tx * Math.cos(rot) + g.tz * Math.sin(rot);
+    const rz = -g.tx * Math.sin(rot) + g.tz * Math.cos(rot);
+    const dx = (rx - rz) * cosIso;
+    const dy = (rx + rz) * sinIso;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: dx / len, y: dy / len };
+  }
+  // étendue de l'écran projetée sur un axe donné — généralise le H/W fixe
+  // de l'ancien rebouclage (toujours haut/bas + gauche/droite) à une
+  // direction de vent quelconque, puisqu'elle tourne maintenant avec la
+  // caméra plutôt que de rester verticale
+  function screenAxisExtent(dx, dy) {
+    let mn = Infinity, mx = -Infinity;
+    for (const p of [[0, 0], [W, 0], [0, H], [W, H]]) {
+      const v = p[0] * dx + p[1] * dy;
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    return mx - mn;
+  }
   function updateSnow(dt) {
     if (!snowOn) return;
+    const wind = windScreenDir();
+    const px = -wind.y, py = wind.x; // perpendiculaire au vent, pour le sway latéral
+    const margin = 20;
+    const along = screenAxisExtent(wind.x, wind.y) + margin * 2;
+    const across = screenAxisExtent(px, py) + margin * 2;
     for (const f of snowflakes) {
       const layer = SNOW_LAYERS[f.li];
       f.phase += dt;
-      f.y += layer.speed * scale * dt;
-      f.x += Math.sin(f.phase * 0.6 + f.windSeed) * layer.sway * scale * dt;
-      if (f.y > H + 20) { f.y = -20; f.x = Math.random() * W; }
-      if (f.x < -20) f.x = W + 20; else if (f.x > W + 20) f.x = -20;
+      const step = layer.speed * scale * dt;
+      const sway = Math.sin(f.phase * 0.6 + f.windSeed) * layer.sway * scale * dt;
+      f.x += wind.x * step + px * sway;
+      f.y += wind.y * step + py * sway;
+      if (f.x < -margin || f.x > W + margin || f.y < -margin || f.y > H + margin) {
+        // reboucle en amont du vent (bord opposé), décalage latéral au
+        // hasard — même principe que l'ancien "réapparaît en haut, x au
+        // hasard", généralisé à une direction de vent quelconque
+        f.x -= wind.x * along; f.y -= wind.y * along;
+        const j = (Math.random() - 0.5) * across;
+        f.x += px * j; f.y += py * j;
+      }
     }
   }
   // signalé en session : la neige passait par drawBallSprite, donc par

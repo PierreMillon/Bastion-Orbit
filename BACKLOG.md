@@ -2824,3 +2824,58 @@ mais avec une dépendance externe : un petit service public gratuit
 Reste à trancher le jour où on s'y met : coopératif (un château à
 deux) ou versus (un attaquant contrôlé par un joueur) — question de
 game design séparée du choix réseau ci-dessus.
+
+## Direction du vent de la neige, alignée sur le courant (consigne du
+2026-09-09) → fait en v0.87
+
+Consigne (dictée) : la neige doit dériver comme portée par un vent
+fort, toujours dans la même direction ET le même sens que le cours
+d'eau — "garde l'actuel" pour le reste, mais la direction "va vers
+nous, en tant que joueur" (donc plaquée à l'écran, extra-diégétique)
+doit devenir la direction du ruisseau dans le monde.
+
+**Diagnostic** : la neige (`updateSnow`/`drawSnow`) est un système de
+particules en espace écran pur (x/y en pixels, pas de position monde)
+— voulu ainsi à l'origine (perf, et pour ne jamais ressembler à un
+ennemi lointain en phosphore, voir le commentaire déjà en place).
+Avant, la dérive était `f.y += vitesse` : toujours vers le bas de
+l'écran, quelle que soit la rotation de caméra (`state.theta`) — un
+vrai artefact extra-diégétique, exactement ce que décrit Pierre.
+
+**Fait** : nouvelle fonction `windScreenDir()` qui prend le vecteur
+tangent du ruisseau (`streamGeometry().tx/tz` — le même vecteur que
+l'écoulement de l'eau lui-même, `fl.d += STREAM_FLOW_SPEED`, donc
+garanti le même sens que le courant, pas juste le même axe) et lui
+applique EXACTEMENT la même rotation+skew isométrique que `project()`
+(rotation caméra `state.theta - PI/4`, puis `cosIso`/`sinIso`) — mais
+seulement la partie vectorielle (ni hauteur, ni translation caméra,
+qui n'ont pas de sens pour une direction). Résultat : un vecteur 2D à
+l'écran qui tourne avec la caméra, toujours aligné sur le vrai sens du
+courant dans le monde.
+
+Le rebouclage (recyclage d'un flocon sorti de l'écran) doit aussi
+généraliser : avant, c'était toujours haut→bas + gauche↔droite figé.
+Nouvelle fonction `screenAxisExtent(dx,dy)` calcule l'étendue de
+l'écran projetée sur un axe quelconque (les 4 coins du rectangle
+écran, min/max de la projection) — généralise le H/W fixe de l'ancien
+code à une direction de vent qui peut être n'importe quel angle
+maintenant. Le sway (ondulation latérale) reste, mais tourné pour
+rester perpendiculaire au nouvel axe du vent plutôt que rester sur
+l'axe x fixe d'avant — sinon il aurait fini par se balancer dans le
+sens de la dérive principale à certains angles de caméra, ce qui
+aurait eu l'air cassé.
+
+"Garde l'actuel" respecté : vitesses/tailles/densité par couche
+(`SNOW_LAYERS`) inchangées, seul l'axe de la dérive (et du sway,
+perpendiculaire à ce nouvel axe) a changé.
+
+Vérifié en Playwright avec des hooks de debug temporaires (retirés
+avant commit, `grep -c "__DEBUG_"` revenu à 1) : `windScreenDir()`
+comparée à la dérive RÉELLEMENT observée sur des flocons (sway mis à
+zéro le temps du test pour isoler le signal) à 4 angles de caméra
+(0, 90°, 180°, 270°) — correspondance exacte (à l'arrondi flottant
+près) dans les 4 cas, confirmant que la direction suit bien la
+rotation de caméra. Capture d'écran après 15s à angle fixe : pas
+d'accumulation ni de flocon coincé hors-écran (le rebouclage
+généralisé fonctionne). Capture après rotation de caméra : neige
+toujours répartie normalement à l'écran. Aucune erreur console.
