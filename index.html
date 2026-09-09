@@ -505,10 +505,12 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.80</button>
+  <button id="versionBtn">v0.82</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.82</b> — fontaine-soin : affaibli en sortie, le seigneur se précipite se soigner à la fontaine du village plutôt que de continuer à se battre — un vrai choix tactique, s'éloigner du combat pour survivre</div>
+  <div><b>v0.81</b> — la grange et l'église du village sont maintenant des cachettes pour les ennemis, comme les maisons</div>
   <div><b>v0.80</b> — correctif bloquant : sur un écran court, le menu (bouton ☰) pouvait dépasser en bas, avec le bouton Fermer inatteignable et aucun moyen de faire défiler — obligeait à fermer l'application. Le menu et l'écran de fin défilent maintenant chacun correctement</div>
   <div><b>v0.79</b> — les routes traversent maintenant deux petits hameaux avant de laisser place à un chemin qui continue seul jusqu'au donjon, au lieu d'un accès direct : "routes → village → chemin → donjon"</div>
   <div><b>v0.78</b> — arrivée par bateau : de temps en temps, un bateau débarque un petit groupe d'ennemis directement sur la berge du ruisseau, une menace séparée des vagues normales</div>
@@ -1430,6 +1432,15 @@
   const PRINCESS_DMG_TICK = 1.2;         // how often a nearby threat chips her HP, up top or down
   const CALIN_HEAL_TIME = 3;             // seconds of an active hug to fully heal both from empty
   const CALIN_RELEASE_GRACE = 1;         // the hug lingers this long after release before deciding what's next
+  // fontaine-soin (item C de la grosse consigne du 2026-09-08, "un nouveau
+  // point de soin au sol, hors du donjon... un vrai choix tactique : aller
+  // se soigner = s'éloigner du combat") — en sortie, si affaibli, priorité
+  // absolue à la fontaine plutôt qu'à un combat en cours : le choix
+  // tactique réel se joue à tenir Sortie ou pas pendant qu'on est faible,
+  // pas dans un menu séparé. Ne soigne QUE le seigneur (pas la princesse,
+  // qui n'est pas là) — à la différence du câlin.
+  const FOUNTAIN_HEAL_HP_FRAC = 0.35;    // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
+  const FOUNTAIN_HEAL_TIME = 4;          // secondes pour se soigner entièrement depuis 0 — un peu plus lent que le câlin (3s), plus exposé/loin du mur
   const PRINCESS_ANGLE_SPEED = 1.2;      // how fast she turns while wandering/approaching up top
   const PRINCESS_R_EASE_RATE = 3;        // how fast she eases toward a new radius up top
   const PRINCESS_THREAT_COUNT = 5;       // this many nearby enemies sends her to the lord's side
@@ -1744,11 +1755,25 @@
   const PLAZA_RADIUS = 80; // marge ~13 unités par rapport à la contrainte la plus proche (l'église)
   const PLAZA_ANGLE = Math.atan2(PLAZA_Z, PLAZA_X);
 
+  // cachette (décidé à la place de Pierre, 2026-09-09, "choisis à ma
+  // place") : la grange et l'église sont maintenant des cachettes
+  // indestructibles comme les maisons (même HOUSE_HIDE_R/CHANCE, même
+  // mécanique générique — nearestSortieTarget/le déloge-à-la-sortie
+  // marchent déjà sur n'importe quel objet avec .hiddenCount/.x/.z/.angle/
+  // .r, aucun changement à cette logique nécessaire). Pas la fontaine —
+  // trop petite pour être une cachette plausible.
   const VILLAGE_EXTRAS = [
-    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: 0.5 },
-    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: -0.35 },
+    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: 0.5, hiddenCount: 0 },
+    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: -0.35, hiddenCount: 0 },
     { type: 'fontaine', x: PLAZA_X, z: PLAZA_Z } // au centre de la place, pas ailleurs
   ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
+  // sous-ensemble "cachette" de VILLAGE_EXTRAS — évite de tester la
+  // fontaine (pas de hiddenCount) à chaque frame dans la boucle de
+  // cachette ci-dessous
+  const VILLAGE_HIDE_SPOTS = VILLAGE_EXTRAS.filter(b => b.type === 'grange' || b.type === 'eglise');
+  // toutes les cachettes possibles (maisons + grange/église), combinées
+  // une seule fois plutôt qu'à chaque frame/chaque ennemi
+  const ALL_HIDE_SPOTS = [...HOUSES, ...VILLAGE_HIDE_SPOTS];
   // Scope assumé et noté dans BACKLOG.md : la place/les chemins vers
   // elle sont purement visuels, superposés aux deux routes existantes
   // SANS toucher à roadAngleAt/le pathing des ennemis dessus (déjà
@@ -1773,6 +1798,7 @@
   // dupliquer le filtre/la boucle de dessin pour chacun
   const ALL_VILLAGE_EXTRAS = [...VILLAGE_EXTRAS, ...FARM_BUILDINGS];
   const EGLISE_EXTRA = VILLAGE_EXTRAS.find(b => b.type === 'eglise');
+  const FOUNTAIN_EXTRA = VILLAGE_EXTRAS.find(b => b.type === 'fontaine'); // fontaine-soin, voir FOUNTAIN_HEAL_*
 
   // ---- mécanique des paysans (demandé en session, détail complet dans
   // BACKLOG.md) ----
@@ -2216,6 +2242,7 @@
     // instead of tapped, and only takes effect once she's already down —
     // grace keeps the hug visually lingering a moment after release
     calin: { held: false, grace: 0, hugging: false },
+    fountainDrinking: false, // fontaine-soin, même esprit que calin.hugging
     siegeEngines: [],
     boats: [], // débarquements par le ruisseau (consigne du 2026-09-08) — voir BOAT_EVENT_MIN_INTERVAL
     boatTimer: BOAT_EVENT_MIN_INTERVAL + Math.random() * (BOAT_EVENT_MAX_INTERVAL - BOAT_EVENT_MIN_INTERVAL),
@@ -2306,6 +2333,10 @@
   // approaching), so holding Sortie always has something to do instead of
   // just idling outside the door
   function nearestSortieTarget(fromAngle) {
+    // fontaine-soin : affaibli en sortie, se soigner passe avant tout le
+    // reste — continuer à se battre à faible PV loin du mur est le
+    // meilleur moyen de mourir pour de bon (voir FOUNTAIN_HEAL_HP_FRAC)
+    if (state.player.hp < state.player.maxHp * FOUNTAIN_HEAL_HP_FRAC) return FOUNTAIN_EXTRA;
     const siege = nearestSiegeEngine(fromAngle);
     if (siege) return siege;
     let best = null, bestD = Infinity;
@@ -2314,10 +2345,11 @@
       const d = Math.abs(angDiff(fromAngle, e.angle));
       if (d < bestD) { bestD = d; best = e; }
     }
-    // maisons-cachettes : même priorité que les ennemis actifs (comme les
-    // engins de siège, un tir à distance ne peut rien contre elles — voir
-    // HOUSE_HIDE_R plus haut) plutôt qu'un dernier recours façon pont
-    for (const house of HOUSES) {
+    // maisons-cachettes (+ grange/église) : même priorité que les ennemis
+    // actifs (comme les engins de siège, un tir à distance ne peut rien
+    // contre elles — voir HOUSE_HIDE_R plus haut) plutôt qu'un dernier
+    // recours façon pont
+    for (const house of ALL_HIDE_SPOTS) {
       if (house.hiddenCount <= 0) continue;
       const d = Math.abs(angDiff(fromAngle, house.angle));
       if (d < bestD) { bestD = d; best = house; }
@@ -3904,6 +3936,23 @@
         p.hp = Math.min(p.maxHp, p.hp + p.maxHp * healFrac);
         state.princess.hp = Math.min(state.princess.maxHp, state.princess.hp + state.princess.maxHp * healFrac);
       }
+    } else if (p.behavior === 'sortie' && sortieTarget && sortieTarget.type === 'fontaine') {
+      // fontaine-soin : se soigne en continu tant qu'il boit, pas un tic
+      // de combat — même logique que le câlin (heal/frame), mais lui
+      // seul (pas la princesse, qui n'est pas là)
+      p.repairTimer = REPAIR_TICK;
+      p.repairMaxedPlayed = false;
+      const arrived = Math.abs(angDiff(p.angle, targetAngle)) < 0.15 &&
+        Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85;
+      state.fountainDrinking = arrived; // même esprit que state.calin.hugging, pour un futur retour visuel
+      if (arrived) {
+        p.hp = Math.min(p.maxHp, p.hp + p.maxHp * (dt / FOUNTAIN_HEAL_TIME));
+        p.fountainSparkleTimer = (p.fountainSparkleTimer || 0) - dt;
+        if (p.fountainSparkleTimer <= 0) {
+          p.fountainSparkleTimer = 0.5;
+          spawnBurst(FOUNTAIN_EXTRA.x, 0, FOUNTAIN_EXTRA.z, 'sparkle');
+        }
+      }
     } else if (p.behavior === 'sortie') {
       p.repairTimer = REPAIR_TICK;
       p.repairMaxedPlayed = false;
@@ -4197,12 +4246,13 @@
           // rarer still: spooked, turns tail and walks off the map for good
           if (!e.fleeing && Math.random() < 0.012) e.fleeing = true;
         }
-        // maisons-cachettes : vérifié à CHAQUE frame (dt-proportionnel),
-        // pas au rythme du mood ci-dessus — un bâtisseur/porteur
-        // d'échelle a sa propre mission, ne se cache jamais
+        // maisons-cachettes (+ grange/église depuis le 2026-09-09) :
+        // vérifié à CHAQUE frame (dt-proportionnel), pas au rythme du
+        // mood ci-dessus — un bâtisseur/porteur d'échelle a sa propre
+        // mission, ne se cache jamais
         if (!e.fleeing && !e.builder && !e.ladder) {
           const hx = e.r * Math.cos(e.angle), hz = e.r * Math.sin(e.angle);
-          for (const house of HOUSES) {
+          for (const house of ALL_HIDE_SPOTS) {
             if (Math.hypot(hx - house.x, hz - house.z) < HOUSE_HIDE_R &&
                 Math.random() < HOUSE_HIDE_CHANCE_PER_SEC * dt) {
               e.dead = true; // pas killEnemy() : disparaît, pas un kill, pas d'or
@@ -5066,19 +5116,24 @@
       ctx.fillStyle = '#8a3f2e';
       buildQuad(sl.pts);
     }
-    // maison-cachette occupée : même langage visuel que les pips
-    // d'équipage des engins de siège — "rien ne se passe en silence"
-    if (h.hiddenCount > 0) {
-      const pipR = 2.4 * scale, gap = 7 * scale;
-      const topPos = project(h.x, wallH + roofH + 6, h.z, rot);
-      const shown = Math.min(h.hiddenCount, 5);
-      const startX = topPos.x - ((shown - 1) * gap) / 2;
-      for (let i = 0; i < shown; i++) {
-        ctx.beginPath();
-        ctx.arc(startX + i * gap, topPos.y, pipR, 0, Math.PI * 2);
-        ctx.fillStyle = '#c9503f';
-        ctx.fill();
-      }
+    drawHiddenPips(h, h.x, h.z, wallH + roofH + 6, rot);
+  }
+
+  // pips rouges au-dessus d'une cachette occupée (maison, et depuis le
+  // 2026-09-09 grange/église) — même langage visuel que l'équipage des
+  // engins de siège, "rien ne se passe en silence". Extrait de drawHouse
+  // pour être réutilisable sans dupliquer le code sur drawGrange/drawEglise.
+  function drawHiddenPips(b, x, z, topY, rot) {
+    if (!(b.hiddenCount > 0)) return;
+    const pipR = 2.4 * scale, gap = 7 * scale;
+    const topPos = project(x, topY, z, rot);
+    const shown = Math.min(b.hiddenCount, 5);
+    const startX = topPos.x - ((shown - 1) * gap) / 2;
+    for (let i = 0; i < shown; i++) {
+      ctx.beginPath();
+      ctx.arc(startX + i * gap, topPos.y, pipR, 0, Math.PI * 2);
+      ctx.fillStyle = '#c9503f';
+      ctx.fill();
     }
   }
 
@@ -5124,6 +5179,7 @@
     const list = [];
     collectBoxRoof(list, b.x, b.z, 26, 18, 20, 16, rot, [150, 80, 45], '#6e2c1e', b.yaw || 0);
     flushBoxRoofList(list);
+    drawHiddenPips(b, b.x, b.z, 20 + 16 + 6, rot);
   }
 
   // l'église : nef allongée + petit clocher carré à une extrémité, croix
@@ -5153,6 +5209,9 @@
     ctx.moveTo(apex.x, apex.y - 14 * scale); ctx.lineTo(apex.x, apex.y + 10 * scale);
     ctx.moveTo(apex.x - 8 * scale, apex.y - 4 * scale); ctx.lineTo(apex.x + 8 * scale, apex.y - 4 * scale);
     ctx.stroke();
+    // pips au-dessus de la nef (pas du clocher, plus haut mais moins
+    // central) — cohérent avec drawHouse/drawGrange
+    drawHiddenPips(b, b.x, b.z, 48 + 36 + 6, rot);
   }
 
   // la fontaine : bassin bas (octogone, mêmes quads plats que tout le

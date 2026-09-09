@@ -199,6 +199,12 @@ concevoir plus en détail avant de coder.
 - **Pas encore fait** : cibler l'équipage vs la machine comme deux choses
   distinctes à l'écran (actuellement un seul objet cliquable/ciblable) ;
   ré-équilibrage ultérieur si le tir à distance s'avère *trop* inutile.
+- **Décidé à la place de Pierre (2026-09-09, "choisis à ma place")** :
+  pas fait, volontairement — la sortie tue déjà l'équipage un par un
+  (voir "Fait en v0.31" ci-dessus), ce qui couvre l'intention tactique
+  de base sans ajouter deux cibles cliquables séparées à l'écran. À
+  reprendre seulement si le tir à distance s'avère concrètement trop
+  inutile en jouant, comme déjà noté.
 
 ## Priorité de ciblage à la sortie → fait en v0.25
 
@@ -438,10 +444,13 @@ pas juste une option cachée) :
 - Chrome (barres, menu, tous les boutons d'action) : monochrome noir/vert,
   plus de couleurs d'accent distinctes par bouton (décidé en session).
 
+**Décidé à la place de Pierre (2026-09-09, "choisis à ma place")** :
+- Teinte : reste vert (#46ffa0), le défaut déjà en place et déjà testé
+  — pas de raison de changer à l'aveugle sans avoir vu le comparateur.
+  Reste changeable en une ligne (`PHOSPHOR_LINE`) si Pierre change d'avis
+  après l'avoir vu en jeu.
+
 **Pas encore fait / en attente** :
-- Teinte : vert posé par défaut (#46ffa0), mais le joueur n'a pas encore
-  ouvert le comparateur pour trancher entre vert/ambre/cyan — à changer
-  via la constante `PHOSPHOR_LINE` (une seule ligne) une fois décidé.
 - Le mode "Filaire pur" réutilise le rendu détaillé à 24 facettes
   (drawCastle d'origine) tel quel, pas la silhouette — cohérent avec l'idée
   "montre tous les traits", mais pas vérifié visuellement en jeu.
@@ -496,8 +505,15 @@ doux aurait rendu les premiers paliers quasi gratuits par rapport aux
 anciens (15/40/100/250). **Pas fait** : les douves restent à 4 paliers
 fixes codés en dur — leur géométrie (rayon d'eau, buissons inondés,
 BRIDGE_MAX_COUNT) est intrinsèquement finie, pas un bon candidat pour une
-formule sans plafond. Les tourelles et les autres "améliorations du
-joueur" évoquées dans le principe général n'ont pas été touchées.
+formule sans plafond.
+
+**Décidé à la place de Pierre (2026-09-09, "choisis à ma place")** : les
+tourelles et les autres "améliorations du joueur" restent aussi à leurs
+paliers fixes actuels, pas convertis en formule sans plafond — pas de
+besoin clair identifié (contrairement au jardin, où "accumuler
+énormément d'or" a un sens), et ça ajouterait de la complexité
+d'équilibrage sans bénéfice évident. Peut être repris si un besoin
+concret apparaît en jouant.
 
 ## Décor procédural (jardin/eau, buissons) → l'eau qui fonce existe déjà, le reste pas fait
 
@@ -1225,17 +1241,10 @@ de suite plutôt que d'attendre le gros chantier centre-ville complet.
   les 3 bâtiments se lisent clairement, aucune erreur console.
 
 **Pas fait :**
-- Purement décoratif — pas de mécanique de cachette sur la grange/
-  l'église (contrairement aux maisons), pas encore tranché si ça vaudrait
-  le coup de l'étendre là aussi.
-- **Mécanique de la fontaine-soin** : quand le seigneur est faible
-  (PV bas) et en sortie (chargé/dehors), s'il est à proximité de la
-  fontaine il peut choisir d'aller y boire pour régénérer sa santé — un
-  nouveau point de soin au sol, hors du donjon, à gérer comme un vrai
-  choix tactique (aller se soigner = s'éloigner du combat). Toujours pas
-  fait — c'est une vraie mécanique de gameplay (sortie ciblée sur un
-  point fixe, cooldown, feedback visuel), pas juste du décor, ça mérite
-  son propre passage.
+- Cachette sur la grange/l'église → fait en v0.81 (décidé à la place de
+  Pierre, "choisis à ma place" — voir plus bas pour le détail).
+- **Mécanique de la fontaine-soin** → fait en v0.82 (voir plus bas pour
+  le détail complet).
 - Le centre du village n'est positionné qu'à un angle pratique choisi à
   la main, pas encore raccordé aux routes ("routes → centre-ville →
   donjon" de la grosse consigne, gros chantier de géométrie pas
@@ -2416,3 +2425,105 @@ Même correctif appliqué à `#overlay` (écran de fin de partie) par
 cohérence/prudence, bien que son contenu plus court soit peu
 susceptible de déborder — coût nul, évite le même piège si du texte
 plus long y est ajouté un jour.
+
+## Cachette sur la grange/l'église, comme les maisons → fait en v0.81
+
+Décidé à la place de Pierre (2026-09-09, "choisis à ma place") : oui,
+étendre la mécanique de cachette (indestructible, délogeable par
+sortie) à la grange et l'église du cœur de village. Pas la fontaine —
+trop petite pour être une cachette plausible.
+
+**Réutilisation quasi totale de la mécanique des maisons** : `hiddenCount:
+0` ajouté aux entrées `grange`/`eglise` de `VILLAGE_EXTRAS`.
+`ALL_HIDE_SPOTS = [...HOUSES, ...VILLAGE_HIDE_SPOTS]` combine les deux
+familles une seule fois ; les deux boucles qui parcouraient `HOUSES`
+(le jet de cachette par frame, et `nearestSortieTarget`) parcourent
+maintenant `ALL_HIDE_SPOTS`. Le délogeage à la sortie (`sortieTarget.
+hiddenCount !== undefined`, `flushHouseEnemy`) n'a demandé AUCUNE
+modification : déjà entièrement générique sur `.hiddenCount`/`.x`/`.z`/
+`.angle`/`.r`, que ces champs viennent d'une maison ou d'un objet
+`VILLAGE_EXTRAS` — vérifié en lisant le code avant de le supposer.
+
+Rendu : pips rouges au-dessus du toit, même langage visuel que les
+maisons — extrait de `drawHouse` en un helper partagé
+(`drawHiddenPips`) plutôt que dupliqué, appelé aussi depuis `drawGrange`/
+`drawEglise` (au-dessus de la nef, pas du clocher, pour rester bien
+visible sans chevaucher la croix).
+
+Vérifié en Playwright (hooks de debug temporaires, ennemi forcé à la
+position de l'église et maintenu sur place — repris après un premier
+essai qui laissait l'ennemi s'éloigner en marchant vers le mur avant
+d'avoir eu le temps de se cacher, faussant le test, pas la mécanique) :
+- Se cache bien (hiddenCount passe à 1) après un temps d'exposition
+  suffisant.
+- Sortie du seigneur : délogé correctement (hiddenCount revient à 0).
+- Une maison du village s'est aussi cachée naturellement (hors du test
+  forcé) pendant la vérification — confirme que le comportement marche
+  aussi en jeu normal, pas seulement via le hook.
+- Aucune erreur console sur l'ensemble des tests.
+
+**Note honnête** : la grange/l'église restent à l'écart des deux routes
+principales (décision d'origine, "aucune HOUSES ni route ne passe par
+là") — la mécanique s'y déclenchera donc naturellement moins souvent
+que sur les maisons (qui, elles, ont été rapprochées des routes en
+v0.79). C'est un choix de position déjà pris avant cette session, pas
+retouché ici.
+
+## Fontaine-soin (item C, consigne du 2026-09-08) → fait en v0.82
+
+Décidé à la place de Pierre (2026-09-09, "choisis à ma place") : mise
+en œuvre comme priorité automatique en sortie plutôt qu'un choix
+explicite dans un menu séparé — le vrai choix tactique se joue à tenir
+le bouton Sortie ou pas pendant qu'on est faible, pas dans une
+interface à part. Guéri LUI SEUL (pas la princesse, absente) —
+distinct du câlin.
+
+**Implémentation, entièrement dans l'architecture existante** :
+- `FOUNTAIN_HEAL_HP_FRAC = 0.35` : sous ce seuil de PV (sur maxHp),
+  `nearestSortieTarget` renvoie directement `FOUNTAIN_EXTRA` — priorité
+  absolue, avant même les engins de siège. Le reste du temps (HP
+  au-dessus du seuil, vérifié en Playwright), le ciblage normal
+  (engin de siège > ennemi > cachette occupée > pont) est parfaitement
+  inchangé.
+- Un nouveau comportement dédié (`p.behavior === 'sortie'` ET
+  `sortieTarget.type === 'fontaine'`, vérifié AVANT la branche combat
+  générique pour ne jamais tomber dans `sortieTarget.hp -= SORTIE_DMG`
+  sur un objet qui n'a pas de `.hp`) — le joueur marche jusqu'à la
+  fontaine via le même mouvement/la même cible que n'importe quel autre
+  point de sortie (`targetAngle`/`targetR`/`targetGround` déjà
+  génériques, aucune touche), puis se soigne en continu une fois
+  arrivé, `FOUNTAIN_HEAL_TIME = 4` (un peu plus lent que le câlin,
+  3s, pour refléter l'exposition/l'éloignement du mur). Petite gerbe
+  d'étincelles (`spawnBurst`, réutilisé) toutes les 0.5s pendant qu'il
+  boit — "rien ne se passe en silence".
+
+Vérifié en Playwright (hooks de debug, PV forcés bas puis lecture de
+l'état en direct — pas juste supposé) :
+- PV pleins, sortie tenue : la fontaine n'est PAS ciblée (comportement
+  normal inchangé, confirmé explicitement).
+- PV à 15% du max, sortie tenue : la fontaine EST ciblée
+  (`nearestSortieTarget` renvoie bien `FOUNTAIN_EXTRA`).
+- Marche jusqu'à la fontaine puis soin confirmé en direct (PV mesurés
+  en hausse une fois `drinking:true`), et re-priorisation automatique
+  vers une cible de combat normale une fois remonté au-dessus du
+  seuil de 35% — cycle complet vérifié, pas juste le déclenchement
+  initial.
+- Aucune erreur console.
+
+**Note honnête, cohérente avec le reste du code** : `state.
+fountainDrinking` (comme `state.calin.hugging`, déjà ainsi avant cette
+session) reste à sa dernière valeur une fois qu'on quitte ce
+comportement plutôt que d'être remis à `false` explicitement — sans
+conséquence tant que rien d'autre ne lit ce champ (pas de retour
+visuel dédié ajouté pour l'instant, juste les étincelles), mais à
+garder en tête si un indicateur visuel s'appuie dessus plus tard.
+
+**Pas fait / hors scope de cette passe** : pas de bouton dédié dans la
+barre d'actions (déjà pleine, 4+4 boutons en grille) — la fontaine
+n'est joignable qu'automatiquement via Sortie à faible PV, pas
+sélectionnable manuellement à PV normal ("je veux boire un coup même
+sans être en danger" reste impossible). Le centre du village (donc la
+fontaine) reste positionné à un angle pratique choisi à la main,
+toujours pas raccordé au réseau routes/village de v0.79 (la
+refonte routes→village ne portait que sur `HOUSES`, pas
+`VILLAGE_EXTRAS` — voir cette section plus haut).
