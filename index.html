@@ -548,10 +548,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.92</button>
+  <button id="versionBtn">v0.93</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.93</b> — la place du village est maintenant vraiment entre l'église et le donjon (avant, elle était plus loin du donjon que l'église elle-même) ; réaudit complet des maisons contre le nouveau tracé des chemins et la nouvelle place — 7 sur 8 ont dû être repositionnées</div>
   <div><b>v0.92</b> — retiré le bruit de la prière (un son de marteau, hors sujet) ; corrigé les fenêtres moulin/église : elles se ferment bien en cliquant ailleurs, sans se refermer par accident si on rate le bouton (le vrai bug du v0.89, mal corrigé) ; corrigé un débordement des curseurs de volume dans le menu</div>
   <div><b>v0.91</b> — première passe sur les chemins : plus de traits pointillés ni de bretelle à trait unique (vraie largeur partout), la jonction bretelle/route est maintenant propre (pas de croix), et le tracé devient de vrais segments droits reliés par des coudes francs dans le village, avec des courbes qui n'apparaissent qu'en s'en éloignant</div>
   <div><b>v0.90</b> — la roue à aubes du moulin, jusque-là plate (2D), a maintenant une vraie épaisseur</div>
@@ -1934,19 +1935,29 @@
   // moulin et la grange lointaine — marge minimale trouvée : 23 unités
   // (maisons vs routes, volontairement serré pour rester "sur le
   // passage" plutôt que loin dedans les champs), toutes les autres > 35.
+  // RÉAUDITÉES (consigne du 2026-09-09, après la place et le nouveau
+  // tracé des chemins à coudes de v0.91) : les coudes du nouveau tracé
+  // traversaient carrément house0 et house6 (marge négative), et
+  // serraient trop house3/house7 — script de vérification numérique à
+  // part (même méthode que le fix ponctuel de house7 en v0.79) : rejet-
+  // échantillonnage en spirale autour de la position d'origine (rayon
+  // ±160, angle ±0.3 rad — assez pour rester dans le même "coin" du
+  // village, pas assez pour changer complètement de cluster), contre
+  // TOUTES les contraintes à la fois cette fois (les autres maisons, la
+  // grange, l'église nef+clocher, le moulin, le ruisseau, les deux
+  // routes AVEC leurs coudes, la nouvelle place, le mur du donjon) —
+  // exigé ≥35 unités de marge partout. 7 des 8 maisons ont dû bouger
+  // (seule house2 était déjà assez loin de tout), toutes retombent
+  // maintenant entre 35 et 37 unités de marge.
   const HOUSES = [
-    { x: 280.1 * Math.cos(2.325), z: 280.1 * Math.sin(2.325) },
-    { x: 267.0 * Math.cos(1.693), z: 267.0 * Math.sin(1.693) },
+    { x: 328.1 * Math.cos(2.365), z: 328.1 * Math.sin(2.365) },
+    { x: 267.0 * Math.cos(1.653), z: 267.0 * Math.sin(1.653) },
     { x: 298.8 * Math.cos(2.607), z: 298.8 * Math.sin(2.607) },
-    { x: 291.9 * Math.cos(1.930), z: 291.9 * Math.sin(1.930) },
-    { x: 252.9 * Math.cos(-2.732), z: 252.9 * Math.sin(-2.732) },
-    { x: 232.2 * Math.cos(-1.929), z: 232.2 * Math.sin(-1.929) },
-    { x: 283.1 * Math.cos(-2.136), z: 283.1 * Math.sin(-2.136) },
-    // était (286.3, -1.760) : retombait dans la zone d'église tier5
-    // (v0.83, "activer fort l'église pour bloquer la fontaine") —
-    // repositionnée, marges revérifiées (>38 vs route1, >40 entre
-    // maisons, >0.3 hors ellipse tier5)
-    { x: 288.6 * Math.cos(-2.499), z: 288.6 * Math.sin(-2.499) }
+    { x: 324.9 * Math.cos(1.850), z: 324.9 * Math.sin(1.850) },
+    { x: 252.9 * Math.cos(-2.772), z: 252.9 * Math.sin(-2.772) },
+    { x: 232.2 * Math.cos(-1.889), z: 232.2 * Math.sin(-1.889) },
+    { x: 310.1 * Math.cos(-1.976), z: 310.1 * Math.sin(-1.976) },
+    { x: 309.6 * Math.cos(-2.559), z: 309.6 * Math.sin(-2.559) }
   // yaw : orientation propre du bâtiment (indépendante de son angle
   // autour du donjon) — signalé en session : sans ça, chaque maison
   // pointait dans le même axe monde, "toutes parallèles" les unes aux
@@ -2020,18 +2031,31 @@
   // session : "les deux chemins doivent se lier... arriver quasiment en
   // bas de l'église... sur une sorte de place... à partir de la place il
   // y a un troisième chemin qui va jusqu'en bas de la porte de la tour").
-  // Repositionnée et agrandie après un premier essai trop petit et
-  // "sous" l'église : cherché numériquement (script à part) le point,
-  // dans le vide entre la grange et l'église (pas juste le plus grand
-  // espace ouvert n'importe où — ça dérivait loin du village), qui
-  // maximise la marge par rapport à la grange, l'église ET les 8
-  // maisons. "La fontaine c'est la seule exception, elle doit être au
-  // centre de la place" — elle n'a donc plus sa propre position, voir
-  // VILLAGE_EXTRAS plus bas.
-  const PLAZA_X = VILLAGE_CENTER_X - 11, PLAZA_Z = VILLAGE_CENTER_Z - 108;
-  const PLAZA_R = Math.hypot(PLAZA_X, PLAZA_Z);
-  const PLAZA_RADIUS = 80; // marge ~13 unités par rapport à la contrainte la plus proche (l'église)
-  const PLAZA_ANGLE = Math.atan2(PLAZA_Z, PLAZA_X);
+  //
+  // RECENTRÉE (consigne du 2026-09-09 : "la place centrale du village,
+  // elle doit vraiment être au centre... entre l'église et le donjon")
+  // — le premier placement (v0.79) l'avait mise dans le vide entre la
+  // grange et l'église, mais à r≈568 du donjon, plus loin que l'église
+  // elle-même (r≈449) : pas du tout "entre les deux", Pierre a raison.
+  // Cherché numériquement (script à part, même méthode que HOUSES[7]) :
+  // PLAZA_ANGLE alignée EXACTEMENT sur la direction donjon->église (donc
+  // vraiment "entre" les deux, pas juste dans la bonne zone), puis
+  // balayage de PLAZA_R le long de ce rayon pour maximiser la marge
+  // contre les 8 maisons, la grange, l'église (nef ET clocher, chacun
+  // comme un rectangle orienté, pas juste un point), le moulin, le
+  // ruisseau, les deux routes (avec leurs coudes, v0.91) et le mur du
+  // donjon. Meilleur point : r≈246 (marge ~56 unités, maison[5] et
+  // l'église quasi à égalité — le vrai maximum local). Elle tombe bien
+  // À L'INTÉRIEUR du 5e palier de la zone sacrée de l'église (ellipse
+  // ~0.84) — attendu et déjà assumé depuis v0.83 : ce palier est
+  // explicitement documenté pour "atteindre la fontaine", or la
+  // fontaine est au centre de CETTE place (voir VILLAGE_EXTRAS
+  // plus bas) — aucune nouvelle collision, juste la même intention
+  // qu'avant appliquée à la nouvelle position.
+  const PLAZA_ANGLE = Math.atan2(VILLAGE_CENTER_Z + 30, VILLAGE_CENTER_X + 120); // direction donjon->église — mêmes coordonnées que l'entrée 'eglise' de VILLAGE_EXTRAS plus bas (déclarée deux fois : EGLISE_EXTRA n'existe pas encore ici)
+  const PLAZA_R = 246;
+  const PLAZA_X = PLAZA_R * Math.cos(PLAZA_ANGLE), PLAZA_Z = PLAZA_R * Math.sin(PLAZA_ANGLE);
+  const PLAZA_RADIUS = 80; // marge ~56 unités par rapport à la contrainte la plus proche (maison[5]/l'église)
 
   // cachette (décidé à la place de Pierre, 2026-09-09, "choisis à ma
   // place") : la grange et l'église sont maintenant des cachettes

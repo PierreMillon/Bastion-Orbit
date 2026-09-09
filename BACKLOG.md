@@ -3252,3 +3252,65 @@ lui-même → reste ouvert (pas de bascule, pas de faux-positif) ;
 que son propre max-width), curseur bruitages entièrement contenu
 dedans. `playHammer()` confirmé absent du handler de clic du prêtre
 (lecture directe du code). Aucune erreur console.
+
+## Reste du lot 1 : place recentrée entre l'église et le donjon +
+réaudit complet des maisons → fait en v0.93
+
+Deuxième et dernière passe sur les chemins. Confirmé par Pierre :
+"place/maisons en premier, ça débloque le reste" avant d'attaquer la
+maison de la sorcière.
+
+**Place recentrée** : `PLAZA_ANGLE` alignée EXACTEMENT sur la
+direction donjon→église (`atan2(VILLAGE_CENTER_Z+30, VILLAGE_CENTER_X
++120)` — les mêmes coordonnées que l'entrée `eglise` de
+`VILLAGE_EXTRAS`, dupliquées ici volontairement : `EGLISE_EXTRA`
+n'existe pas encore à ce point du fichier, et `PLAZA_X/Z` sert
+justement à construire l'entrée `fontaine` de `VILLAGE_EXTRAS` juste
+après — une dépendance circulaire à éviter). Script de vérification
+numérique à part (même méthode que HOUSES[7] en v0.79) : balayage de
+`PLAZA_R` le long de ce rayon, en modélisant l'église comme DEUX
+rectangles orientés (nef 32×60 + clocher 18×18, décalé de 68 unités
+selon le même yaw — pas juste un point ni un cercle, pour ne pas
+sous-estimer son emprise réelle), la grange pareil, contre les 8
+maisons, le moulin, le ruisseau, les deux routes (avec leurs coudes
+v0.91) et le mur du donjon. Meilleur point trouvé : `PLAZA_R=246`
+(marge ~56 unités, maison[5] et l'église quasi à égalité — un vrai
+maximum local, pas juste "la première position qui passe"). Avant :
+`PLAZA_R≈568`, plus loin du donjon que l'église elle-même (r≈449) —
+Pierre avait raison, ce n'était pas du tout "entre les deux".
+
+Vérifié que le nouveau point tombe bien à l'intérieur du 5e palier de
+la zone sacrée de l'église (valeur d'ellipse 0.84) — PAS un nouveau
+problème : ce palier est explicitement documenté depuis v0.83 pour
+"atteindre la fontaine", et la fontaine est au centre de cette place.
+Même intention qu'avant, juste appliquée à la position recentrée.
+
+**Réaudit des maisons** : le nouveau tracé à coudes (v0.91) traversait
+carrément `house0` (marge -1.3) et `house6` (marge -17.6), et serrait
+trop `house3`/`house7` (7.2/15.1). Script de vérification numérique à
+part : rejet-échantillonnage en spirale autour de la position
+d'origine de CHAQUE maison (rayon ±160, angle ±0.3 rad — assez pour
+rester dans le même coin du village, pas assez pour changer
+complètement de cluster), contre TOUTES les contraintes à la fois :
+les 7 autres maisons entre elles, la grange, l'église (nef+clocher),
+le moulin, le ruisseau, les deux routes avec leurs coudes, la
+NOUVELLE place, le mur du donjon — exigé ≥35 unités de marge partout
+(pas juste ≥0 : de la marge visuelle confortable, pas seulement
+"techniquement pas superposé"). Résultat : 7 des 8 maisons ont dû
+bouger (seule `house2` était déjà assez loin de tout, marge 37.7 dès
+le départ) ; toutes retombent maintenant entre 35 et 37 unités de
+marge, avec des décalages angulaires modestes (elles restent
+reconnaissables dans leur coin d'origine, pas téléportées ailleurs).
+
+Vérifié en Playwright avec un hook de debug temporaire (retiré avant
+commit, `grep -c "__DEBUG_"` revenu à 1) : 10 vagues forcées en rafale
+sans erreur. Captures d'écran à 8 angles de caméra différents :
+l'église et la place se voient maintenant clairement l'une à côté de
+l'autre, toutes deux proches du donjon (au lieu d'être séparées dans
+des coins opposés du village comme avant) ; aucune maison ne chevauche
+visuellement une route ou la place, à aucun angle testé. Aucune erreur
+console.
+
+Le lot 1 (refonte des chemins, consigne du 2026-09-09) est maintenant
+complet : largeur réelle partout, jonctions propres, tracé brisé en
+ville/courbe au loin, place recentrée, maisons réauditées.
