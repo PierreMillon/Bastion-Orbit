@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.85</button>
+  <button id="versionBtn">v0.86</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.86</b> — rentabilité : détruire un engin de siège rapportait un forfait fixe (5 or) qu'il ait 2 ou 6 soldats à bord ; chaque soldat abattu en sortie rapporte maintenant 1 or, immédiatement, comme n'importe quel ennemi — plus un bonus de 3 or au coup de grâce</div>
   <div><b>v0.85</b> — les engins de siège ont maintenant un vrai équipage de soldats individuels visibles (postés autour de l'engin, se balançant sur place), plutôt qu'une simple rangée de pips abstraite — la sortie les abat toujours un par un</div>
   <div><b>v0.84</b> — nouvelle section "Astuces" dans le menu : explique toutes les mécaniques du jeu avec les vrais chiffres (dégâts, coûts, seuils, timings), en français et en anglais</div>
   <div><b>v0.83</b> — les ennemis aussi peuvent boire à la fontaine pour se soigner (rare, un détour risqué) : nouveau 5e palier de la zone sacrée de l'église qui s'étend jusqu'à la fontaine pour vraiment menacer ce détour ; le premier palier de la zone se débloque maintenant en priant le prêtre dans le donjon, plutôt qu'en touchant l'église dehors</div>
@@ -682,6 +683,7 @@
       <p>Les PV d'un ennemi = 2 + (numéro de vague ÷ un diviseur qui dépend de la difficulté) arrondi vers le bas. Facile : diviseur 6.4. Normal : 4.5. Difficile : 3.2. Très difficile : 2.9 — plus il est petit, plus les PV montent vite.</p>
       <p>Une vague envoie 3 + (vague × 2) ennemis — sauf une vague sur cinq, une vague de répit à effectif réduit de 30%.</p>
       <p>Un ennemi marche à 24 + (vague × 1.5) unités/seconde une fois visible à l'écran (plus vite, hors champ, pour ne pas trop faire attendre).</p>
+      <p>Chaque ennemi tué rapporte 1 or, individuellement — même un soldat d'un engin de siège, abattu un par un en sortie.</p>
 
       <h3>Le seigneur</h3>
       <p>Sur les remparts (pas en sortie), viser précisément multiplie les dégâts : ×2 dans l'axe serré (moins de 15°), ×1.5 dans l'axe large (moins de 40°), ×1 hors axe — puis ×2 supplémentaire, toujours depuis les remparts.</p>
@@ -723,6 +725,7 @@
       5 : <b>tour de siège</b> — grandit peu à peu, finit par frapper un défenseur directement (2 dégâts, ou 1 PV pour le seigneur).<br>
       6 et plus : <b>bélier</b> — très résistant (55 PV), avance très lentement vers le mur (4 unités/s, presque une minute pour arriver), 22 dégâts au contact toutes les 3.4s.</p>
       <p>Tant qu'il reste de l'équipage vivant à l'intérieur, l'engin se régénère (1.5 PV/s par soldat) — le tir à distance seul ne peut jamais l'achever. Il faut sortir et frapper l'équipage directement.</p>
+      <p>Chaque soldat abattu en sortie rapporte 1 or (comme un ennemi normal), plus 3 or de bonus quand l'engin tombe entièrement — un engin bien rempli (6 soldats) rapporte donc jusqu'à 9 or au total.</p>
 
       <h3>Le village</h3>
       <p>Les maisons, la grange et l'église peuvent cacher un ennemi qui passe à moins de 140 unités (20% de chance par seconde) — invisible et intouchable jusqu'à ce que le seigneur sorte l'en déloger.</p>
@@ -741,6 +744,7 @@
       <p>An enemy's HP = 2 + (wave number ÷ a difficulty-dependent divisor), rounded down. Easy: divisor 6.4. Normal: 4.5. Hard: 3.2. Very hard: 2.9 — the smaller it is, the faster HP climbs.</p>
       <p>A wave sends 3 + (wave × 2) enemies — except every 5th wave, a breather wave at 30% reduced numbers.</p>
       <p>An enemy walks at 24 + (wave × 1.5) units/second once visible on screen (faster while off-screen, so it doesn't take forever to arrive).</p>
+      <p>Every enemy killed pays 1 gold, individually — even a siege engine's crew, taken down one by one while sallying.</p>
 
       <h3>The lord</h3>
       <p>From the ramparts (not sallying), aiming precisely multiplies damage: ×2 dead-on (within 15°), ×1.5 roughly on target (within 40°), ×1 off-axis — then an extra ×2 on top, always from the ramparts.</p>
@@ -782,6 +786,7 @@
       5: <b>siege tower</b> — grows over time, eventually hits a defender directly (2 damage, or 1 HP for the lord).<br>
       6 and up: <b>battering ram</b> — very tough (55 HP), crawls toward the wall very slowly (4 units/s, nearly a minute to arrive), 22 damage on contact every 3.4s.</p>
       <p>As long as living crew remains inside, the engine regenerates (1.5 HP/s per soldier) — ranged fire alone can never finish it off. Sallying out to hit the crew directly is the only real way.</p>
+      <p>Each soldier killed while sallying pays 1 gold (same as a regular enemy), plus a 3 gold bonus once the engine falls entirely — a fully-crewed one (6 soldiers) pays up to 9 gold total.</p>
 
       <h3>The village</h3>
       <p>Houses, the barn, and the church can hide an enemy passing within 140 units (20% chance per second) — invisible and untouchable until the lord sallies out to flush it back into the open.</p>
@@ -3037,6 +3042,14 @@
   // founding headcount (2 founds a bouclier, but a 3rd can still join later
   // and top it out at 3; same +1 pattern for every tier)
   function siegeCrewCap(tierIdx) { return tierIdx + 3; }
+  // rentabilité (item, consigne du 2026-09-09) : détruire un engin
+  // rapportait un forfait fixe (5 or) qu'il ait 2 ou 6 soldats à bord —
+  // maintenant chaque soldat abattu vaut 1 or comme un ennemi normal
+  // (voir la sortie plus bas), et ce bonus ne récompense plus que le
+  // "coup de grâce" en plus — un engin à 2 (le minimum) redonne
+  // exactement 2+3=5, comme avant ; un engin à 6 (le max) redonne 9,
+  // vraiment plus pour un ennemi vraiment plus dangereux
+  const SIEGE_DESTROY_BONUS = 3;
 
   // vrais soldats individuels (task 10, "ça doit grouiller de vie") : chaque
   // membre d'équipage est une entrée à part (position locale + phase
@@ -4275,17 +4288,26 @@
             // crew heals it right back (see the regen in the enemies
             // loop), so this is the only thing that actually ends one.
             // vrais soldats individuels : chaque coup retire réellement des
-            // entrées du tableau plutôt que de décrémenter un compteur
-            sortieTarget.soldiers.splice(0, hitMul);
-            spawnBurst(sortieTarget.r * Math.cos(sortieTarget.angle), 0,
-              sortieTarget.r * Math.sin(sortieTarget.angle), 'smoke');
+            // entrées du tableau plutôt que de décrémenter un compteur.
+            // rentabilité : 1 or par soldat réellement abattu (comme un
+            // ennemi normal), payé immédiatement à chaque coup — avant,
+            // aucun or ne tombait avant le tout dernier coup, voir
+            // SIEGE_DESTROY_BONUS plus haut
+            const killed = Math.min(hitMul, sortieTarget.soldiers.length);
+            sortieTarget.soldiers.splice(0, killed);
+            const sx = sortieTarget.r * Math.cos(sortieTarget.angle), sz = sortieTarget.r * Math.sin(sortieTarget.angle);
+            if (killed > 0) {
+              state.gold += killed;
+              goldNum.textContent = state.gold;
+              spawnFloatingGold(sx, 0, sz, killed);
+            }
+            spawnBurst(sx, 0, sz, 'smoke');
             if (sortieTarget.soldiers.length <= 0) {
               state.siegeEngines = state.siegeEngines.filter(s => s !== sortieTarget);
-              state.gold += 5;
+              state.gold += SIEGE_DESTROY_BONUS;
               goldNum.textContent = state.gold;
-              const sx = sortieTarget.r * Math.cos(sortieTarget.angle), sz = sortieTarget.r * Math.sin(sortieTarget.angle);
               spawnBurst(sx, 0, sz, 'sparkle');
-              spawnFloatingGold(sx, 0, sz, 5);
+              spawnFloatingGold(sx, 0, sz, SIEGE_DESTROY_BONUS, true);
             }
           } else {
             sortieTarget.hp -= SORTIE_DMG * horseMul(state.horseLevel);

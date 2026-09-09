@@ -2745,3 +2745,64 @@ mis en pause depuis une consigne antérieure, voir plus haut dans ce
 fichier) ; pas re-testé plus loin, le rendu Filaire suffit à confirmer
 visuellement le comportement. Aucune erreur console. 8 vagues forcées
 en rafale en jeu normal sans erreur non plus (régression générale).
+
+## Passe "rentabilité" (consigne du 2026-09-09 : "chaque mécanique doit
+être rentable") → premier volet fait en v0.86
+
+Consigne large, prise au sens : auditer les chiffres réels du jeu
+(coûts, revenus, récompenses) pour trouver des cas où une mécanique
+punit ou ne récompense pas correctement ce qu'elle devrait, plutôt que
+de tout rééquilibrer d'un coup sans preuve de terrain — cohérent avec
+la consigne "approximatif d'abord, on itère après".
+
+**Trouvé et corrigé — les engins de siège pénalisaient l'équipage
+capturé** : un ennemi absorbé dans un groupe (`clusterSiegeEngines`)
+passe `e.dead = true` directement, en dehors de `killEnemy()` — donc
+0 or à l'absorption (logique, il n'est pas mort, juste enrôlé). Mais à
+la destruction finale, l'ancien code payait un **forfait fixe de 5 or**
+identique qu'il y ait 2 ou 6 soldats à bord. Résultat concret : laisser
+un groupe se former en engin plutôt que d'abattre chaque attaquant
+individuellement faisait perdre jusqu'à 6 or (6 soldats × 1 or) contre
+un maigre 5 or forfaitaire — et strictement aucun retour visuel d'or
+pendant tout le combat contre l'engin, à l'encontre du principe déjà
+acté "rien ne se passe en silence". Rendu possible à corriger
+proprement par le travail de la veille (v0.85, `se.soldiers` en vraies
+entrées individuelles) : chaque soldat abattu en sortie rapporte
+maintenant 1 or immédiatement (comme un ennemi normal), plus un bonus
+de destruction (`SIEGE_DESTROY_BONUS = 3`) au coup de grâce — un engin
+minimal (2 soldats) rapporte toujours exactement 5 au total (aucune
+régression sur le cas déjà équilibré), un engin plein (6 soldats)
+rapporte maintenant 9 (une vraie récompense pour un ennemi vraiment
+plus dangereux, au lieu d'être pénalisé pour avoir grossi). Section
+Astuces mise à jour dans le même commit (règle du fichier), FR et EN.
+
+Vérifié en Playwright avec des hooks de debug temporaires (retirés
+avant commit, `grep -c "__DEBUG_"` revenu à 1) : engin à 2 soldats →
+2 coups de sortie, gains 1 puis 4 (1+3 bonus), total 5 = exactement
+l'ancien comportement pour ce cas minimal ; engin plein à 6 soldats →
+6 coups, gains 1×5 puis 4 (1+3), total 9. Aucune erreur console.
+
+**Audité, jugé cohérent, pas touché** : jardin et moulin partagent
+déjà volontairement le même ratio coût/revenu (75 or pour 1 or/s de
+revenu chacun, voir les commentaires du code — décision déjà actée en
+session, pas un oubli). Douves (4 paliers, 20/50/200/500) et zone
+d'église (5 paliers, 25/55/100/180/320) sont toutes deux des
+investissements coûteux et tardifs par nature (rejoindre leur coût
+total, ~770 et ~680, prend des dizaines de vagues rien qu'avec l'or
+des kills) — cohérent avec des mécaniques de fin de partie, pas un
+signe de déséquilibre en soi.
+
+**Repéré, pas encore tranché — à surveiller en jouant plutôt qu'à
+corriger sur la seule base des formules** : les tourelles (5 or pièce,
+1 dégât/s chacune) n'ont ni palier ni plafond de nombre, contrairement
+à absolument tout le reste de l'économie (jardin/moulin/cheval montent
+en coût géométriquement, douves/église par paliers fixes croissants).
+Le coût total de N tourelles reste strictement linéaire — aucune
+mécanique de rendements décroissants ne vient jamais rendre "encore
+une tourelle" moins intéressant que "encore une tourelle" précédente.
+Ce n'est pas forcément un problème (leur dégât individuel est modeste,
+et empiler de l'or dans les tourelles reste un choix qui coûte
+proportionnellement à ce qu'il rapporte, contrairement à un vrai piège
+d'investissement) mais ça mériterait d'être vérifié en jeu réel sur
+plusieurs vagues avant d'y toucher — pas de changement fait ici,
+noté pour la suite.
