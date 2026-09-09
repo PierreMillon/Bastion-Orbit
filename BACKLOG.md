@@ -3214,3 +3214,41 @@ contraintes existantes comme pour HOUSES[7]), puis réaudit complet de
 toutes les maisons/la grange/le moulin contre le nouveau tracé des
 chemins ET la nouvelle position de la place (script de vérification
 numérique, même méthode que le reste de la session).
+
+## Trois petits correctifs signalés juste après v0.91 → faits en v0.92
+
+**Son de la prière retiré** : "un bruit horrible quand je prie" —
+`playHammer()` (le bruit de marteau réutilisé par réflexe pour tout
+achat confirmé) n'avait aucun sens pour un geste de prière. Retiré
+sans le remplacer par autre chose — silencieux plutôt qu'un mauvais
+son inventé à la hâte ; un vrai son de prière pourrait être ajouté
+plus tard si Pierre le demande.
+
+**Contresens corrigé sur les fenêtres moulin/église** : le v0.89
+avait supprimé TOUTE fermeture au tap, alors que Pierre voulait bien
+le clic-dehors-ferme ("je VEUX qu'en cliquant hors de la fenêtre elle
+se ferme, tu as fait un contresens") — le vrai bug d'origine (avant
+v0.89) n'était pas "ça se ferme au clic dehors", c'était "un tap qui
+rate le petit bouton retombe sur le canevas juste en dessous, encore
+dans le rayon de détection du bâtiment, et referme par accident".
+Fix correct cette fois : un tap sur le bâtiment n'ouvre plus jamais
+qu'un bascule (donc plus jamais ce faux-positif), et un tap ailleurs
+sur le canevas referme les deux fenêtres — le clic-dehors-ferme que
+Pierre voulait, sans réintroduire le vrai bug d'origine.
+
+**Débordement des curseurs de volume** : `.volumeRow` a `width:100%;
+max-width:240px`, mais `input[type="range"]` a une largeur minimale
+implicite que `flex-shrink` ne réduit jamais en dessous par défaut
+("min-width: auto" implicite sur un enfant flex) — ça poussait la
+ligne à déborder de son propre max-width, visible sur la capture
+envoyée par Pierre (le curseur Bruitages dépassait nettement les
+autres boutons du menu). Fix standard : `min-width: 0` sur l'input.
+
+Vérifié en Playwright avec des hooks de debug temporaires (retirés
+avant commit, `grep -c "__DEBUG_"` revenu à 1) : tap sur le moulin →
+ouvert ; tap ailleurs → fermé ; deux taps de suite sur le moulin
+lui-même → reste ouvert (pas de bascule, pas de faux-positif) ;
+`.volumeRow` mesurée exactement à 240px de large (avant : plus large
+que son propre max-width), curseur bruitages entièrement contenu
+dedans. `playHammer()` confirmé absent du handler de clic du prêtre
+(lecture directe du code). Aucune erreur console.

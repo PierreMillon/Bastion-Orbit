@@ -287,7 +287,15 @@
     box-sizing: border-box;
   }
   .volumeRow label { flex: none; width: 68px; text-align: left; }
-  .volumeRow input[type="range"] { flex: 1; accent-color: #f2ead9; }
+  /* min-width:0 — signalé en session (2026-09-09, "overflow à régler sur
+     les sliders son") : un <input type="range"> a une largeur minimale
+     implicite (son propre min-content) que flex-shrink ne réduit jamais
+     en dessous par défaut ("min-width: auto" implicite sur les enfants
+     flex) — ça poussait .volumeRow (width:100%, max-width:240px) à
+     déborder de sa propre largeur max, le curseur débordant visiblement
+     à droite des autres boutons du menu. Piège flexbox classique, fix
+     standard. */
+  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; }
   .volumeRow .volumeVal { flex: none; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
   body.phosphor .volumeRow {
     background: var(--ph-fill);
@@ -540,10 +548,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.91</button>
+  <button id="versionBtn">v0.92</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.92</b> — retiré le bruit de la prière (un son de marteau, hors sujet) ; corrigé les fenêtres moulin/église : elles se ferment bien en cliquant ailleurs, sans se refermer par accident si on rate le bouton (le vrai bug du v0.89, mal corrigé) ; corrigé un débordement des curseurs de volume dans le menu</div>
   <div><b>v0.91</b> — première passe sur les chemins : plus de traits pointillés ni de bretelle à trait unique (vraie largeur partout), la jonction bretelle/route est maintenant propre (pas de croix), et le tracé devient de vrais segments droits reliés par des coudes francs dans le village, avec des courbes qui n'apparaissent qu'en s'en éloignant</div>
   <div><b>v0.90</b> — la roue à aubes du moulin, jusque-là plate (2D), a maintenant une vraie épaisseur</div>
   <div><b>v0.89</b> — la prière au prêtre est maintenant gratuite et répétable (soin complet immédiat + bonus de résistance de 100% pendant 30s, 45s de délai) ; le palier 1 de la zone d'église redevient un achat normal dehors. Corrige aussi : les fenêtres du moulin/de l'église pouvaient se refermer accidentellement en cliquant près du bouton</div>
@@ -3442,22 +3451,26 @@
   function toScreen(p) { return { x: camPanX + p.x * camZoom, y: camPanY + p.y * camZoom }; }
 
   // boutons flottants ancrés à un bâtiment du monde (voir #moulinBtn dans
-  // le HTML) — un vrai tap sur le bâtiment OUVRE sa fenêtre d'achat ; la
-  // position (left/top) est recalculée chaque frame dans render() tant
-  // qu'il est visible, pour suivre la rotation de la caméra.
+  // le HTML) — un vrai tap sur le bâtiment OUVRE sa fenêtre d'achat ; un
+  // tap ailleurs sur le canevas la referme. La position (left/top) est
+  // recalculée chaque frame dans render() tant qu'il est visible, pour
+  // suivre la rotation de la caméra.
   //
-  // signalé en session (2026-09-09) : c'était un BASCULE (toggle) avant —
-  // un tap sur le bâtiment fermait la fenêtre si elle était déjà ouverte.
-  // Problème concret : le bouton flottant est positionné pile au-dessus
-  // du bâtiment (voir .worldBtn, translate(-50%,-100%)) — donc un tap qui
-  // rate légèrement le petit bouton (visant pourtant "à côté" de lui, pas
-  // sur le bâtiment) retombe souvent sur le canevas juste en dessous,
-  // encore dans le rayon de détection du bâtiment, et refermait la
-  // fenêtre sans que ce soit voulu. Un tap sur le bâtiment n'ouvre plus
-  // que la fenêtre désormais (jamais ne la referme) — elle reste
-  // affichée tant qu'elle a quelque chose à proposer (prix/état déjà mis
-  // à jour chaque frame, voir refreshBuyButtons()), pas besoin de la
-  // refermer pour que le jeu reste jouable.
+  // historique en session (2026-09-09, deux passes) : d'abord signalé
+  // comme un bug ("ça se ferme au clic à côté") — corrigé en supprimant
+  // toute fermeture au tap. Corrigé À NOUVEAU dans la foulée ("je VEUX
+  // qu'en cliquant hors de la fenêtre elle se ferme, tu as fait un
+  // contresens") : Pierre voulait bien le clic-dehors-ferme, le vrai bug
+  // d'origine était ailleurs — le bouton flottant est positionné pile
+  // au-dessus du bâtiment (voir .worldBtn, translate(-50%,-100%)), donc
+  // un tap qui rate légèrement le petit bouton retombait souvent sur le
+  // CANEVAS juste en dessous, encore dans le rayon de détection du
+  // bâtiment lui-même, et le bascule d'alors le refermait par accident.
+  // Fix correct : un tap sur le bâtiment n'OUVRE plus jamais qu'un
+  // bascule (donc plus jamais ce faux-positif "referme par accident"),
+  // et un tap ailleurs sur le canevas (donc ni sur le bâtiment, ni sur le
+  // bouton lui-même — un clic sur le vrai bouton DOM ne traverse jamais
+  // jusqu'ici, il l'intercepte avant) referme les deux fenêtres.
   const moulinBtn = document.getElementById('moulinBtn');
   let moulinBtnVisible = false;
   const WORLD_TAP_RADIUS = 42; // rayon de détection du tap sur un bâtiment, en pixels écran
@@ -3476,8 +3489,12 @@
       if (Math.hypot(clientX - ePos.x, clientY - ePos.y) < tapR) {
         egliseBtnVisible = true;
         updateEgliseBtn();
+        return;
       }
     }
+    // ni le moulin ni l'église : un tap "ailleurs" referme ce qui était ouvert
+    if (moulinBtnVisible) { moulinBtnVisible = false; updateMoulinBtn(); }
+    if (egliseBtnVisible) { egliseBtnVisible = false; updateEgliseBtn(); }
   }
   function updateMoulinBtn() {
     if (!moulinBtnVisible) { moulinBtn.hidden = true; return; }
@@ -3571,7 +3588,12 @@
     if (!state.princessDead) state.princess.hp = state.princess.maxHp;
     state.prayerBuffTimer = PRAYER_BUFF_DURATION;
     state.prayerCooldown = PRAYER_COOLDOWN;
-    playHammer();
+    // pas de playHammer() ici — signalé en session (2026-09-09) : "un
+    // bruit horrible quand je prie", retiré. playHammer (un coup de
+    // marteau descendant) était réutilisé par réflexe pour toute action
+    // confirmée, mais ne correspond à rien pour un geste de prière —
+    // silencieux plutôt qu'un mauvais son ; un vrai son de prière
+    // pourrait être ajouté plus tard si besoin, pas inventé à la hâte ici.
     updatePriestBtn();
   });
 
