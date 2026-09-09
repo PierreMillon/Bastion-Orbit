@@ -2935,3 +2935,87 @@ avancer la position réellement entre les deux mesures ; corrigé en
 regroupant la mesure dans un seul appel synchrone. Captures d'écran à
 15s (pas d'accumulation ni de trou) et après rotation (couverture
 toujours normale). Aucune erreur console.
+
+## Gros lot de consignes du 2026-09-09 (dictées en rafale) — log immédiat,
+statuts honnêtes, rien commencé sauf mention contraire
+
+### 1. Refonte complète des chemins → pas fait, le plus gros morceau
+
+Consigne détaillée (verbatim reformulé) :
+- Bords gauche/droit d'un chemin = traits CONTINUS (pas pointillés).
+  Lignes brisées (polygonales) à l'intérieur du village ("construit
+  par l'homme"), de plus en plus courbes en s'en éloignant ("un vrai
+  chemin").
+- La place centrale du village doit être vraiment au centre, entre
+  l'église et le donjon.
+- Plus aucun chemin à trait unique (sans largeur) : chaque chemin a
+  une vraie largeur, praticable.
+- Aux intersections (ex. 90°), il faut "couper" le petit bout de
+  tracé qui bloquerait le passage — on doit pouvoir traverser d'un
+  chemin à l'autre sans qu'un trait ne barre le passage, comme un
+  doigt qui glisse en continu.
+- Une fois ça fait : re-vérifier qu'aucune maison n'empiète sur un
+  chemin ou sur la place (interdit) — seul le moulin est près de
+  l'eau, jamais dedans.
+
+Le plus gros morceau du lot : géométrie de chemins à largeur variable
++ courbure progressive + découpe booléenne aux intersections + replacement
+de la place + réaudit des maisons. Mérite une passe dédiée plutôt que
+d'être casée entre deux autres tâches — prévu comme prochain gros
+chantier.
+
+### 2. Roue du moulin → pas fait
+
+La roue à eau est actuellement plate (2D) — doit avoir une vraie
+épaisseur pour "pouvoir fonctionner" (lecture visuelle d'un vrai
+mécanisme).
+
+### 3. Prière au prêtre : gratuite, avec soin + bonus temporaire → pas fait
+
+Consigne : prier ne doit RIEN coûter — payer sert à AUGMENTER LA
+PUISSANCE de l'église (les paliers de zone), pas à prier. Ce sont
+deux choses différentes. La prière (gratuite, répétable) doit :
+- Soigner le seigneur (et la princesse ?) beaucoup plus vite qu'en
+  temps normal.
+- Donner un bonus de résistance temporaire (défense) — Pierre cite
+  "100% de bonus" pendant "une vague ou deux".
+
+Implique de découpler l'actuel `priestBtn` (v0.83 : payait 25 or ET
+débloquait le palier 1 de la zone) en deux choses : un bouton de
+prière gratuite et répétable (soin + buff), et l'achat du palier 1 de
+la zone d'église qui redevient un vrai achat payant comme les paliers
+suivants (au lieu d'être remplacé par la prière). Valeurs exactes du
+buff (durée précise en secondes, curseur "vague ou deux") à ma
+discrétion — Pierre a donné l'intention, pas les chiffres au tiret
+près.
+
+### 4. Bug : les popups moulin/église/prêtre se ferment au clic à côté → pas
+fait, pas encore investigué
+
+Rapporté comme un problème : cliquer en dehors de la petite fenêtre
+qui s'affiche en touchant le moulin/l'église la fait disparaître. À
+vérifier dans le code réel (ces boutons sont-ils vraiment un système
+de fermeture au clic extérieur, ou est-ce autre chose qui y
+ressemble) avant de corriger.
+
+### 5. Nouvelle maison éloignée, "chez la sorcière" → pas fait
+
+Une maison près du bord de l'écran (visible même en tournant, sur
+téléphone et sur ordinateur). Au clic : un message, reformulé court
+et efficace (Pierre donne l'intention : ambiguïté volontaire — sorcière
+ou dame de compagnie que le seigneur visite "sans assumer" —, pas le
+texte exact). Mécaniques prévues :
+- Tous les ennemis évitent de s'approcher de cette maison à bonne
+  distance (comme une zone interdite).
+- De temps en temps (toutes les ~10-30 vagues), un villageois SEUL
+  traverse en courant vers cette maison — jamais à deux à cette
+  fréquence.
+- Très rarement (~toutes les 50 vagues), DEUX villageois y vont
+  ensemble (ex. un couple qui va "chercher des informations" — sa
+  propre idée narrative). Ils disparaissent à l'écran en entrant,
+  restent moins d'une demi-vague, puis reviennent au village.
+- D'autres mécaniques à venir plus tard, pas précisées maintenant.
+
+Tout ce lot est noté maintenant, rien perdu — j'attaque les items
+bornés (2, 3, 4) en premier, le lot 1 (chemins) en chantier séparé
+juste après, le lot 5 (maison + IA villageois dédiée) à la suite.
