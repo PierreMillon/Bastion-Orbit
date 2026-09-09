@@ -2527,3 +2527,125 @@ fontaine) reste positionné à un angle pratique choisi à la main,
 toujours pas raccordé au réseau routes/village de v0.79 (la
 refonte routes→village ne portait que sur `HOUSES`, pas
 `VILLAGE_EXTRAS` — voir cette section plus haut).
+
+## Les ennemis boivent aussi à la fontaine + zone d'église qui menace ce détour + prêtre dans le donjon → fait en v0.83
+
+Signalé en session (2026-09-09) : "les ennemis aussi peuvent boire à
+la fontaine pour se soigner, d'où l'intérêt d'activer fort la zone de
+l'église" — puis, dans la foulée : "le bouton pour activer en premier
+le palier de l'église, c'est dans le donjon en allant voir le prêtre
+et prier". Trois décisions prises via `AskUserQuestion` avant de coder
+(cf. skill), le joueur ayant explicitement demandé de trancher plutôt
+que deviner : ennemis **actifs mais rares** (10-30%, pas juste
+opportunistes en passant), zone d'église **doit** pouvoir couvrir la
+fontaine (rapprocher/agrandir), prêtre **seulement pour le 1er palier**
+(paliers suivants toujours achetés dehors), prêtre **en personnage
+dessiné** (pas juste un bouton).
+
+### 1. Zone d'église, 5e palier, jusqu'à la fontaine
+
+Constat de départ vérifié numériquement (script à part) : même au
+palier 4 (max d'alors, rx=175/rz=110), la zone n'atteignait pas la
+fontaine — ~190 unités d'écart contre ~175 de portée max. Nouveau
+palier 5 (`cost: 320, rx: 312, rz: 196`) dimensionné pour que la
+fontaine tombe confortablement dedans (valeur d'ellipse ~0.85, la
+valeur 1 étant la limite) tout en restant loin du donjon/des douves
+(point le plus proche de la zone à r≈218, marge >40 vs douves
+max=178). La grange tombe aussi dans ce palier — accepté comme
+conséquence assumée plutôt qu'évité : "aller à fond" sacralise tout le
+cœur du village, pas seulement l'église elle-même.
+
+**Collision trouvée et corrigée en vérifiant** (pas juste supposée) :
+`HOUSES[7]` (v0.79, r=286/angle=-1.76) tombait dans cette zone
+élargie — repositionnée (script de génération sous contraintes, même
+méthode que v0.79, avec la nouvelle ellipse tier5 ajoutée aux
+contraintes) à r=288.6/angle=-2.499, toutes marges revérifiées
+(routes, ruisseau, autres maisons, point de débarquement bateau).
+
+### 2. Fontaine-soin côté ennemis, active mais rare
+
+Symétrique du mécanisme joueur (v0.82), réutilise le même modèle
+d'état que `'building'` (un détour temporaire qui revient à
+`'approach'` une fois terminé) plutôt qu'un système de flags parallèle
+— cohérent avec l'architecture existante de la machine à états
+ennemie.
+
+- **Jet UNIQUE par ennemi** (`e.fountainRolled`, pas un jet par frame
+  comme la cachette) dès qu'il passe sous `ENEMY_FOUNTAIN_HP_FRAC=0.4`
+  de PV — `ENEMY_FOUNTAIN_CHANCE=0.2` (20%, milieu de la fourchette
+  10-30% demandée) décide s'il est du genre à tenter le détour. Mêmes
+  exclusions que la cachette (bâtisseur/porteur d'échelle : mission
+  propre, jamais de détour).
+- **`seekingFountain`** : marche en ligne droite (pas le pas radial
+  habituel de `'approach'`) vers la fontaine, reste soumis à
+  `updateEgliseZoneDamage` tout du long — c'est tout l'intérêt du
+  palier 5, un ennemi qui tente sa chance peut y laisser des PV, voire
+  y mourir en chemin, pas seulement à l'arrivée.
+- **`drinkingFountain`** : soin continu (`ENEMY_FOUNTAIN_HEAL_TIME=5s`
+  pour un plein depuis 0, un peu plus lent que le joueur car plus
+  exposé/loin du mur), toujours vulnérable à la zone pendant qu'il
+  boit. Repart en `'approach'` une fois soigné, depuis là où il est —
+  le détour coûte du chemin en plus, pas juste du temps.
+- Petite jauge de progression au-dessus de l'ennemi pendant qu'il boit
+  (`enemyWaitInfo`, même mécanisme que building/attackBase/onTop).
+
+**Piège de méthodologie de test rencontré en chemin** (comme souvent
+cette session) : mon premier test forçait un ennemi à hp=1 près du
+donjon (r=200) pour observer le cycle rapidement — abattu en <1s par
+le tir défensif normal du seigneur, avant même d'entrer en jeu la
+mécanique testée. Cause : `nearestVisibleTarget()` (utilisée pour le
+VRAI tir, pas `nearestEnemyTo(pos, ATTACK_RANGE=260)`) n'a AUCUNE
+limite de portée — `ATTACK_RANGE` ne sert qu'à décider si le seigneur
+reste en comportement `'combat'`, pas à plafonner sa portée de tir une
+fois dedans. Corrigé en donnant assez de PV à l'ennemi de test pour
+survivre au tir incident, ce qui a permis d'observer le cycle complet
+(`seekingFountain` → `drinkingFountain` → `approach`, PV qui montent
+puis re-descendent une fois reparti) sur une trace image par image de
+1000+ échantillons. Vérifié séparément avec la zone d'église au
+maximum : l'ennemi meurt bien EN CHEMIN vers la fontaine (PV stables
+plusieurs frames puis disparition sans transition — la zone applique
+999×0.5 dégâts en un seul coup dans le même frame qui applique le
+`killEnemy`, jamais échantillonné entre les deux, mais cohérent avec
+la formule `moitié de la vie MAX` déjà en place depuis v0.70).
+
+### 3. Le prêtre, dans le donjon
+
+Première interaction cliquable jamais ajoutée à la scène cosy
+(jusque-là purement décorative, seul le bouton "Retour au mur"
+existait) — nouvelle infrastructure, pas juste un ajout ponctuel :
+- `cosyPerson(PRIEST_X, PRIEST_Z, ...)` (mêmes x/z que
+  seigneur/princesse/paysans, teinte pierre grise cohérente avec
+  `drawEglise`), posté près de l'arche éclairée plutôt que dans le
+  coin du feu déjà occupé.
+- `#priestBtn` : même famille que `#moulinBtn`/`#egliseBtn`
+  (`.worldBtn`), mais repositionné via `cosyIso()` + le ratio
+  `getBoundingClientRect()`/`COSY_W`/`COSY_H` du canvas cosy
+  (responsive, `width: min(560px, 92vw)`) plutôt que
+  `project()`/`rot` du monde extérieur — la scène cosy ne tourne
+  jamais, pas besoin de suivre une caméra, juste le redimensionnement
+  éventuel de la fenêtre (recalculé chaque frame dans `cosyFrame`,
+  comme moulin/église le sont dans `render()`).
+- **Vrai bug trouvé en testant visuellement, pas juste en lisant le
+  code** : `.worldBtn` a `z-index:9`, mais `#cosyOverlay` (qui contient
+  le canvas cosy) a `z-index:25` — le bouton du prêtre, positionné en
+  `fixed` en dehors de cet overlay, se serait retrouvé peint SOUS le
+  canvas malgré `hidden=false`, invisible. Corrigé avec une règle
+  `#priestBtn { z-index: 26; }` dédiée (pas touché à `.worldBtn`
+  lui-même, pour ne pas affecter moulin/église qui n'ont pas ce
+  problème).
+- Prier (25 or, coût du 1er palier existant, inchangé) débloque
+  `state.egliseZoneLevel=1`. Le bouton dehors (`#egliseBtn`) affiche
+  désormais "Va d'abord prier au donjon" (désactivé) tant que le
+  niveau est à 0, et bascule normalement sur l'achat des paliers
+  suivants une fois le premier fait via le prêtre — vérifié dans les
+  deux sens (avant/après prière, texte ET état disabled).
+
+Vérifié en Playwright pour l'ensemble des trois volets : cycle complet
+zone/collision (script de vérification numérique indépendant), cycle
+complet fontaine-ennemi (seekingFountain→drinkingFountain→approach,
+mort en chemin sous la zone maximale), cycle complet prêtre (avant
+prière → bouton désactivé avec bonne position/texte → clic → PV/or mis
+à jour → bouton dehors reflète le changement → re-clic sans effet →
+disparition à la fermeture de la scène cosy). Aucune erreur console
+sur l'ensemble des tests, ni sur 8 vagues forcées en rafale en jeu
+normal. Tous les hooks de debug temporaires retirés avant ce commit.

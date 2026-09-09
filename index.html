@@ -129,6 +129,11 @@
   }
   .worldBtn[hidden] { display: none; }
   .worldBtn.unaffordable { opacity: 0.45; }
+  /* #priestBtn s'affiche PENDANT que #cosyOverlay est ouvert (z-index 25)
+     — sans ce correctif, le canvas cosy (peint dans ce contexte
+     d'empilement plus élevé) le recouvrirait entièrement malgré
+     hidden=false, invisible bien que "affiché". */
+  #priestBtn { z-index: 26; }
 
   #changelog {
     position: fixed;
@@ -498,6 +503,12 @@
      via project(). Même idée pour l'église (zone sacrée). -->
 <button id="moulinBtn" class="worldBtn" hidden></button>
 <button id="egliseBtn" class="worldBtn" hidden></button>
+<!-- prêtre dans le donjon (signalé en session, 2026-09-09) : le premier
+     palier de la zone sacrée se débloque en lui parlant/priant, pas en
+     touchant l'église dehors — même bouton flottant que moulin/église,
+     mais repositionné dans le repère du canvas cosy (cosyIso), pas
+     project()/rot du monde extérieur (voir updatePriestBtn). -->
+<button id="priestBtn" class="worldBtn" hidden></button>
 
 <div id="topbar">
   <button id="menuBtn" aria-label="Menu">☰</button>
@@ -505,10 +516,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.82</button>
+  <button id="versionBtn">v0.83</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.83</b> — les ennemis aussi peuvent boire à la fontaine pour se soigner (rare, un détour risqué) : nouveau 5e palier de la zone sacrée de l'église qui s'étend jusqu'à la fontaine pour vraiment menacer ce détour ; le premier palier de la zone se débloque maintenant en priant le prêtre dans le donjon, plutôt qu'en touchant l'église dehors</div>
   <div><b>v0.82</b> — fontaine-soin : affaibli en sortie, le seigneur se précipite se soigner à la fontaine du village plutôt que de continuer à se battre — un vrai choix tactique, s'éloigner du combat pour survivre</div>
   <div><b>v0.81</b> — la grange et l'église du village sont maintenant des cachettes pour les ennemis, comme les maisons</div>
   <div><b>v0.80</b> — correctif bloquant : sur un écran court, le menu (bouton ☰) pouvait dépasser en bas, avec le bouton Fermer inatteignable et aucun moyen de faire défiler — obligeait à fermer l'application. Le menu et l'écran de fin défilent maintenant chacun correctement</div>
@@ -680,6 +692,8 @@
       moulin_max: 'Moulin au maximum',
       eglise_btn_start: 'Bénir le terrain', eglise_btn_upgrade: 'Agrandir la zone sacrée',
       eglise_max: 'Zone sacrée au maximum',
+      eglise_pray_first: "Va d'abord prier au donjon",
+      priest_pray: 'Prier', priest_done: 'Terrain déjà béni',
       restart_full: 'Recommencer depuis le début',
       difficulty_prefix: 'Difficulté : ',
       diff_facile: 'Facile', diff_normal: 'Normal', diff_difficile: 'Difficile',
@@ -713,6 +727,8 @@
       moulin_max: 'Mill maxed out',
       eglise_btn_start: 'Bless the ground', eglise_btn_upgrade: 'Expand the sacred ground',
       eglise_max: 'Sacred ground maxed out',
+      eglise_pray_first: 'Go pray at the donjon first',
+      priest_pray: 'Pray', priest_done: 'Ground already blessed',
       restart_full: 'Restart from the beginning',
       difficulty_prefix: 'Difficulty: ',
       diff_facile: 'Easy', diff_normal: 'Normal', diff_difficile: 'Hard',
@@ -1441,6 +1457,14 @@
   // qui n'est pas là) — à la différence du câlin.
   const FOUNTAIN_HEAL_HP_FRAC = 0.35;    // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
   const FOUNTAIN_HEAL_TIME = 4;          // secondes pour se soigner entièrement depuis 0 — un peu plus lent que le câlin (3s), plus exposé/loin du mur
+  // symétrique côté ennemis (signalé en session, 2026-09-09 : "les ennemis
+  // aussi peuvent boire à la fontaine... d'où l'intérêt d'activer fort la
+  // zone de l'église") — confirmé ACTIF (détour délibéré, pas juste
+  // opportuniste) mais RARE (10-30% des ennemis affaiblis, pas tous).
+  const ENEMY_FOUNTAIN_HP_FRAC = 0.4;    // un peu plus tôt que le joueur (35%) — les ennemis ont bien moins de PV dans l'absolu
+  const ENEMY_FOUNTAIN_CHANCE = 0.2;     // jet UNIQUE par ennemi affaibli, pas un jet continu — "ce genre-là irait boire", pas tous
+  const ENEMY_FOUNTAIN_ARRIVE_R = 15;    // distance pour considérer qu'il est arrivé
+  const ENEMY_FOUNTAIN_HEAL_TIME = 5;    // un peu plus lent que le joueur (4s) — plus il traîne, plus le palier 5 de l'église a de temps pour le punir
   const PRINCESS_ANGLE_SPEED = 1.2;      // how fast she turns while wandering/approaching up top
   const PRINCESS_R_EASE_RATE = 3;        // how fast she eases toward a new radius up top
   const PRINCESS_THREAT_COUNT = 5;       // this many nearby enemies sends her to the lord's side
@@ -1579,11 +1603,24 @@
   // réinventées), chacun élargit l'ellipse (rx le long de la nef, rz en
   // travers) plutôt qu'un simple rayon — la nef est déjà allongée
   // (32×60), une ellipse ronde aurait eu l'air à côté de la plaque.
+  // 5e palier ajouté en session (2026-09-09) : "les ennemis aussi peuvent
+  // boire à la fontaine pour se soigner, d'où l'intérêt d'activer fort la
+  // zone de l'église" — confirmé par Pierre que la zone doit pouvoir
+  // couvrir la fontaine pour rendre ce lien réel. Vérifié numériquement
+  // (script à part) : rx=312/rz=196 fait passer la fontaine largement
+  // dedans (valeur d'ellipse ~0.85, marge confortable) sans jamais
+  // atteindre le donjon/les douves (point le plus proche de la zone à
+  // r≈218, marge >40 vs douves max=178). La grange tombe aussi dedans à
+  // ce palier — accepté comme conséquence assumée plutôt qu'évité : "aller
+  // à fond" sacralise tout le cœur du village, pas seulement l'église
+  // elle-même. A forcé un repositionnement de HOUSES[7] (v0.79), qui
+  // serait sinon tombée dans cette zone élargie — voir HOUSES plus haut.
   const EGLISE_ZONE_TIERS = [
     { cost: 25, rx: 70, rz: 45 },
     { cost: 55, rx: 100, rz: 65 },
     { cost: 100, rx: 135, rz: 85 },
-    { cost: 180, rx: 175, rz: 110 }
+    { cost: 180, rx: 175, rz: 110 },
+    { cost: 320, rx: 312, rz: 196 }
   ];
   const EGLISE_ZONE_SEGS = 20;
 
@@ -1668,7 +1705,11 @@
     { x: 252.9 * Math.cos(-2.732), z: 252.9 * Math.sin(-2.732) },
     { x: 232.2 * Math.cos(-1.929), z: 232.2 * Math.sin(-1.929) },
     { x: 283.1 * Math.cos(-2.136), z: 283.1 * Math.sin(-2.136) },
-    { x: 286.3 * Math.cos(-1.760), z: 286.3 * Math.sin(-1.760) }
+    // était (286.3, -1.760) : retombait dans la zone d'église tier5
+    // (v0.83, "activer fort l'église pour bloquer la fontaine") —
+    // repositionnée, marges revérifiées (>38 vs route1, >40 entre
+    // maisons, >0.3 hors ellipse tier5)
+    { x: 288.6 * Math.cos(-2.499), z: 288.6 * Math.sin(-2.499) }
   // yaw : orientation propre du bâtiment (indépendante de son angle
   // autour du donjon) — signalé en session : sans ça, chaque maison
   // pointait dans le même axe monde, "toutes parallèles" les unes aux
@@ -3197,18 +3238,29 @@
   function updateEgliseBtn() {
     if (!egliseBtnVisible) { egliseBtn.hidden = true; return; }
     egliseBtn.hidden = false;
+    // le 1er palier se débloque désormais au prêtre, dans le donjon (voir
+    // priestBtn plus bas) — le bouton dehors reste visible au tap (pour
+    // ne pas dérouter le joueur qui touche l'église) mais n'achète plus
+    // rien tant que ce n'est pas fait, juste un rappel désactivé
+    if (state.egliseZoneLevel === 0) {
+      egliseBtn.textContent = t('eglise_pray_first');
+      egliseBtn.classList.remove('unaffordable');
+      egliseBtn.disabled = true;
+      return;
+    }
     if (state.egliseZoneLevel >= EGLISE_ZONE_TIERS.length) {
       egliseBtn.textContent = t('eglise_max');
       egliseBtn.classList.remove('unaffordable');
       egliseBtn.disabled = true;
     } else {
       const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
-      egliseBtn.textContent = affordText(state.egliseZoneLevel === 0 ? t('eglise_btn_start') : t('eglise_btn_upgrade'), cost);
+      egliseBtn.textContent = affordText(t('eglise_btn_upgrade'), cost);
       egliseBtn.classList.toggle('unaffordable', state.gold < cost);
       egliseBtn.disabled = false;
     }
   }
   egliseBtn.addEventListener('click', () => {
+    if (state.egliseZoneLevel === 0) return; // faut d'abord prier au donjon
     if (state.egliseZoneLevel >= EGLISE_ZONE_TIERS.length) return;
     const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
     if (state.gold < cost) return;
@@ -3217,6 +3269,43 @@
     state.egliseZoneLevel++;
     playHammer();
     updateEgliseBtn();
+  });
+
+  // le prêtre, dans le donjon (voir cosyPerson(PRIEST_X,PRIEST_Z,...) dans
+  // renderCosyScene) : seul moyen de débloquer le 1er palier de la zone
+  // sacrée — les paliers suivants restent achetés dehors, sur l'église
+  // elle-même, comme avant (confirmé par Pierre). Bouton flottant
+  // repositionné dans updatePriestBtn (repère du canvas cosy, pas
+  // project()/rot du monde extérieur — la scène cosy ne tourne jamais).
+  const priestBtn = document.getElementById('priestBtn');
+  function updatePriestBtn() {
+    if (cosyOverlay.hidden) { priestBtn.hidden = true; return; }
+    priestBtn.hidden = false;
+    const rect = cosyCanvas.getBoundingClientRect();
+    const pos = cosyIso(PRIEST_X, 0.9, PRIEST_Z); // un peu au-dessus de sa tête
+    priestBtn.style.left = (rect.left + pos.x * (rect.width / COSY_W)) + 'px';
+    priestBtn.style.top = (rect.top + pos.y * (rect.height / COSY_H)) + 'px';
+    if (state.egliseZoneLevel >= 1) {
+      priestBtn.textContent = t('priest_done');
+      priestBtn.classList.remove('unaffordable');
+      priestBtn.disabled = true;
+    } else {
+      const cost = EGLISE_ZONE_TIERS[0].cost;
+      priestBtn.textContent = affordText(t('priest_pray'), cost);
+      priestBtn.classList.toggle('unaffordable', state.gold < cost);
+      priestBtn.disabled = false;
+    }
+  }
+  priestBtn.addEventListener('click', () => {
+    if (state.egliseZoneLevel >= 1) return;
+    const cost = EGLISE_ZONE_TIERS[0].cost;
+    if (state.gold < cost) return;
+    state.gold -= cost;
+    goldNum.textContent = state.gold;
+    state.egliseZoneLevel = 1;
+    playHammer();
+    updatePriestBtn();
+    updateEgliseBtn(); // au cas où le bouton dehors serait déjà affiché
   });
 
   // ---- UI ----
@@ -3473,6 +3562,10 @@
   // qu'une texture plaquée à plat. Le seigneur et la princesse sont déjà
   // positionnés juste à côté (voir renderCosyScene) : ils "jouent"
   // ensemble à cette même table.
+  // le prêtre (voir renderCosyScene/updatePriestBtn) : posté près de
+  // l'arche éclairée (x=3.3, z=0), décalé en z pour ne pas être dans
+  // l'arche elle-même ni gêner les tonneaux (5.6,1.4)/(6.3,2.1)
+  const PRIEST_X = 3.3, PRIEST_Z = 1.8;
   const CHESS_CX = 5.9, CHESS_CZ = 4.3, CHESS_Y = 0.16;
   const CHESS_HALF_W = 0.42, CHESS_HALF_D = 0.3;
   function drawChessBoard() {
@@ -3629,6 +3722,13 @@
     drawChessBoard();
     cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
     if (!state.princessDead) cosyPerson(6.4, 4.1, 15, '#f3d6e8', '#a4568c'); // la princesse, si vivante
+    // le prêtre (signalé en session, 2026-09-09 : "le bouton pour activer
+    // en premier le palier de l'église, c'est dans le donjon en allant
+    // voir le prêtre et prier") — posté près de l'arche éclairée plutôt
+    // que dans le coin du feu déjà occupé par le seigneur/la princesse/
+    // l'échiquier ; teinte pierre grise, cohérente avec la nef/le clocher
+    // (drawEglise, dehors) plutôt que les tons chauds du reste de la pièce.
+    cosyPerson(PRIEST_X, PRIEST_Z, 15, '#a8a8b0', '#3a3a42');
 
     // les paysans réfugiés dans le château (state.villagersHiddenCastle) —
     // demandé en session : "on verra exactement le même nombre de paysans
@@ -3652,6 +3752,7 @@
     cosyClock += dt;
     updateCosyCat(dt);
     renderCosyScene(cosyClock);
+    updatePriestBtn(); // repositionné chaque frame (taille CSS du canvas responsive, peut changer au resize)
     cosyRAF = requestAnimationFrame(cosyFrame);
   }
   document.getElementById('cosyBtn').addEventListener('click', () => {
@@ -3662,6 +3763,7 @@
   document.getElementById('cosyClose').addEventListener('click', () => {
     cosyOverlay.hidden = true;
     if (cosyRAF !== null) { cancelAnimationFrame(cosyRAF); cosyRAF = null; }
+    priestBtn.hidden = true;
   });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
 
@@ -4263,6 +4365,22 @@
           }
         }
         if (e.hidAway) continue;
+        // fontaine-soin côté ennemis (signalé en session : "les ennemis
+        // aussi peuvent boire à la fontaine, d'où l'intérêt d'activer fort
+        // la zone de l'église") — confirmé par Pierre : ACTIF (l'ennemi se
+        // détourne délibérément vers la fontaine, pas juste opportuniste
+        // en passant) mais RARE (10-30% des ennemis affaiblis, pas tous).
+        // Jet UNE SEULE FOIS par ennemi (e.fountainRolled), pas un jet par
+        // frame comme la cachette — c'est un trait ("ce genre d'ennemi
+        // irait boire"), pas une fenêtre d'opportunité continue. Mêmes
+        // exclusions que la cachette : mission propre pour bâtisseur/
+        // porteur d'échelle, jamais de détour pour eux.
+        if (!e.fleeing && !e.builder && !e.ladder && !e.fountainRolled &&
+            e.hp < e.maxHp * ENEMY_FOUNTAIN_HP_FRAC) {
+          e.fountainRolled = true;
+          if (Math.random() < ENEMY_FOUNTAIN_CHANCE) e.state = 'seekingFountain';
+        }
+        if (e.state === 'seekingFountain') continue; // traité dans son propre bloc plus bas, pas la marche normale ci-dessous
         let nearby = 0;
         const ex0 = e.r * Math.cos(e.angle), ez0 = e.r * Math.sin(e.angle);
         for (const o of state.enemies) {
@@ -4327,6 +4445,32 @@
           }
           e.state = 'approach'; // done — carries on in same as any other approach
         }
+      } else if (e.state === 'seekingFountain') {
+        // marche en ligne droite (pas le pas radial habituel de 'approach')
+        // vers la fontaine — reste soumis à la zone d'église en chemin,
+        // c'est tout l'intérêt du palier 5 (voir EGLISE_ZONE_TIERS) : un
+        // ennemi qui tente sa chance peut y laisser des PV, voire y mourir
+        const ex = e.r * Math.cos(e.angle), ez = e.r * Math.sin(e.angle);
+        const dx = FOUNTAIN_EXTRA.x - ex, dz = FOUNTAIN_EXTRA.z - ez;
+        const dist = Math.hypot(dx, dz);
+        if (dist < ENEMY_FOUNTAIN_ARRIVE_R) {
+          e.state = 'drinkingFountain';
+        } else {
+          const step = Math.min(dist, e.speed * dt);
+          const nx = ex + (dx / dist) * step, nz = ez + (dz / dist) * step;
+          e.r = Math.hypot(nx, nz);
+          e.angle = Math.atan2(nz, nx);
+        }
+        updateEgliseZoneDamage(e);
+        if (e.dead) continue;
+      } else if (e.state === 'drinkingFountain') {
+        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * (dt / ENEMY_FOUNTAIN_HEAL_TIME));
+        updateEgliseZoneDamage(e); // toujours vulnérable pendant qu'il boit — la zone punit d'y traîner
+        if (e.dead) continue;
+        // reprend sa route vers le mur une fois soigné, depuis là où il
+        // est (près de la fontaine) — le détour lui coûte du chemin en
+        // plus, pas juste du temps
+        if (e.hp >= e.maxHp) e.state = 'approach';
       } else if (e.state === 'attackBase') {
         e.timer -= dt;
         if (e.timer <= 0) {
@@ -5798,6 +5942,7 @@
     if (e.state === 'building') return { timer: e.buildTimer, max: BRIDGE_BUILD_TIME, color: '#7fb0e8' }; // pose un pont
     if (e.state === 'attackBase') return { timer: e.timer, max: e.ladder ? LADDER_SETUP_TIME : 1.2, color: e.ladder ? '#e0a94f' : '#c9503f' }; // plante l'échelle / grignote le mur
     if (e.state === 'onTop') return { timer: e.timer, max: 1.4, color: '#c9503f' }; // va frapper le seigneur/une tourelle
+    if (e.state === 'drinkingFountain') return { timer: e.maxHp - e.hp, max: e.maxHp, color: '#7fc9a0' }; // se soigne à la fontaine
     return null;
   }
 
