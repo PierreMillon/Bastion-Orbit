@@ -1724,16 +1724,6 @@ combien de temps ça reste affiché).
 
 ## Nouvelles demandes (suite, 2026-09-08 tard) — en attente
 
-- **Grange plus loin, pour la continuité du ruisseau** — redemandé
-  ("je te l'avais déjà signalé"), formulation encore vague ("pour la
-  perspective, la continuité de l'eau par rapport au champ visible").
-  Interprétation retenue faute de mieux : un bâtiment supplémentaire
-  loin le long du ruisseau (au-delà du moulin, vers le bord visible)
-  pour donner l'impression que l'eau continue au loin plutôt que de
-  sembler s'arrêter dans le vide. À corriger si l'intention réelle
-  était différente.
-- **Zone sacrée de l'église** : toujours en attente, voir la section
-  précédente pour le détail complet.
 - **Vrais curseurs de volume — vérifié, déjà fait, rien à faire.**
   Signalé comme "juste en off" par Pierre, mais testé en Playwright :
   `#musicVolumeInput`/`#sfxVolumeInput` sont déjà de vraies glissières
@@ -2043,3 +2033,30 @@ tactile multi-doigts n'est pas disponible dans cet environnement) :
 Pas fait (hors du scope confirmé par les réponses de Pierre) : pas de
 comportement souris/desktop dédié (molette pour zoomer) — resté
 tactile uniquement, comme décrit dans la demande d'origine.
+
+## Grange lointaine, pour la continuité visuelle du ruisseau → fait en v0.75
+
+Redemandé en session ("je te l'avais déjà signalé"), formulation restée
+vague ("pour la perspective, la continuité de l'eau par rapport au
+champ visible"). Interprétation retenue faute de mieux : un bâtiment
+supplémentaire loin le long du ruisseau, sur la même berge que le
+moulin mais bien plus loin en amont (d=-460 contre d=-220 pour le
+moulin), pour ancrer visuellement l'idée que l'eau continue au loin
+plutôt que de sembler s'arrêter dans le vide.
+
+Position vérifiée numériquement (script à part, même méthode que pour
+tous les autres bâtiments de la session) contre les deux routes et
+tous les bâtiments existants (moulin inclus) : marges > 120 unités
+partout. Réutilise `drawGrange` telle quelle (même recette visuelle
+que la grange du cœur de village, juste une autre position/orientation)
+— ajoutée à `ALL_VILLAGE_EXTRAS` après coup (`.push`, une fois
+`streamGeometry`/`streamPointAt` disponibles) plutôt que déclarée à sa
+place d'origine, pour éviter le même piège de TDZ déjà rencontré
+plusieurs fois cette session.
+
+Vérifié en Playwright : capture zoomée près du bord de la carte — la
+grange est bien visible juste à côté du ruisseau, à son extrémité
+visible. Aucune erreur console.
+
+À corriger si l'intention réelle de Pierre était différente — la
+formulation d'origine reste ambiguë malgré cette interprétation.

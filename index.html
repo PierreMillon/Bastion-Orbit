@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.74</button>
+  <button id="versionBtn">v0.75</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.75</b> — une grange au loin, plus loin le long du ruisseau que le moulin, pour ancrer visuellement la continuité de l'eau vers le bord de la carte</div>
   <div><b>v0.74</b> — zoom pincé à deux doigts : ancré sur le point pincé, reste zoomé au relâchement, la rotation continue de fonctionner normalement pendant qu'on est zoomé</div>
   <div><b>v0.73</b> — un vrai échiquier 8x8 dans la scène cosy, à la table où le seigneur et la princesse se retrouvent déjà près du feu</div>
   <div><b>v0.72</b> — un petit cours d'eau secondaire (3x moins large) part du ruisseau et se déverse dans les douves dès leur construction, avec des particules qui s'éteignent avant d'atteindre l'eau stagnante</div>
@@ -2052,6 +2053,27 @@
       td: Math.random(),
       lat: (Math.random() * 2 - 1) * TRIBUTARY_HALF_WIDTH * 0.7
     }));
+  }
+
+  // grange lointaine (redemandé en session : "il fallait mettre une
+  // grange plus loin pour la perspective, la continuité de l'eau par
+  // rapport au champ visible") — interprétation retenue : un bâtiment
+  // supplémentaire loin le long du ruisseau, au-delà du moulin (même
+  // berge, plus loin en amont), pour ancrer visuellement l'idée que l'eau
+  // continue au loin plutôt que de sembler s'arrêter dans le vide.
+  // Position vérifiée numériquement (script à part, même méthode que les
+  // autres bâtiments) contre les deux routes et tous les bâtiments
+  // existants (dont le moulin) : marges > 120 unités partout.
+  {
+    const FAR_GRANGE_D = -460, FAR_GRANGE_BANK = 1;
+    const gFar = streamGeometry();
+    const cFar = streamPointAt(gFar, FAR_GRANGE_D);
+    const fgx = cFar.x + gFar.rx * FAR_GRANGE_BANK * (STREAM_HALF_WIDTH + 30);
+    const fgz = cFar.z + gFar.rz * FAR_GRANGE_BANK * (STREAM_HALF_WIDTH + 30);
+    ALL_VILLAGE_EXTRAS.push({
+      type: 'grange_lointaine', x: fgx, z: fgz, yaw: 0.9,
+      angle: Math.atan2(fgz, fgx), r: Math.hypot(fgx, fgz)
+    });
   }
   // audité en session : même chose que _roadSegsCache — cette géométrie ne
   // dépend que de constantes et de streamHalfLen() (=roadMaxR()=SPAWN_R,
@@ -5032,7 +5054,7 @@
   }
 
   function drawVillageExtra(b, rot) {
-    if (b.type === 'grange') drawGrange(b, rot);
+    if (b.type === 'grange' || b.type === 'grange_lointaine') drawGrange(b, rot);
     else if (b.type === 'eglise') drawEglise(b, rot);
     else if (b.type === 'ferme_grange') drawFermeGrange(b, rot);
     else if (b.type === 'ferme_maison') drawFermeMaison(b, rot);
