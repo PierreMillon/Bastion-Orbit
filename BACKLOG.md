@@ -3330,3 +3330,49 @@ pas de faire défiler/zoomer la PAGE à la place du jeu.
 Vérifié en Playwright : `mouse.wheel()` centré sur le donjon → zoom
 avant net (capture à l'appui), puis dézoome jusqu'au niveau de base
 (clampé correctement à `CAM_ZOOM_MIN=1`). Aucune erreur console.
+
+## Croisements de chemins : le morceau pris dans l'intersection disparaît
+au lieu de se superposer → fait en v0.95
+
+Pierre a envoyé une capture du bug ET une version retouchée à la main
+montrant le résultat voulu (le croisement "vidé") — repris tel quel,
+pas de doute à trancher ici.
+
+**Diagnostic** : le fix de v0.91 (`roadNearEdgePoint`) empêche déjà la
+bretelle de traverser la route AU POINT où elle s'y raccorde (elle
+s'arrête au bord, pas au centre) — mais son arc contourné
+(`bowedPathPoints`, qui interpole angle+rayon pour éviter de couper à
+travers le donjon) pouvait recouper cette MÊME route un peu plus loin
+sur sa courbe : un vrai second croisement, différent du premier,
+confirmé en reproduisant la scène de la capture (capture à l'appui,
+zoomée sur le point exact).
+
+**Fait** : plutôt que d'ajuster la courbe à l'aveugle (fragile — un
+autre réglage pourrait recroiser autre chose ailleurs), un vrai test
+d'intersection géométrique. Nouvelles fonctions `segsIntersect()`
+(intersection de deux segments 2D, formule standard, avec une marge
+0.03–0.97 pour ignorer les faux positifs bout-à-bout) et
+`crossesAnyRoad()` (teste un petit bout de tracé contre TOUS les
+segments réels des deux routes, via `roadSegs()` déjà existant).
+Branché dans `drawSplitRoadPath()` (utilisé par la bretelle ET le
+3e chemin place→porte) : tout petit morceau qui croise une route n'est
+simplement pas dessiné — le trou qui en résulte EST le croisement
+propre demandé, exactement ce que montrait la retouche de Pierre.
+Généraliste : marche pour n'importe quel croisement rencontré, pas
+seulement celui de la capture.
+
+Vérifié en Playwright avec un hook de debug temporaire (retiré avant
+commit, `grep -c "__DEBUG_"` revenu à 1) : capture zoomée sur le point
+exact du bug signalé → le croisement montre maintenant un vrai trou
+(deux bouts de ligne distincts, plus de superposition), balayage à
+8 angles de caméra sans nouveau croisement visible ailleurs. 10 vagues
+forcées en rafale sans erreur. Aucune erreur console.
+
+Le deuxième point du message ("parfois séparées par un gap vide, ce
+n'est pas bon") n'a pas été reproduit séparément — probablement la
+même chose décrite deux fois plutôt qu'un bug distinct (le tracé
+kinké lui-même reste géométriquement continu par construction : deux
+segments consécutifs partagent exactement le même point, vérifié en
+lisant `roadSegs()`). Si un vrai gap réapparaît ailleurs (un coude
+franc, pas un croisement entre deux chemins), le signaler avec un
+exemple précis pour que je le corrige.

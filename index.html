@@ -548,10 +548,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.94</button>
+  <button id="versionBtn">v0.95</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.95</b> — corrige les croisements de chemins : là où une bretelle recoupait une route, le petit bout pris dans le croisement disparaît maintenant au lieu de se superposer</div>
   <div><b>v0.94</b> — ajoute le zoom à la molette/au pincement trackpad (n'existait qu'au pincement tactile)</div>
   <div><b>v0.93</b> — la place du village est maintenant vraiment entre l'église et le donjon (avant, elle était plus loin du donjon que l'église elle-même) ; réaudit complet des maisons contre le nouveau tracé des chemins et la nouvelle place — 7 sur 8 ont dû être repositionnées</div>
   <div><b>v0.92</b> — retiré le bruit de la prière (un son de marteau, hors sujet) ; corrigé les fenêtres moulin/église : elles se ferment bien en cliquant ailleurs, sans se refermer par accident si on rate le bouton (le vrai bug du v0.89, mal corrigé) ; corrigé un débordement des curseurs de volume dans le menu</div>
@@ -6528,6 +6529,40 @@
   // parce que drawPlazaAndPaths en a besoin par petit bout, pas juste une
   // fois pour tout le groupe (voir plus bas pourquoi).
   function pointFar(x, z, rot) { return Math.cos(Math.atan2(z, x) - rot) < 0; }
+  // intersection propre bretelle/troisième-chemin × routes (signalé en
+  // session, 2026-09-09, capture à l'appui : "je veux que tu fasses la
+  // même chose" — vider le petit morceau de tracé pris dans le
+  // croisement plutôt que le laisser se superposer). roadNearEdgePoint
+  // (plus bas) empêche déjà la bretelle de traverser la route AU POINT
+  // où elle s'y raccorde, mais son arc contourné (bowedPathPoints, pour
+  // éviter le donjon) pouvait recouper cette même route un peu plus
+  // loin — un vrai croisement, pas juste un raccord. Plutôt que de
+  // deviner une meilleure courbe (fragile, un autre virage pourrait
+  // recroiser autre chose), test d'intersection direct contre les
+  // segments réels des deux routes (roadSegs) : tout petit bout de
+  // bretelle/chemin qui coupe une route n'est simplement pas dessiné —
+  // le trou qui en résulte EST le croisement propre demandé.
+  function segsIntersect(x1, z1, x2, z2, x3, z3, x4, z4) {
+    const d1x = x2 - x1, d1z = z2 - z1, d2x = x4 - x3, d2z = z4 - z3;
+    const denom = d1x * d2z - d1z * d2x;
+    if (Math.abs(denom) < 1e-9) return false; // parallèles (ou quasi)
+    const t = ((x3 - x1) * d2z - (z3 - z1) * d2x) / denom;
+    const u = ((x3 - x1) * d1z - (z3 - z1) * d1x) / denom;
+    // marge (pas 0..1 strict) : ignore les faux positifs au tout début/
+    // toute fin d'un segment (un simple bout-à-bout ne compte pas comme
+    // un croisement à vider)
+    return t > 0.03 && t < 0.97 && u > 0.03 && u < 0.97;
+  }
+  function crossesAnyRoad(ax, az, bx, bz) {
+    for (let idx = 0; idx < 2; idx++) {
+      for (const seg of roadSegs(idx)) {
+        const x3 = seg.r0 * Math.cos(seg.a0), z3 = seg.r0 * Math.sin(seg.a0);
+        const x4 = seg.r1 * Math.cos(seg.a1), z4 = seg.r1 * Math.sin(seg.a1);
+        if (segsIntersect(ax, az, bx, bz, x3, z3, x4, z4)) return true;
+      }
+    }
+    return false;
+  }
   // même découpage pour le troisième chemin (un vrai ruban à deux bords,
   // pas juste une ligne) — chaque petit bout redessine son propre
   // drawSimpleRoadPath, ce qui garde les deux bords parallèles et de la
@@ -6538,6 +6573,7 @@
       const ax = x0 + (x1 - x0) * t0, az = z0 + (z1 - z0) * t0;
       const bx = x0 + (x1 - x0) * t1, bz = z0 + (z1 - z0) * t1;
       if (pointFar((ax + bx) / 2, (az + bz) / 2, rot) !== wantFar) continue;
+      if (crossesAnyRoad(ax, az, bx, bz)) continue; // vide le morceau pris dans un croisement
       drawSimpleRoadPath(ax, az, bx, bz, halfWidth, rot);
     }
   }
