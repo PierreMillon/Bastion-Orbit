@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.87</button>
+  <button id="versionBtn">v0.88</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.88</b> — correctif du v0.87 : la neige avait une direction correcte mais restait figée à l'écran pendant la rotation de caméra (une pause visible) ; elle a maintenant une vraie position dans le monde, comme n'importe quel décor, et tourne avec la caméra sans à-coup</div>
   <div><b>v0.87</b> — la neige tombait toujours tout droit vers le bas de l'écran, vers le joueur, quelle que soit l'orientation de la caméra ; elle suit maintenant le sens réel du courant du ruisseau, et tourne avec la caméra plutôt que de rester figée à l'écran</div>
   <div><b>v0.86</b> — rentabilité : détruire un engin de siège rapportait un forfait fixe (5 or) qu'il ait 2 ou 6 soldats à bord ; chaque soldat abattu en sortie rapporte maintenant 1 or, immédiatement, comme n'importe quel ennemi — plus un bonus de 3 or au coup de grâce</div>
   <div><b>v0.85</b> — les engins de siège ont maintenant un vrai équipage de soldats individuels visibles (postés autour de l'engin, se balançant sur place), plutôt qu'une simple rangée de pips abstraite — la sortie les abat toujours un par un</div>
@@ -1136,6 +1137,14 @@
     { size: 4.2, speed: 32, count: 20, alpha: 0.50, sway: 22 },
     { size: 7.5, speed: 55, count: 11, alpha: 0.78, sway: 38 }
   ];
+  // existence monde (2026-09-09) : seedSnowflake()/initSnow() (voir plus
+  // bas, section "ambient snow") sont appelés dès resize() ci-dessous —
+  // ces trois constantes doivent donc être initialisées AVANT ce point,
+  // même piège TDZ que SNOW_LAYERS juste au-dessus (et déjà expliqué dans
+  // le commentaire du haut de ce bloc).
+  const SNOW_FALL_BAND = 340;  // hauteur (monde) entre le rebouclage et l'apparition
+  const SNOW_GROUND_Y = -40;   // rebouclé une fois tombé sous ce point
+  const SNOW_WIND_MUL = 1.8;   // "vent fort" : dérive horizontale nettement plus marquée que la seule chute
   let snowflakes = [];
   let snowOn = true;
   try { snowOn = localStorage.getItem('bo_snowOn') !== 'off'; } catch (e) { /* ignore */ }
@@ -6756,76 +6765,54 @@
 
   // ---- ambient snow ---- (SNOW_LAYERS/snowflakes declared up near W/H/
   // scale, for the same "resize() runs first" TDZ reason)
+  //
+  // existence physique dans le monde (correctif du 2026-09-09, sur un
+  // premier essai en espace écran jugé insuffisant par Pierre : "quand je
+  // tourne, ça doit faire partie de la rotation... le point qui a tel
+  // endroit dans l'espace, il doit avoir la même rotation que les
+  // autres") — chaque flocon a maintenant une vraie position MONDE
+  // (wx/wy/wz), projetée chaque frame via project(), exactement comme
+  // n'importe quel autre objet du jeu. Tourner la caméra fait donc
+  // tourner la neige avec le reste de la scène, au lieu de rester figée à
+  // l'écran pendant que seule la direction de dérive future changeait
+  // (le premier essai, insuffisant). Le vent, lui, redevient trivial :
+  // un vecteur MONDE constant (g.tx/g.tz, le sens du courant), plus
+  // besoin de le re-tourner à la main à chaque frame — project() s'en
+  // charge tout seul, comme pour tout le reste du décor. (SNOW_FALL_BAND/
+  // SNOW_GROUND_Y/SNOW_WIND_MUL déclarées avec SNOW_LAYERS plus haut,
+  // même raison TDZ.)
+  function seedSnowflake(f, topOfBand) {
+    const r = Math.sqrt(Math.random()) * SPAWN_R; // uniforme sur le disque (pas juste sur le rayon)
+    const a = Math.random() * Math.PI * 2;
+    f.wx = r * Math.cos(a);
+    f.wz = r * Math.sin(a);
+    f.wy = topOfBand ? SNOW_GROUND_Y + SNOW_FALL_BAND : SNOW_GROUND_Y + Math.random() * SNOW_FALL_BAND;
+  }
   function initSnow() {
     snowflakes = [];
     SNOW_LAYERS.forEach((layer, li) => {
       for (let i = 0; i < layer.count; i++) {
-        snowflakes.push({
-          li,
-          x: Math.random() * W,
-          y: Math.random() * H,
-          phase: Math.random() * Math.PI * 2,
-          windSeed: 1 + Math.random() * 3
-        });
+        const f = { li, phase: Math.random() * Math.PI * 2, windSeed: 1 + Math.random() * 3 };
+        seedSnowflake(f, false); // pleine hauteur au hasard, pour une couverture immédiate au chargement
+        snowflakes.push(f);
       }
     });
   }
-  // direction du vent (demandé en session, 2026-09-09) : la neige tombait
-  // toujours tout droit vers le bas de l'écran, donc "vers le joueur" quel
-  // que soit l'angle de vue — un artefact extra-diégétique (figé à l'écran,
-  // ignore l'orientation du monde). Alignée maintenant sur le sens réel du
-  // courant du ruisseau (g.tx/g.tz — le même vecteur que l'écoulement de
-  // l'eau, voir fl.d += STREAM_FLOW_SPEED plus haut), tourné par la même
-  // transformation que project() (rotation caméra + skew iso, sans la
-  // hauteur ni la translation — un vecteur, pas une position) : tourne la
-  // caméra autour du donjon, le vent tourne avec elle, toujours dans le
-  // même sens du courant. "Garde l'actuel" pour tout le reste (vitesses,
-  // tailles, sway, densité par couche) — seul l'axe de la dérive change.
-  function windScreenDir() {
-    const rot = state.theta - Math.PI / 4;
-    const g = streamGeometry();
-    const rx = g.tx * Math.cos(rot) + g.tz * Math.sin(rot);
-    const rz = -g.tx * Math.sin(rot) + g.tz * Math.cos(rot);
-    const dx = (rx - rz) * cosIso;
-    const dy = (rx + rz) * sinIso;
-    const len = Math.hypot(dx, dy) || 1;
-    return { x: dx / len, y: dy / len };
-  }
-  // étendue de l'écran projetée sur un axe donné — généralise le H/W fixe
-  // de l'ancien rebouclage (toujours haut/bas + gauche/droite) à une
-  // direction de vent quelconque, puisqu'elle tourne maintenant avec la
-  // caméra plutôt que de rester verticale
-  function screenAxisExtent(dx, dy) {
-    let mn = Infinity, mx = -Infinity;
-    for (const p of [[0, 0], [W, 0], [0, H], [W, H]]) {
-      const v = p[0] * dx + p[1] * dy;
-      if (v < mn) mn = v;
-      if (v > mx) mx = v;
-    }
-    return mx - mn;
-  }
   function updateSnow(dt) {
     if (!snowOn) return;
-    const wind = windScreenDir();
-    const px = -wind.y, py = wind.x; // perpendiculaire au vent, pour le sway latéral
-    const margin = 20;
-    const along = screenAxisExtent(wind.x, wind.y) + margin * 2;
-    const across = screenAxisExtent(px, py) + margin * 2;
+    const g = streamGeometry(); // tx/tz = sens du courant, rx/rz = perpendiculaire
     for (const f of snowflakes) {
       const layer = SNOW_LAYERS[f.li];
       f.phase += dt;
-      const step = layer.speed * scale * dt;
-      const sway = Math.sin(f.phase * 0.6 + f.windSeed) * layer.sway * scale * dt;
-      f.x += wind.x * step + px * sway;
-      f.y += wind.y * step + py * sway;
-      if (f.x < -margin || f.x > W + margin || f.y < -margin || f.y > H + margin) {
-        // reboucle en amont du vent (bord opposé), décalage latéral au
-        // hasard — même principe que l'ancien "réapparaît en haut, x au
-        // hasard", généralisé à une direction de vent quelconque
-        f.x -= wind.x * along; f.y -= wind.y * along;
-        const j = (Math.random() - 0.5) * across;
-        f.x += px * j; f.y += py * j;
-      }
+      f.wy -= layer.speed * dt;
+      const windStep = layer.speed * SNOW_WIND_MUL * dt;
+      const sway = Math.sin(f.phase * 0.6 + f.windSeed) * layer.sway * dt;
+      f.wx += g.tx * windStep + g.rx * sway;
+      f.wz += g.tz * windStep + g.rz * sway;
+      // rebouclage : tombé au sol, OU dérivé hors de la zone visible (le
+      // vent souffle toujours dans le même sens, sans jamais rien
+      // ramener — sans ça, tout finirait un jour hors champ)
+      if (f.wy < SNOW_GROUND_Y || Math.hypot(f.wx, f.wz) > SPAWN_R * 1.15) seedSnowflake(f, true);
     }
   }
   // signalé en session : la neige passait par drawBallSprite, donc par
@@ -6835,13 +6822,18 @@
   // (lui aussi un cercle creux). La neige doit rester lisiblement du
   // décor, jamais une cible potentielle : dessinée ici directement sur
   // rawCtx (le contexte brut, PAS le wrapper phosphore) — un point plein
-  // simple, dans tous les styles, jamais un contour.
+  // simple, dans tous les styles, jamais un contour. Toujours dessinée
+  // par-dessus toute la scène (pas de tri en profondeur avec les
+  // bâtiments) — inchangé du premier essai, seule la position (vraie
+  // position monde, projetée) a changé.
   function drawSnow() {
     if (!snowOn) return;
+    const rot = state.theta - Math.PI / 4;
     for (const f of snowflakes) {
       const layer = SNOW_LAYERS[f.li];
+      const p = project(f.wx, f.wy, f.wz, rot);
       rawCtx.beginPath();
-      rawCtx.arc(f.x, f.y, layer.size * scale * 0.5, 0, Math.PI * 2);
+      rawCtx.arc(p.x, p.y, layer.size * scale * 0.5, 0, Math.PI * 2);
       rawCtx.fillStyle = `rgba(255,255,255,${layer.alpha})`;
       rawCtx.fill();
     }

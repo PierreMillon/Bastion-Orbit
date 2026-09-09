@@ -2879,3 +2879,59 @@ rotation de caméra. Capture d'écran après 15s à angle fixe : pas
 d'accumulation ni de flocon coincé hors-écran (le rebouclage
 généralisé fonctionne). Capture après rotation de caméra : neige
 toujours répartie normalement à l'écran. Aucune erreur console.
+
+## Correctif du v0.87 : la neige doit avoir une vraie existence dans le
+monde (consigne du 2026-09-09) → fait en v0.88
+
+Retour de Pierre sur le v0.87 : le v0.87 changeait seulement la
+DIRECTION de la dérive future (bonne idée, mal exécutée) — les
+flocons restaient des particules en espace ÉCRAN pur. Résultat
+concret signalé : "quand je tourne, ça reste au même endroit de
+l'écran, puis ça fait une pause, puis ça repart dans la bonne
+direction" — parce qu'un flocon existant n'était jamais lui-même
+tourné, seule sa prochaine dérive changeait de sens. Consigne
+explicite : "le point qui est à tel endroit dans l'espace doit avoir
+la même rotation que les autres" — donc une vraie existence MONDE,
+comme n'importe quel bâtiment.
+
+**Refonte** : chaque flocon a maintenant une vraie position monde
+`(wx, wy, wz)` au lieu de `(x, y)` écran. `updateSnow()` ne connaît
+plus du tout la caméra — il fait juste tomber `wy` et dériver
+`wx/wz` le long du vecteur MONDE constant du courant
+(`streamGeometry().tx/tz`, plus besoin de le re-tourner à la main
+comme dans le v0.87). `drawSnow()` projette chaque flocon avec
+`project(wx, wy, wz, rot)`, exactement comme tout le reste du décor —
+donc tourner la caméra fait tourner la neige avec la scène, sans
+aucun code dédié à la rotation : c'est juste project() qui s'en
+charge, comme pour une maison. Nouvelles constantes `SNOW_FALL_BAND`
+(hauteur de la bande de chute), `SNOW_GROUND_Y` (seuil de rebouclage)
+et `SNOW_WIND_MUL` (dérive horizontale nettement plus marquée que la
+chute seule, pour lire "vent fort" plutôt qu'une brise). Rebouclage :
+au sol OU trop loin du centre (`SPAWN_R`, le rayon déjà utilisé
+ailleurs pour garantir la couverture de l'écran à n'importe quel
+angle) → réapparition en haut de la bande, position aléatoire dans le
+disque.
+
+**Bug trouvé et corrigé avant de tester** : `resize()` appelle
+`initSnow()` au tout premier chargement, avant que les nouvelles
+constantes (déclarées près de leur code, plus bas dans le fichier) ne
+soient initialisées — exactement le piège TDZ déjà documenté pour
+`SNOW_LAYERS` (voir le commentaire historique à sa déclaration :
+"the whole game silently died right there"). `SNOW_FALL_BAND`/
+`SNOW_GROUND_Y`/`SNOW_WIND_MUL` déplacées à côté de `SNOW_LAYERS`,
+même remède que la fois précédente. Repéré en testant AVANT de
+pousser (erreur console au premier chargement), pas après.
+
+Vérifié en Playwright avec des hooks de debug temporaires (retirés
+avant commit, `grep -c "__DEBUG_"` revenu à 1) : un flocon capturé une
+fois, projeté à deux angles de caméra DANS LE MÊME appel synchrone
+(donc sans que le temps de jeu ne s'écoule entre les deux mesures) —
+la position monde reste bit-à-bit identique, seule la position écran
+change, exactement le comportement attendu d'un objet du monde. Un
+premier essai de test (deux appels séparés) avait donné un faux
+négatif — la boucle de jeu continue de tourner en fond entre deux
+`page.evaluate()`, donc `updateSnow()` avait le temps de faire
+avancer la position réellement entre les deux mesures ; corrigé en
+regroupant la mesure dans un seul appel synchrone. Captures d'écran à
+15s (pas d'accumulation ni de trou) et après rotation (couverture
+toujours normale). Aucune erreur console.
