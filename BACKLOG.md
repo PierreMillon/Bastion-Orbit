@@ -3376,3 +3376,95 @@ segments consécutifs partagent exactement le même point, vérifié en
 lisant `roadSegs()`). Si un vrai gap réapparaît ailleurs (un coude
 franc, pas un croisement entre deux chemins), le signaler avec un
 exemple précis pour que je le corrige.
+
+## Maison "chez la sorcière" + IA villageois dédiée → fait en v0.96
+
+Demandé en un gros batch de consignes (tâche #15 du batch) : une
+nouvelle maison isolée, visible depuis n'importe quel angle de caméra
+sur mobile et desktop, un message ambigu au clic (sorcière OU
+compagne secrète que le seigneur visite "sans l'admettre"), les
+ennemis qui l'évitent toujours à bonne distance, et de temps en temps
+un villageois (rarement deux) qui y va en cachette et en revient.
+Brouillon de Pierre pour le texte : "Ici habite une dame que vous
+connaissez mieux que ce que vous pouvez assumer" — reformulé plus
+court : *"Ici : une dame que le seigneur connaît mieux qu'il ne
+l'avoue."*
+
+**Position** : même méthode que pour la place/les maisons (v0.93) —
+script Node autonome, balayage angulaire à r=480 (proche de
+`SPAWN_R_BASE`, comme la ferme, pour rester "quasiment au bord de
+l'écran" à tout angle de caméra), clearance minimale contre TOUTES
+les contraintes à la fois (les 8 maisons, la grange, l'église,
+la ferme, le ruisseau, les deux routes avec leurs coudes). Résultat :
+`WITCH_ANGLE = -0.4`, `WITCH_R = 478`, largement le point le plus
+isolé testé (~300 unités de marge, loin devant les autres candidats).
+
+**Rendu** : `drawWitchHouse()` — volontairement une maison ordinaire
+(même géométrie `collectBoxRoof` que les autres), aucun indice visuel
+qui la distingue avant d'avoir cliqué dessus. Le message (`#witchMsg`,
+nouvelle classe CSS `.worldMsg` — bulle multi-lignes, non cliquable)
+suit le même ancrage écran que les boutons moulin/église.
+
+**Ouverture/fermeture** : branché dans `handleCanvasTap()` sur le même
+principe que la correction du v0.92 pour moulin/église — un tap sur la
+maison ouvre seulement (jamais de toggle, donc pas de fermeture
+accidentelle en la re-tapant), un tap ailleurs sur le canvas qui n'est
+ni le moulin ni l'église ni la maison ferme ce qui est ouvert.
+
+**Évitement ennemi** : `avoidWitchHouse()`, calqué sur `avoidBushes()`
+déjà existant (repousse circulaire simple), mais toujours actif — pas
+de condition d'achat comme pour les buissons. `WITCH_AVOID_R = 70`.
+
+**Visite villageois** : deux compteurs de vague, tirés aléatoirement
+et rechargés après chaque déclenchement — `nextWitchSoloWave` (10 à 30
+vagues, un·e seul·e villageois·e) et `nextWitchDuoWave` (~45-55
+vagues, deux ensemble — l'idée de Pierre : "un couple qui va chercher
+des informations chez elle"). `witchCheckWave()`, appelée à chaque
+nouvelle vague (normale ET vague anticipée), pioche dans les
+villageois en mode `sheltering` et les passe en `toWitch`. Trois
+nouveaux modes dans `updateVillagers()` : `toWitch` → `atWitch`
+(invisible, caché "à l'intérieur" pendant `WITCH_VISIT_HIDE_TIME =
+18s`, soit un peu moins d'une demi-vague comme demandé) → `fromWitch`
+(retour à sa maison d'origine, puis `sheltering` normal).
+
+**FAQ** : décision de jugement — la règle habituelle (tout commit qui
+touche une mécanique de gameplay documente les vrais chiffres dans
+Astuces) heurtait l'intention narrative, volontairement floue, de
+cette fonctionnalité. Compromis : une phrase ajoutée à la section
+"Le village", sans chiffres (ni rayon d'évitement, ni fréquence des
+visites, ni durée) — juste de quoi confirmer que le comportement vu en
+jeu est voulu, pas un bug, sans percer le mystère : *"Une maison
+isolée, près du bord de la carte, reste toujours à bonne distance des
+ennemis — et de temps en temps, un ou deux villageois y font un
+aller-retour discret. Ce qui s'y passe reste leur affaire."*
+
+**Vérifié en Playwright**, deux passes (la première avait deux pièges
+méthodologiques classiques de cette session, tous deux corrigés) :
+- Tap sur la maison → message visible avec le bon texte bilingue ; tap
+  ailleurs → se referme. Confirmé.
+- Évitement : ennemi à 999 PV (pour survivre au tir le temps du test)
+  spawné à distance 40 de la maison (donc sous `WITCH_AVOID_R=70`) →
+  distance 87.4 après 0.8s. Premier essai faussé (le suivi se faisait
+  par index dans `state.enemies`, décalé par la mort naturelle d'autres
+  ennemis pendant l'attente → un saut de distance de 40 à 587,
+  totalement irréaliste) ; corrigé en taguant l'ennemi de test
+  (`__debugTag`) et en le retrouvant par `.find()` plutôt que par
+  index.
+- Déclenchement de visite : forcer les deux seuils de vague à 1 puis
+  appeler `witchCheckWave()` → 3 villageois (1 solo + 2 duo, les deux
+  seuils tombant en même temps dans ce test) passés en `toWitch`.
+  Premier essai à 0 déclenchement : les seuils sont tirés aléatoirement
+  au chargement (10-30 et 45-55), et forcer `state.wave = 15` ne les
+  dépassait pas forcément ; corrigé avec un hook dédié pour forcer les
+  deux seuils directement.
+- Capture d'écran de la bulle de message (zoomée) : texte correct,
+  bien positionnée au-dessus du bâtiment.
+
+Tous les hooks `__DEBUG_*` ajoutés pour ces tests retirés avant commit
+(`grep -c "__DEBUG_" index.html` revenu à 1). 8 vagues forcées en
+rafale en régression finale, aucune erreur console (le seul 404
+observé est `favicon.ico`, absent du repo depuis toujours — sans
+rapport, non corrigé ici).
+
+D'autres mécaniques pour cette maison pourraient venir plus tard (pas
+précisées par Pierre) — noté pour info, rien à construire maintenant.

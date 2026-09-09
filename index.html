@@ -129,6 +129,27 @@
   }
   .worldBtn[hidden] { display: none; }
   .worldBtn.unaffordable { opacity: 0.45; }
+  /* maison de la sorcière : une bulle de texte, pas un bouton d'achat —
+     même ancrage que .worldBtn (position fixe, ancrée au bâtiment) mais
+     multi-lignes (max-width + pas de nowrap) et non cliquable (se ferme
+     au tap ailleurs, jamais en cliquant dessus) */
+  .worldMsg {
+    position: fixed;
+    transform: translate(-50%, -100%);
+    z-index: 9;
+    background: #3b3222;
+    border: 1px solid rgba(242,234,217,0.4);
+    border-radius: 8px;
+    color: #f2ead9;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 8px 12px;
+    font-family: inherit;
+    max-width: 200px;
+    text-align: left;
+    pointer-events: none;
+  }
+  .worldMsg[hidden] { display: none; }
   /* #priestBtn s'affiche PENDANT que #cosyOverlay est ouvert (z-index 25)
      — sans ce correctif, le canvas cosy (peint dans ce contexte
      d'empilement plus élevé) le recouvrirait entièrement malgré
@@ -541,6 +562,11 @@
      mais repositionné dans le repère du canvas cosy (cosyIso), pas
      project()/rot du monde extérieur (voir updatePriestBtn). -->
 <button id="priestBtn" class="worldBtn" hidden></button>
+<!-- maison de la sorcière (item 5, consigne du 2026-09-09) : au tap, un
+     message plutôt qu'un achat — pas un bouton, une bulle de texte
+     (worldMsg, pas worldBtn) ; même position ancrée au bâtiment, même
+     "tap ailleurs pour fermer" que moulin/église (voir handleCanvasTap). -->
+<div id="witchMsg" class="worldMsg" hidden></div>
 
 <div id="topbar">
   <button id="menuBtn" aria-label="Menu">☰</button>
@@ -548,10 +574,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.95</button>
+  <button id="versionBtn">v0.96</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.96</b> — nouvelle maison isolée près du bord de l'écran (visible sous tous les angles) ; un clic montre un message énigmatique et se referme comme le moulin/l'église ; les ennemis l'évitent toujours à bonne distance, et de temps en temps un·e villageois·e y va discrètement (rarement à deux) avant de revenir au village</div>
   <div><b>v0.95</b> — corrige les croisements de chemins : là où une bretelle recoupait une route, le petit bout pris dans le croisement disparaît maintenant au lieu de se superposer</div>
   <div><b>v0.94</b> — ajoute le zoom à la molette/au pincement trackpad (n'existait qu'au pincement tactile)</div>
   <div><b>v0.93</b> — la place du village est maintenant vraiment entre l'église et le donjon (avant, elle était plus loin du donjon que l'église elle-même) ; réaudit complet des maisons contre le nouveau tracé des chemins et la nouvelle place — 7 sur 8 ont dû être repositionnées</div>
@@ -750,6 +777,7 @@
       <p>Les maisons, la grange et l'église peuvent cacher un ennemi qui passe à moins de 140 unités (20% de chance par seconde) — invisible et intouchable jusqu'à ce que le seigneur sorte l'en déloger.</p>
       <p>De temps en temps (toutes les 50 à 80 secondes), un bateau débarque un petit groupe d'ennemis directement sur la berge du ruisseau — un évènement à part, indépendant des vagues normales.</p>
       <p>Les paysans se dispersent dès la première attaque : certains se cachent à l'église, d'autres au château, quelques-uns partent même se battre.</p>
+      <p>Une maison isolée, près du bord de la carte, reste toujours à bonne distance des ennemis — et de temps en temps, un ou deux villageois y font un aller-retour discret. Ce qui s'y passe reste leur affaire.</p>
 
       <h3>La princesse</h3>
       <p>Un appui long sur le bouton Descendre/Remonter, une fois qu'elle est en bas, déclenche le câlin : 3 secondes pour soigner le seigneur ET la princesse entièrement, même depuis 0 PV.</p>
@@ -813,6 +841,7 @@
       <p>Houses, the barn, and the church can hide an enemy passing within 140 units (20% chance per second) — invisible and untouchable until the lord sallies out to flush it back into the open.</p>
       <p>Every 50 to 80 seconds or so, a boat lands a small group of enemies straight onto the stream bank — a separate event, independent of normal waves.</p>
       <p>Villagers scatter at the first attack: some hide in the church, others in the castle, a few even go fight.</p>
+      <p>One isolated house near the edge of the map always keeps enemies at a safe distance — and every so often, one or two villagers slip over there and back. Whatever happens there is their business.</p>
 
       <h3>The princess</h3>
       <p>A long press on the Down/Up button, once she's down, triggers a hug: 3 seconds to fully heal both the lord and the princess, even from 0 HP.</p>
@@ -879,6 +908,7 @@
       eglise_btn_start: 'Bénir le terrain', eglise_btn_upgrade: 'Agrandir la zone sacrée',
       eglise_max: 'Zone sacrée au maximum',
       priest_pray: 'Prier',
+      witch_msg: "Ici : une dame que le seigneur connaît mieux qu'il ne l'avoue.",
       faq_btn: 'Astuces',
       restart_full: 'Recommencer depuis le début',
       difficulty_prefix: 'Difficulté : ',
@@ -914,6 +944,7 @@
       eglise_btn_start: 'Bless the ground', eglise_btn_upgrade: 'Expand the sacred ground',
       eglise_max: 'Sacred ground maxed out',
       priest_pray: 'Pray',
+      witch_msg: "Here: a lady the lord knows better than he lets on.",
       faq_btn: 'Tips',
       restart_full: 'Restart from the beginning',
       difficulty_prefix: 'Difficulty: ',
@@ -2097,10 +2128,29 @@
     { type: 'ferme_grange', x: FARM_X, z: FARM_Z, yaw: 1.1 },
     { type: 'ferme_maison', x: FARM_X + 75, z: FARM_Z - 45, yaw: 0.6 }
   ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
+
+  // la maison "de la sorcière" (item 5, consigne du 2026-09-09) : "une
+  // maison beaucoup plus loin, quasiment à la limite de l'écran... au
+  // clic, un message... ambiguïté volontaire, sorcière ou dame de
+  // compagnie que le seigneur visite sans l'assumer". Isolée à dessein
+  // — ni près du village, ni près de la ferme — à un angle nettement
+  // séparé des deux (0.55 pour la ferme, ~-1.55/coeur du village),
+  // vérifié numériquement (script à part, même méthode que les autres
+  // bâtiments) : marge >300 unités contre tout à angle=-0.4, largement
+  // le point le plus isolé trouvé.
+  const WITCH_ANGLE = -0.4, WITCH_R = 478;
+  const WITCH_X = WITCH_R * Math.cos(WITCH_ANGLE), WITCH_Z = WITCH_R * Math.sin(WITCH_ANGLE);
+  const WITCH_YAW = 2.4;
+  // rayon "personne ne s'approche" — les ennemis en approche sont
+  // repoussés dès qu'ils entrent dedans (voir avoidWitchHouse plus bas,
+  // même idiome qu'avoidBushes)
+  const WITCH_AVOID_R = 70;
   // combiné une seule fois ici pour que le tri far/near (voir plus bas
   // dans render()) traite le cœur de village ET la ferme ensemble, sans
   // dupliquer le filtre/la boucle de dessin pour chacun
-  const ALL_VILLAGE_EXTRAS = [...VILLAGE_EXTRAS, ...FARM_BUILDINGS];
+  const ALL_VILLAGE_EXTRAS = [...VILLAGE_EXTRAS, ...FARM_BUILDINGS,
+    { type: 'sorciere', x: WITCH_X, z: WITCH_Z, yaw: WITCH_YAW, angle: WITCH_ANGLE, r: WITCH_R }
+  ];
   const EGLISE_EXTRA = VILLAGE_EXTRAS.find(b => b.type === 'eglise');
   const FOUNTAIN_EXTRA = VILLAGE_EXTRAS.find(b => b.type === 'fontaine'); // fontaine-soin, voir FOUNTAIN_HEAL_*
 
@@ -2204,6 +2254,37 @@
       v.timer = 0;
     }
   }
+  // maison de la sorcière (item 5) : "de temps en temps, un villageois
+  // seul traverse en courant... jamais à deux à cette fréquence ; très
+  // rarement, deux y vont ensemble". Puise dans le pool 'sheltering'
+  // (déjà à l'abri, donc en pleine vague — cohérent avec "malgré les
+  // risques de se faire tuer") plutôt que 'peaceful' (avant panique, pas
+  // de risque à décrire).
+  const WITCH_VISIT_HIDE_TIME = 18; // "moins d'une demi-vague" — au jugé, court par rapport à une vague normale
+  function witchPickSheltering(n) {
+    const pool = state.villagers.filter(v => v.mode === 'sheltering');
+    if (pool.length < n) return null;
+    // mélange léger (n petit, 1 ou 2 — pas la peine d'un vrai shuffle)
+    const picked = [];
+    while (picked.length < n) {
+      const v = pool[Math.floor(Math.random() * pool.length)];
+      if (!picked.includes(v)) picked.push(v);
+    }
+    return picked;
+  }
+  function witchCheckWave() {
+    if (!state.villagePanic) return; // pas de visite avant la toute première attaque
+    if (state.wave >= state.nextWitchSoloWave) {
+      const picked = witchPickSheltering(1);
+      if (picked) { picked[0].mode = 'toWitch'; picked[0].timer = 0; }
+      state.nextWitchSoloWave = state.wave + 10 + Math.floor(Math.random() * 21);
+    }
+    if (state.wave >= state.nextWitchDuoWave) {
+      const picked = witchPickSheltering(2);
+      if (picked) for (const v of picked) { v.mode = 'toWitch'; v.timer = 0; }
+      state.nextWitchDuoWave = state.wave + 45 + Math.floor(Math.random() * 11);
+    }
+  }
   function villageTriggerPanic() {
     state.villagePanic = true;
     // simplification assumée (budget de session) : pas d'animation de fuite
@@ -2237,6 +2318,17 @@
       } else if (v.mode === 'fleeing_castle') {
         const d = moveVillagerToward(v, doorX, doorZ, dt);
         if (d < 16) { state.villagersHiddenCastle++; state.villagers.splice(i, 1); }
+      } else if (v.mode === 'toWitch') {
+        // "malgré les risques" — un peu pressé, pas la démarche tranquille habituelle
+        const d = moveVillagerToward(v, WITCH_X, WITCH_Z, dt, VILLAGER_SPEED * 1.4);
+        if (d < 14) { v.mode = 'atWitch'; v.timer = WITCH_VISIT_HIDE_TIME; }
+      } else if (v.mode === 'atWitch') {
+        v.timer -= dt; // invisible tant que dans ce mode, voir drawVillagers
+        if (v.timer <= 0) v.mode = 'fromWitch';
+      } else if (v.mode === 'fromWitch') {
+        const home = HOUSES[v.houseIdx];
+        const d = moveVillagerToward(v, home.x, home.z, dt, VILLAGER_SPEED * 1.4);
+        if (d < 6) v.mode = 'sheltering'; // de retour, planqué comme les autres — le siège continue
       }
       // 'sheltering' : à l'abri, rien à mettre à jour tant qu'il n'est pas mobilisé
     }
@@ -2574,6 +2666,10 @@
     villagePanic: false,       // devient vrai à la toute première apparition d'un ennemi
     villagersHiddenChurch: 0,  // comptage seulement — ils disparaissent de l'écran en entrant
     villagersHiddenCastle: 0,  // idem, mais repris dans la vue cosy (même nombre près du feu)
+    // maison de la sorcière (item 5) : prochaine vague où un visiteur
+    // (solo/duo) est déclenché — voir witchCheckWave()
+    nextWitchSoloWave: 10 + Math.floor(Math.random() * 21), // 10-30
+    nextWitchDuoWave: 45 + Math.floor(Math.random() * 11),  // ~50, avec un peu de variance
     // économie du moulin (demandé en session : toucher le moulin fait
     // apparaître un bouton d'achat par palier, revenu passif ensuite) —
     // niveau 0 = pas encore acheté, "juste de la farine" (narratif)
@@ -2845,6 +2941,7 @@
   function startWave() {
     state.waveState = 'active';
     if (state.villagePanic) villageDispatchWave(); // "vagues suivantes" — un nouveau lot de paysans à l'abri est mobilisé
+    witchCheckWave();
     state.toSpawn = waveSpawnCount(state.wave);
     // a quick "FIGHT!" banner up top, then the first enemy arrives just as
     // it's fading — instead of enemies spawning the instant the wave starts
@@ -2911,6 +3008,7 @@
     state.waveState = 'active';
     updateNextWaveBonus();
     if (state.villagePanic) villageDispatchWave(); // même mobilisation que startWave() quand la vague est appelée en avance
+    witchCheckWave();
   }
 
   function fire(from, target, dmg) {
@@ -3222,6 +3320,28 @@
     return false;
   }
 
+  // "tous les ennemis évitent de s'approcher de cette maison à bonne
+  // distance" (item 5, maison de la sorcière) — même idiome qu'avoidBushes
+  // juste en dessous : un cercle infranchissable qui repousse, sauf que
+  // celui-ci s'applique à TOUS les ennemis en approche (pas seulement
+  // ceux qui passent par le jardin), en permanence (pas conditionné à un
+  // achat). Un ennemi qui n'a de toute façon aucune raison de passer par
+  // là ne le remarque jamais (WITCH_R=478 est loin de la trajectoire
+  // directe donjon<->bord d'écran pour la plupart des angles de spawn) —
+  // seuls ceux dont la route les amène près de WITCH_ANGLE en sont
+  // déviés.
+  function avoidWitchHouse(e) {
+    const x = e.r * Math.cos(e.angle), z = e.r * Math.sin(e.angle);
+    const dx = x - WITCH_X, dz = z - WITCH_Z;
+    const d = Math.hypot(dx, dz);
+    if (d < WITCH_AVOID_R && d > 0.001) {
+      const push = WITCH_AVOID_R - d;
+      const nx = x + (dx / d) * push, nz = z + (dz / d) * push;
+      e.r = Math.hypot(nx, nz);
+      e.angle = Math.atan2(nz, nx);
+    }
+  }
+
   function avoidBushes(e) {
     if (state.gardenLevel <= 0) return; // nothing planted yet, nothing to dodge
     const flooded = Math.min(BUSHES.length, state.moatLevel * FLOODED_PER_TIER);
@@ -3516,6 +3636,15 @@
   const moulinBtn = document.getElementById('moulinBtn');
   let moulinBtnVisible = false;
   const WORLD_TAP_RADIUS = 42; // rayon de détection du tap sur un bâtiment, en pixels écran
+  // maison de la sorcière : même ancrage/tap que moulin/église, mais une
+  // bulle de texte (voir .worldMsg) plutôt qu'un bouton d'achat — pas de
+  // logique de prix/affordabilité, juste montrer/cacher le message
+  const witchMsg = document.getElementById('witchMsg');
+  let witchMsgVisible = false;
+  function updateWitchMsg() {
+    witchMsg.hidden = !witchMsgVisible;
+    if (witchMsgVisible) witchMsg.textContent = t('witch_msg');
+  }
   function handleCanvasTap(clientX, clientY) {
     const rot = state.theta - Math.PI / 4;
     const tapR = WORLD_TAP_RADIUS * camZoom; // le bâtiment paraît plus grand à l'écran une fois zoomé
@@ -3534,9 +3663,17 @@
         return;
       }
     }
-    // ni le moulin ni l'église : un tap "ailleurs" referme ce qui était ouvert
+    const wPos = toScreen(project(WITCH_X, 16, WITCH_Z, rot));
+    if (Math.hypot(clientX - wPos.x, clientY - wPos.y) < tapR) {
+      witchMsgVisible = true;
+      updateWitchMsg();
+      return;
+    }
+    // ni le moulin, ni l'église, ni la maison de la sorcière : un tap
+    // "ailleurs" referme ce qui était ouvert
     if (moulinBtnVisible) { moulinBtnVisible = false; updateMoulinBtn(); }
     if (egliseBtnVisible) { egliseBtnVisible = false; updateEgliseBtn(); }
+    if (witchMsgVisible) { witchMsgVisible = false; updateWitchMsg(); }
   }
   function updateMoulinBtn() {
     if (!moulinBtnVisible) { moulinBtn.hidden = true; return; }
@@ -4790,6 +4927,7 @@
         if (!onScreen0) speedMul *= OFFSCREEN_APPROACH_MUL;
         e.r = Math.min(SPAWN_R, e.r - e.speed * speedMul * dt);
         avoidBushes(e);
+        avoidWitchHouse(e);
         avoidStream(e, dt);
         updateEgliseZoneDamage(e);
         if (e.dead) continue;
@@ -5818,11 +5956,20 @@
     flushBoxRoofList(list);
   }
 
+  // maison de la sorcière (item 5) : dessinée comme une maison tout à
+  // fait ordinaire, EXPRÈS — "ambiguïté volontaire", rien ne doit la
+  // distinguer visuellement de l'extérieur avant qu'on y touche
+  function drawWitchHouse(b, rot) {
+    const list = [];
+    collectBoxRoof(list, b.x, b.z, 16, 16, 14, 11, rot, [130, 100, 70], '#5a3b22', b.yaw || 0);
+    flushBoxRoofList(list);
+  }
   function drawVillageExtra(b, rot) {
     if (b.type === 'grange' || b.type === 'grange_lointaine') drawGrange(b, rot);
     else if (b.type === 'eglise') drawEglise(b, rot);
     else if (b.type === 'ferme_grange') drawFermeGrange(b, rot);
     else if (b.type === 'ferme_maison') drawFermeMaison(b, rot);
+    else if (b.type === 'sorciere') drawWitchHouse(b, rot);
     else drawFontaine(b, rot);
   }
 
@@ -5929,6 +6076,7 @@
   }
   function drawVillagers(rot, wantFar) {
     for (const v of state.villagers) {
+      if (v.mode === 'atWitch') continue; // "disparaissent de l'écran en entrant" — dedans, invisible
       if (pointFar(v.x, v.z, rot) !== wantFar) continue;
       drawVillager(v, rot);
     }
@@ -7044,6 +7192,11 @@
       const pos = toScreen(project(EGLISE_EXTRA.x, 92, EGLISE_EXTRA.z, rot)); // au-dessus du clocher
       egliseBtn.style.left = pos.x + 'px';
       egliseBtn.style.top = pos.y + 'px';
+    }
+    if (witchMsgVisible) {
+      const pos = toScreen(project(WITCH_X, 30, WITCH_Z, rot));
+      witchMsg.style.left = pos.x + 'px';
+      witchMsg.style.top = pos.y + 'px';
     }
 
     // zoom pincé : tout ce qui suit (le monde du jeu) est dessiné dans ce
