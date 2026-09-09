@@ -3314,3 +3314,19 @@ console.
 Le lot 1 (refonte des chemins, consigne du 2026-09-09) est maintenant
 complet : largeur réelle partout, jonctions propres, tracé brisé en
 ville/courbe au loin, place recentrée, maisons réauditées.
+
+## Zoom à la molette/trackpad ("c'est où le zoom ?") → fait en v0.94
+
+Signalé en session : le zoom (`camZoom`/`camPanX`/`camPanY`) n'existait
+QUE via le pincement à deux doigts (tactile) — rien sur ordinateur
+(souris, trackpad). Nouveau `canvas.addEventListener('wheel', ...)` :
+même ancrage que le pincement (le point sous le curseur reste fixe à
+l'écran pendant le zoom, juste piloté par `deltaY` au lieu de la
+distance entre deux doigts) — marche à la molette ET au pincement
+trackpad (Firefox/Chrome envoient les deux comme des événements
+`wheel`). `preventDefault()` sur l'event pour que le geste ne tente
+pas de faire défiler/zoomer la PAGE à la place du jeu.
+
+Vérifié en Playwright : `mouse.wheel()` centré sur le donjon → zoom
+avant net (capture à l'appui), puis dézoome jusqu'au niveau de base
+(clampé correctement à `CAM_ZOOM_MIN=1`). Aucune erreur console.
