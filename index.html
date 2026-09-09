@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.72</button>
+  <button id="versionBtn">v0.73</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.73</b> — un vrai échiquier 8x8 dans la scène cosy, à la table où le seigneur et la princesse se retrouvent déjà près du feu</div>
   <div><b>v0.72</b> — un petit cours d'eau secondaire (3x moins large) part du ruisseau et se déverse dans les douves dès leur construction, avec des particules qui s'éteignent avant d'atteindre l'eau stagnante</div>
   <div><b>v0.71</b> — le seigneur est ralenti dans les douves en sortie (30%, seulement 10% avec le cheval), comme confirmé en session</div>
   <div><b>v0.70</b> — zone sacrée de l'église : le toucher fait apparaître un bouton d'achat par palier qui agrandit une ellipse au sol, no-man's-land pour les ennemis (moitié de vie perdue à l'entrée, l'autre moitié à la ré-entrée)</div>
@@ -3162,6 +3163,47 @@
     cosyCtx.shadowBlur = 0;
   }
 
+  // l'échiquier (demandé en session : "un vrai carré de huit cases par
+  // huit cases... des cases pleines, des cases vides, pour qu'on voit
+  // qui joue aux échecs") — remplace l'ancienne table plate (un simple
+  // rectangle gris) par un vrai damier 8x8 projeté en isométrique, même
+  // recette que les dalles du sol (cosyIso + cosyQuad par case) plutôt
+  // qu'une texture plaquée à plat. Le seigneur et la princesse sont déjà
+  // positionnés juste à côté (voir renderCosyScene) : ils "jouent"
+  // ensemble à cette même table.
+  const CHESS_CX = 5.9, CHESS_CZ = 4.3, CHESS_Y = 0.16;
+  const CHESS_HALF_W = 0.42, CHESS_HALF_D = 0.3;
+  function drawChessBoard() {
+    const m = 0.05; // bordure de table autour du damier
+    const border = [
+      cosyIso(CHESS_CX - CHESS_HALF_W - m, CHESS_Y - 0.03, CHESS_CZ - CHESS_HALF_D - m),
+      cosyIso(CHESS_CX + CHESS_HALF_W + m, CHESS_Y - 0.03, CHESS_CZ - CHESS_HALF_D - m),
+      cosyIso(CHESS_CX + CHESS_HALF_W + m, CHESS_Y - 0.03, CHESS_CZ + CHESS_HALF_D + m),
+      cosyIso(CHESS_CX - CHESS_HALF_W - m, CHESS_Y - 0.03, CHESS_CZ + CHESS_HALF_D + m)
+    ];
+    cosyQuad(border, '#4a3018');
+    for (let cz = 0; cz < 8; cz++) {
+      for (let cx = 0; cx < 8; cx++) {
+        const x0 = CHESS_CX - CHESS_HALF_W + (cx / 8) * CHESS_HALF_W * 2;
+        const x1 = CHESS_CX - CHESS_HALF_W + ((cx + 1) / 8) * CHESS_HALF_W * 2;
+        const z0 = CHESS_CZ - CHESS_HALF_D + (cz / 8) * CHESS_HALF_D * 2;
+        const z1 = CHESS_CZ - CHESS_HALF_D + ((cz + 1) / 8) * CHESS_HALF_D * 2;
+        const p = [cosyIso(x0, CHESS_Y, z0), cosyIso(x1, CHESS_Y, z0), cosyIso(x1, CHESS_Y, z1), cosyIso(x0, CHESS_Y, z1)];
+        cosyQuad(p, (cx + cz) % 2 === 0 ? '#3f2b1a' : '#d9c69c');
+        // pièces suggérées : rangées de départ occupées, milieu vide —
+        // "des cases pleines... des cases vides", pas une vraie partie
+        // simulée coup par coup
+        if (cz <= 1 || cz >= 6) {
+          const pos = cosyIso((x0 + x1) / 2, CHESS_Y + 0.035, (z0 + z1) / 2);
+          cosyCtx.fillStyle = cz <= 1 ? '#241a10' : '#f0e6cc';
+          cosyCtx.beginPath();
+          cosyCtx.arc(pos.x, pos.y, 2.3, 0, Math.PI * 2);
+          cosyCtx.fill();
+        }
+      }
+    }
+  }
+
   // le chat : erre sur le sol de la pièce, s'arrête de temps en temps et
   // ronronne (demandé en session) — même vocabulaire d'IA simple que la
   // patrouille de créneaux du seigneur (cible aléatoire, ease, pause)
@@ -3282,9 +3324,7 @@
     cosyCtx.fillStyle = flame;
     cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x, fireCenter.y, 11 * flicker, 0, Math.PI * 2); cosyCtx.fill();
 
-    const tableP = cosyIso(5.9, 0.15, 4.3);
-    cosyCtx.fillStyle = '#6b5236';
-    cosyCtx.fillRect(tableP.x - 20, tableP.y - 6, 40, 12);
+    drawChessBoard();
     cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
     if (!state.princessDead) cosyPerson(6.4, 4.1, 15, '#f3d6e8', '#a4568c'); // la princesse, si vivante
 

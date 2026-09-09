@@ -1522,10 +1522,6 @@ correctif, aucune erreur console.
   l'eau, qui tourne dans le bon sens par rapport au courant (vrai
   mécanisme de moulin à eau à rechercher, pas inventé au hasard). Pas
   commencé.
-- **Échiquier 8x8 dans la scène cosy** — le roi et la reine jouent aux
-  échecs : il faut un vrai damier 8x8 avec cases pleines/vides en
-  alternance, pas juste suggéré. Pas commencé (la scène cosy actuelle
-  n'a pas de table de jeu détaillée à ce niveau).
 - **Zoom pincé (pinch-to-zoom) tactile** — mécanique de caméra
   entièrement nouvelle, décrite en détail par Pierre (zoom classique à
   deux doigts, ancré sur le point pincé, reste zoomé au relâchement, la
@@ -1964,3 +1960,24 @@ affluent visible partant du ruisseau principal près du pont, courbant
 vers l'anneau des douves, particules visibles le long du trajet.
 Aucune erreur console sur plusieurs vagues jouées avec les douves
 actives.
+
+## Échiquier 8x8 dans la scène cosy (6e et dernier des 6 gros chantiers) → fait en v0.73
+
+"Un vrai carré de huit cases par huit cases... des cases pleines, des
+cases vides, pour qu'on voit qui joue aux échecs." Remplace l'ancienne
+table (un simple rectangle gris plat, `fillRect`) par un vrai damier
+8x8 projeté en isométrique (`drawChessBoard`, même recette que les
+dalles du sol de la pièce : `cosyIso`+`cosyQuad` par case plutôt qu'une
+texture plaquée à plat). Le seigneur et la princesse étaient déjà
+positionnés juste à côté de cette table (voir `renderCosyScene`) : ils
+"jouent" naturellement ensemble à la même table, sans avoir à les
+redéplacer.
+
+Cases alternées classiquement (`(cx+cz)%2`), plus un pion/silhouette
+sur les rangées de départ (0-1 et 6-7, milieu vide) pour "qu'on voit
+qui joue" sans simuler une vraie partie coup par coup — au-delà du
+scope demandé.
+
+Vérifié en Playwright (capture zoomée sur la vue cosy) : damier 8x8
+bien visible entre les deux figures, alternance claire des cases,
+aucune erreur console.
