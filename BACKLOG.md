@@ -757,14 +757,13 @@ reste à revoir mécanique par mécanique, *pas fait*.
    pour un bénéfice quasi nul. La future section "Astuces" (point 3
    ci-dessous, pas encore fait) devra en revanche être bilingue dès sa
    création — c'est elle qui compte comme interface de jeu.
-3. **Section explicative (Astuces/FAQ/Conseils)** — *pas fait*. Explique
-   sans mystère TOUTES les mécaniques, avec exemples chiffrés (forces,
-   gains, seuils, timings). Règle à respecter dès maintenant, notée ici
-   formellement : **tout commit qui touche une mécanique de gameplay met
-   à jour la section explicative correspondante dans le même commit.**
-   Idéalement, plus tard, un test automatique vérifiant que chaque
-   constante de gameplay est référencée dans les textes — pas fait non
-   plus.
+3. **Section explicative (Astuces/FAQ/Conseils)** → fait en v0.84 (voir
+   plus bas pour le détail complet). Règle à respecter dès maintenant,
+   notée ici formellement : **tout commit qui touche une mécanique de
+   gameplay met à jour la section explicative correspondante dans le
+   même commit.** Idéalement, plus tard, un test automatique vérifiant
+   que chaque constante de gameplay est référencée dans les textes —
+   pas fait non plus.
 4. **Lisibilité des mécaniques** — fait en v0.58/v0.59.
    - **Nombre flottant au-dessus de la tête pour tout gain d'or** → fait.
      `spawnFloatingGold(x, y, z, amount, highlight)` + `state.floatingTexts`
@@ -2649,3 +2648,42 @@ prière → bouton désactivé avec bonne position/texte → clic → PV/or mis
 disparition à la fermeture de la scène cosy). Aucune erreur console
 sur l'ensemble des tests, ni sur 8 vagues forcées en rafale en jeu
 normal. Tous les hooks de debug temporaires retirés avant ce commit.
+
+## Section Astuces (Partie 2.3, consigne du 2026-09-08) → fait en v0.84
+
+"Explique sans mystère TOUTES les mécaniques, avec exemples chiffrés."
+Nouveau bouton "Astuces" dans le menu, nouvel overlay `#faqOverlay` en
+plein écran.
+
+**Choix d'architecture** : deux blocs de texte complets (`#faqFr`/
+`#faqEn`) basculés par simple `hidden` selon `lang`, plutôt que des
+dizaines de clés `I18N` pour chaque phrase — le reste de l'UI (boutons
+courts) garde son système de clés existant, la FAQ (paragraphes
+entiers) est plus simple à écrire/relire d'un bloc. `updateFaqLang()`
+ajouté à `refreshDynamicLangUI()` pour basculer au changement de
+langue, sans casser le mécanisme existant.
+
+**Contenu** : chiffres tirés directement des constantes du code au
+moment de l'écriture (pas devinés) — vagues/difficulté, seigneur
+(multiplicateurs de visée, cheval), château/tourelles, douves, jardin,
+moulin, zone d'église + prêtre, fontaine (joueur et ennemis), les 5
+tiers d'engins de siège avec équipage vivant, cachettes du village +
+bateau, princesse/câlin. Règle notée dans ce fichier depuis un moment
+(voir plus haut) formalisée : tout commit touchant une mécanique doit
+mettre à jour cette section dans le même commit — à partir de
+maintenant, honnêtement pas garanti rétroactivement pour les tout
+premiers commits de la session, mais applicable désormais.
+
+**CSS écrite dès le départ avec le correctif de scroll de v0.80**
+(`overflow-y:auto`, `touch-action:pan-y`) plutôt que d'attendre de
+retrouver le même bug — la FAQ a largement plus de contenu que le
+menu qui avait révélé le problème, quasi certaine de déborder sur un
+écran court.
+
+Vérifié en Playwright : ouverture depuis le menu (qui se ferme),
+bloc FR affiché en locale fr-FR, bloc EN en locale en-US, bouton
+Astuces/Fermer traduits (`t('faq_btn')`), défilement jusqu'en bas
+avec bouton Fermer atteignable ET sur un viewport court (360×560,
+même test que le bug v0.80 — pas re-tombé dedans), fermeture
+fonctionnelle. Aucune erreur console. 8 vagues forcées en rafale en
+jeu normal sans erreur non plus (régression générale).

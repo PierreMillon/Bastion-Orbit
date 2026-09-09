@@ -236,10 +236,34 @@
     text-decoration: none;
   }
 
-  #menu button.ghost {
+  #menu button.ghost, #faqOverlay button.ghost {
     background: none;
     border: 1px solid rgba(242,234,217,0.4);
   }
+
+  /* section Astuces (Partie 2.3 de la grosse consigne du 2026-09-08) —
+     même recette que #menu (fond sombre, défilable dès le départ cette
+     fois, pas besoin d'attendre un bug pour l'apprendre) mais du texte
+     aligné à gauche plutôt que des boutons centrés : bien plus de contenu
+     à lire, pas juste des actions à toucher. */
+  #faqOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20,16,10,0.94);
+    color: #f2ead9;
+    z-index: 21;
+    padding: 20px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+  #faqOverlay[hidden] { display: none; }
+  #faqInner { max-width: 640px; margin: 0 auto; }
+  #faqInner h2 { font-size: 20px; margin: 0 0 4px; }
+  #faqInner .faqSub { opacity: 0.7; font-size: 12px; margin: 0 0 20px; }
+  #faqInner h3 { font-size: 14px; color: #e8b96a; margin: 22px 0 6px; }
+  #faqInner p { font-size: 13px; line-height: 1.5; margin: 0 0 8px; opacity: 0.92; }
+  #faqInner .faqClose { display: block; margin: 24px auto 8px; }
 
   #fpsLine {
     font-size: 12px;
@@ -516,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.83</button>
+  <button id="versionBtn">v0.84</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.84</b> — nouvelle section "Astuces" dans le menu : explique toutes les mécaniques du jeu avec les vrais chiffres (dégâts, coûts, seuils, timings), en français et en anglais</div>
   <div><b>v0.83</b> — les ennemis aussi peuvent boire à la fontaine pour se soigner (rare, un détour risqué) : nouveau 5e palier de la zone sacrée de l'église qui s'étend jusqu'à la fontaine pour vraiment menacer ce détour ; le premier palier de la zone se débloque maintenant en priant le prêtre dans le donjon, plutôt qu'en touchant l'église dehors</div>
   <div><b>v0.82</b> — fontaine-soin : affaibli en sortie, le seigneur se précipite se soigner à la fontaine du village plutôt que de continuer à se battre — un vrai choix tactique, s'éloigner du combat pour survivre</div>
   <div><b>v0.81</b> — la grange et l'église du village sont maintenant des cachettes pour les ennemis, comme les maisons</div>
@@ -622,6 +647,7 @@
   <button id="snowBtn">Neige : ON</button>
   <button id="cameraBtn">Caméra : Axonométrique</button>
   <button id="langBtn">Langue : Français</button>
+  <button id="faqBtn">Astuces</button>
   <div class="volumeRow">
     <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
     <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
@@ -634,6 +660,139 @@
   </div>
   <div id="fpsLine"><span id="fpsLabel">FPS : </span><span id="fpsNum">--</span></div>
   <button class="ghost" id="closeMenu">Fermer</button>
+</div>
+
+<!-- Astuces (Partie 2.3 de la grosse consigne du 2026-09-08) : "explique
+     sans mystère TOUTES les mécaniques, avec exemples chiffrés". Deux
+     blocs complets (fr/en) plutôt que des dizaines de clés I18N pour
+     chaque phrase — plus simple à écrire/relire d'un bloc, basculés par
+     lang() comme le reste de l'UI dynamique. Chiffres tirés directement
+     des constantes du code au moment de l'écriture (v0.84) — à tenir à
+     jour si une mécanique change, comme demandé formellement dans
+     BACKLOG.md ("tout commit qui touche une mécanique de gameplay met à
+     jour la section explicative correspondante"). -->
+<div id="faqOverlay" hidden>
+  <div id="faqInner">
+    <div id="faqFr">
+      <h2>Astuces</h2>
+      <p class="faqSub">Comment tout marche, sans mystère — avec les vrais chiffres.</p>
+
+      <h3>Vagues et difficulté</h3>
+      <p>Les PV d'un ennemi = 2 + (numéro de vague ÷ un diviseur qui dépend de la difficulté) arrondi vers le bas. Facile : diviseur 6.4. Normal : 4.5. Difficile : 3.2. Très difficile : 2.9 — plus il est petit, plus les PV montent vite.</p>
+      <p>Une vague envoie 3 + (vague × 2) ennemis — sauf une vague sur cinq, une vague de répit à effectif réduit de 30%.</p>
+      <p>Un ennemi marche à 24 + (vague × 1.5) unités/seconde une fois visible à l'écran (plus vite, hors champ, pour ne pas trop faire attendre).</p>
+
+      <h3>Le seigneur</h3>
+      <p>Sur les remparts (pas en sortie), viser précisément multiplie les dégâts : ×2 dans l'axe serré (moins de 15°), ×1.5 dans l'axe large (moins de 40°), ×1 hors axe — puis ×2 supplémentaire, toujours depuis les remparts.</p>
+      <p>En sortie, chaque coup (toutes les 0.4s) inflige 4 dégâts, multipliés par le cheval s'il est acheté.</p>
+      <p>Le cheval coûte 40 or (×1.35 par niveau) et multiplie les dégâts de sortie : niveau 1 = ×2, niveau 2 = ×3, etc.</p>
+
+      <h3>Le château</h3>
+      <p>Hauteur maximum 208, minimum 16 — il ne tombe jamais complètement, mais reste très vulnérable sous ce seuil.</p>
+      <p>Réparer (bouton tenu) rend 8 de hauteur toutes les 0.5s.</p>
+      <p>Une tourelle coûte 5 or, a 6 PV, se soigne à 4 PV/s pendant qu'on la répare.</p>
+
+      <h3>Les douves</h3>
+      <p>4 paliers : 20 or (rayon 87), 50 or (122), 200 or (148), 500 or (178).</p>
+      <p>Ralentissent tout le monde dans l'eau, sans jamais faire de dégâts — le seigneur aussi en sortie (30% plus lent, seulement 10% avec le cheval).</p>
+      <p>Un ennemi bâtisseur peut y poser un pont (2 maximum en même temps, 2.5s à construire, 20 PV) pour que les autres passent au sec.</p>
+
+      <h3>Le jardin</h3>
+      <p>15 or de départ, ×1.35 de coût ET de revenu à chaque niveau, versé toutes les 5s — pas de palier maximum.</p>
+      <p>Revenu ×1.5 tant que la princesse est descendue et à l'aise dans le jardin.</p>
+
+      <h3>Le moulin</h3>
+      <p>30 or de départ, ×1.35 de coût et de revenu par niveau, versé toutes les 5s, 6 paliers au maximum.</p>
+
+      <h3>La zone sacrée de l'église</h3>
+      <p>Le premier palier (25 or) se débloque en allant prier le prêtre dans le donjon (bouton 🔥, en bas à droite) — pas en touchant l'église elle-même.</p>
+      <p>Les paliers suivants (55 / 100 / 180 / 320 or) s'achètent ensuite dehors, en touchant l'église.</p>
+      <p>Un ennemi qui entre dans la zone perd la moitié de sa vie maximum ; s'il en ressort puis y revient, il perd l'autre moitié — deux passages suffisent toujours à le tuer, jamais plus.</p>
+      <p>Au 5e palier, la zone s'étend jusqu'à la fontaine du village — de quoi menacer les ennemis qui viendraient s'y soigner (voir plus bas).</p>
+
+      <h3>La fontaine</h3>
+      <p>Le seigneur, en sortie, sous 35% de ses PV, se précipite s'y soigner en priorité — même avant un combat en cours. 4 secondes pour un plein depuis 0 PV.</p>
+      <p>Les ennemis en profitent aussi, sous 40% de leurs PV : environ 1 sur 5 tente le détour (pas tous), 5 secondes pour se soigner — mais reste exposé au tir et à la zone de l'église tout du long du trajet.</p>
+
+      <h3>Les engins de siège</h3>
+      <p>Se forment quand plusieurs ennemis stagnent au même endroit, au pied du mur (2 minimum). Plus ils sont nombreux, plus l'engin qui en sort est puissant :</p>
+      <p>2 : <b>bouclier</b> — encaisse, très résistant au tir à distance (ne prend que 20% des dégâts), n'attaque jamais.<br>
+      3 : <b>arbalète</b> — 5 dégâts au mur toutes les 1.6s.<br>
+      4 : <b>trébuchet</b> — se fabrique loin du donjon, tire un projectile visible, 10 dégâts toutes les 2.2s.<br>
+      5 : <b>tour de siège</b> — grandit peu à peu, finit par frapper un défenseur directement (2 dégâts, ou 1 PV pour le seigneur).<br>
+      6 et plus : <b>bélier</b> — très résistant (55 PV), avance très lentement vers le mur (4 unités/s, presque une minute pour arriver), 22 dégâts au contact toutes les 3.4s.</p>
+      <p>Tant qu'il reste de l'équipage vivant à l'intérieur, l'engin se régénère (1.5 PV/s par soldat) — le tir à distance seul ne peut jamais l'achever. Il faut sortir et frapper l'équipage directement.</p>
+
+      <h3>Le village</h3>
+      <p>Les maisons, la grange et l'église peuvent cacher un ennemi qui passe à moins de 140 unités (20% de chance par seconde) — invisible et intouchable jusqu'à ce que le seigneur sorte l'en déloger.</p>
+      <p>De temps en temps (toutes les 50 à 80 secondes), un bateau débarque un petit groupe d'ennemis directement sur la berge du ruisseau — un évènement à part, indépendant des vagues normales.</p>
+      <p>Les paysans se dispersent dès la première attaque : certains se cachent à l'église, d'autres au château, quelques-uns partent même se battre.</p>
+
+      <h3>La princesse</h3>
+      <p>Un appui long sur le bouton Descendre/Remonter, une fois qu'elle est en bas, déclenche le câlin : 3 secondes pour soigner le seigneur ET la princesse entièrement, même depuis 0 PV.</p>
+      <p>Elle est en danger si un ennemi arrive à moins de 18 unités d'elle une fois descendue.</p>
+    </div>
+    <div id="faqEn" hidden>
+      <h2>Tips</h2>
+      <p class="faqSub">How everything actually works — with the real numbers.</p>
+
+      <h3>Waves and difficulty</h3>
+      <p>An enemy's HP = 2 + (wave number ÷ a difficulty-dependent divisor), rounded down. Easy: divisor 6.4. Normal: 4.5. Hard: 3.2. Very hard: 2.9 — the smaller it is, the faster HP climbs.</p>
+      <p>A wave sends 3 + (wave × 2) enemies — except every 5th wave, a breather wave at 30% reduced numbers.</p>
+      <p>An enemy walks at 24 + (wave × 1.5) units/second once visible on screen (faster while off-screen, so it doesn't take forever to arrive).</p>
+
+      <h3>The lord</h3>
+      <p>From the ramparts (not sallying), aiming precisely multiplies damage: ×2 dead-on (within 15°), ×1.5 roughly on target (within 40°), ×1 off-axis — then an extra ×2 on top, always from the ramparts.</p>
+      <p>While sallying, each hit (every 0.4s) deals 4 damage, multiplied by the horse if bought.</p>
+      <p>The horse costs 40 gold (×1.35 per level) and multiplies sally damage: level 1 = ×2, level 2 = ×3, and so on.</p>
+
+      <h3>The castle</h3>
+      <p>Maximum height 208, minimum 16 — it never fully falls, but stays very vulnerable below that.</p>
+      <p>Repairing (button held) restores 8 height every 0.5s.</p>
+      <p>A turret costs 5 gold, has 6 HP, heals at 4 HP/s while being repaired.</p>
+
+      <h3>The moat</h3>
+      <p>4 tiers: 20 gold (radius 87), 50 gold (122), 200 gold (148), 500 gold (178).</p>
+      <p>Slows everyone in the water, never deals damage — the lord too while sallying (30% slower, only 10% with the horse).</p>
+      <p>A builder enemy can lay a bridge across it (2 at a time max, 2.5s to build, 20 HP) so others cross dry.</p>
+
+      <h3>The garden</h3>
+      <p>15 gold to start, ×1.35 cost AND income per level, paid out every 5s — no level cap.</p>
+      <p>Income ×1.5 while the princess is down and relaxing in the garden.</p>
+
+      <h3>The mill</h3>
+      <p>30 gold to start, ×1.35 cost and income per level, paid out every 5s, 6 levels max.</p>
+
+      <h3>The church's sacred ground</h3>
+      <p>The first tier (25 gold) unlocks by going to pray with the priest inside the donjon (🔥 button, bottom right) — not by touching the church itself.</p>
+      <p>Further tiers (55 / 100 / 180 / 320 gold) are then bought outside, by touching the church.</p>
+      <p>An enemy entering the zone loses half its maximum HP; if it leaves and comes back in, it loses the other half — always exactly two passes to kill it, never more.</p>
+      <p>At tier 5, the zone stretches all the way to the village fountain — threatening enemies who'd try to heal there (see below).</p>
+
+      <h3>The fountain</h3>
+      <p>The lord, while sallying, below 35% HP, rushes there to heal first — even ahead of an ongoing fight. 4 seconds for a full heal from 0 HP.</p>
+      <p>Enemies can use it too, below 40% HP: roughly 1 in 5 attempts the detour (not all of them), 5 seconds to heal — but stays exposed to fire and to the church's sacred ground the whole way there.</p>
+
+      <h3>Siege engines</h3>
+      <p>They form when several enemies stall in the same spot at the wall (2 minimum). The more of them, the stronger the engine that comes out:</p>
+      <p>2: <b>shield</b> — soaks hits, very resistant to ranged fire (only takes 20% damage), never attacks.<br>
+      3: <b>crossbow</b> — 5 damage to the wall every 1.6s.<br>
+      4: <b>trebuchet</b> — builds far from the donjon, fires a visible projectile, 10 damage every 2.2s.<br>
+      5: <b>siege tower</b> — grows over time, eventually hits a defender directly (2 damage, or 1 HP for the lord).<br>
+      6 and up: <b>battering ram</b> — very tough (55 HP), crawls toward the wall very slowly (4 units/s, nearly a minute to arrive), 22 damage on contact every 3.4s.</p>
+      <p>As long as living crew remains inside, the engine regenerates (1.5 HP/s per soldier) — ranged fire alone can never finish it off. Sallying out to hit the crew directly is the only real way.</p>
+
+      <h3>The village</h3>
+      <p>Houses, the barn, and the church can hide an enemy passing within 140 units (20% chance per second) — invisible and untouchable until the lord sallies out to flush it back into the open.</p>
+      <p>Every 50 to 80 seconds or so, a boat lands a small group of enemies straight onto the stream bank — a separate event, independent of normal waves.</p>
+      <p>Villagers scatter at the first attack: some hide in the church, others in the castle, a few even go fight.</p>
+
+      <h3>The princess</h3>
+      <p>A long press on the Down/Up button, once she's down, triggers a hug: 3 seconds to fully heal both the lord and the princess, even from 0 HP.</p>
+      <p>She's in danger if an enemy gets within 18 units of her once she's down.</p>
+    </div>
+    <button class="ghost faqClose" id="closeFaq">Fermer</button>
+  </div>
 </div>
 <!-- preload="none" : audité en session — la lecture est de toute façon
      bloquée jusqu'au premier geste (déblocage audio mobile), inutile de
@@ -694,6 +853,7 @@
       eglise_max: 'Zone sacrée au maximum',
       eglise_pray_first: "Va d'abord prier au donjon",
       priest_pray: 'Prier', priest_done: 'Terrain déjà béni',
+      faq_btn: 'Astuces',
       restart_full: 'Recommencer depuis le début',
       difficulty_prefix: 'Difficulté : ',
       diff_facile: 'Facile', diff_normal: 'Normal', diff_difficile: 'Difficile',
@@ -729,6 +889,7 @@
       eglise_max: 'Sacred ground maxed out',
       eglise_pray_first: 'Go pray at the donjon first',
       priest_pray: 'Pray', priest_done: 'Ground already blessed',
+      faq_btn: 'Tips',
       restart_full: 'Restart from the beginning',
       difficulty_prefix: 'Difficulty: ',
       diff_facile: 'Easy', diff_normal: 'Normal', diff_difficile: 'Hard',
@@ -784,6 +945,8 @@
     document.getElementById('sfxVolumeLabel').textContent = t('vol_sfx');
     document.getElementById('fpsLabel').textContent = t('fps_label');
     document.getElementById('closeMenu').textContent = t('close_menu');
+    document.getElementById('faqBtn').textContent = t('faq_btn');
+    document.getElementById('closeFaq').textContent = t('close_menu');
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
     document.querySelector('.cosyCaption').textContent = t('cosy_caption');
@@ -815,6 +978,16 @@
     updatePrincessBtn();
     updateWaveNum();
     updateNextWaveBonus();
+    updateFaqLang();
+  }
+
+  // Astuces (voir #faqOverlay) : deux blocs de texte complets plutôt que
+  // des clés I18N par phrase — juste basculer lequel est visible
+  function updateFaqLang() {
+    const faqFr = document.getElementById('faqFr'), faqEn = document.getElementById('faqEn');
+    if (!faqFr) return; // appelé avant que le DOM soit prêt, au tout premier refreshDynamicLangUI() ? défensif seulement
+    faqFr.hidden = lang !== 'fr';
+    faqEn.hidden = lang === 'fr';
   }
 
   // ---- mode phosphore: 'couleur' (rendu d'origine, en pause depuis v0.56)
@@ -3766,6 +3939,13 @@
     priestBtn.hidden = true;
   });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
+  const faqOverlay = document.getElementById('faqOverlay');
+  document.getElementById('faqBtn').addEventListener('click', () => {
+    menu.hidden = true;
+    updateFaqLang();
+    faqOverlay.hidden = false;
+  });
+  document.getElementById('closeFaq').addEventListener('click', () => { faqOverlay.hidden = true; });
 
   const versionBtn = document.getElementById('versionBtn');
   versionBtn.addEventListener('click', () => {
