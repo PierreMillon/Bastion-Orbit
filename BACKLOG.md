@@ -1025,10 +1025,9 @@ tenir compte des maisons-cachettes et du cheval une fois codés.
    à la vague 28 à 89%) — `enemyHp(wave)` retendu de `2+⌊w/7⌋` à
    `2+⌊w/4.5⌋` pour retomber dans la cible (68% à v28, 57% à v30). Voir
    aussi la section difficulté plus haut.
-3. **Routes → centre-ville (maisons) → chemin → donjon** : réseau en
-   deux temps au lieu d'un accès direct route→donjon. Refonte de la
-   génération de routes/maisons actuelle (`HOUSES`, `ROAD_ANGLES`).
-   *Pas fait, gros chantier de géométrie.*
+3. **Routes → centre-ville (maisons) → chemin → donjon** → fait en v0.79
+   (voir plus bas pour le détail complet). Confirmé par Pierre : vraie
+   refonte géométrique, pas juste visuelle.
 4. **Arrivée par bateau** → fait en v0.78 (voir plus bas pour le détail
    complet). Confirmé par Pierre : vague dédiée de temps en temps,
    séparée des vagues normales, pas mélangée.
@@ -2279,3 +2278,94 @@ inchangé), mais il n'y a pas de logique de "choix de meilleur
 emplacement" dédiée — jugé hors scope de cette demande précise
 (arrivée par bateau), déjà noté ailleurs dans ce fichier comme son
 propre chantier séparé.
+
+## Refonte routes → centre-ville → chemin → donjon (item 3, consigne du 2026-09-08) → fait en v0.79
+
+Confirmé explicitement par Pierre en session ("vraie refonte
+géométrique") plutôt que la version visuelle légère envisagée au
+départ — les 8 maisons de `HOUSES` ont bougé, plus seulement le style
+de dessin.
+
+**Constat de départ** : les 8 maisons étaient placées à des angles
+totalement indépendants des deux routes (`ROAD_ANGLES≈2.1/-2.3`) — de
+±0.68 à ±2.5 rad d'écart, pur décor sans rapport avec le trajet réel
+des ennemis (déjà noté dans le diagnostic `HOUSE_HIDE_R` plus haut dans
+ce fichier). Un ennemi qui marche vers le mur ne "traversait" jamais
+un vrai hameau, juste des maisons éparpillées au hasard dans le
+paysage.
+
+**Choix d'implémentation, pour rester à risque maîtrisé malgré
+l'ampleur** : plutôt que de toucher au pathing des ennemis
+(`roadAngleAt`, la fonction qui les fait marcher, reste identique au
+caractère près — zéro changement à l'équilibrage déjà réglé), la
+refonte porte sur la GÉOMÉTRIE STATIQUE que ce pathing traverse déjà :
+- **Maisons regroupées en deux hameaux**, un par route, dans la bande
+  r≈230-300 (au-delà des douves max=178) : 4 près de
+  `ROAD_ANGLES[0]=2.1` (±0.55 rad), 4 près de `ROAD_ANGLES[1]=-2.3`
+  (±0.55 rad) — un vrai village que la route dessert, plutôt qu'un
+  décor sans rapport.
+- **`VILLAGE_R=210`** : rayon de bascule visuelle route→chemin, choisi
+  juste sous la maison la plus proche (232) pour que la bascule tombe
+  pile à la sortie du hameau. `drawRoadSeg`/`drawRoadRun` distinguent
+  maintenant deux tronçons : la ROUTE (r≥VILLAGE_R, style plein
+  habituel) qui traverse le hameau, puis le CHEMIN (r<VILLAGE_R, plus
+  fin et tireté) qui continue seul jusqu'au donjon. Purement visuel —
+  `roadAngleAt`/`roadHalfAngle` restent identiques des deux côtés de la
+  bascule, donc **aucun changement au pathing ni à la vitesse des
+  ennemis** (le bonus de vitesse "sur la route", basé sur
+  `roadHalfAngle`, n'est pas touché non plus).
+- **Distinction qui survit à tous les styles visuels** : en Phosphore/
+  Filaire, `wrapPhosphor` écrase de toute façon toute couleur littérale
+  (piège déjà repéré plusieurs fois cette session) — la route/le chemin
+  se distinguent donc par `lineWidth`/`setLineDash` (propriétés hors-
+  couleur du contexte canvas, qui survivent), pas par la couleur. En
+  style Couleur (`drawRoadSeg`, quads pleins), une teinte différente
+  s'ajoute en plus (`#9c8360` route / `#6e5c40` chemin, terre battue).
+
+**Positions des maisons** : plutôt que deviner à la main (8 positions
+sous 5 contraintes simultanées — bien plus dur que les placements à un
+seul bâtiment de cette session), génération par recherche aléatoire
+sous contraintes (script à part, rejection sampling : bande r/angle
+par hameau, marge minimale vs les deux routes, le ruisseau, les autres
+maisons du même hameau, le point de débarquement des bateaux v0.78),
+PUIS vérification numérique indépendante de chaque position acceptée
+(même méthode que tout le reste de la session, script séparé de la
+génération pour ne pas juste re-vérifier avec le même code qui a
+généré) contre : les douves max, le ruisseau (échantillonné sur toute
+sa longueur, ±700 unités), les deux routes (échantillonnées sur toute
+leur longueur), le point de débarquement des bateaux, le cœur de
+village/la ferme (church/grange/fontaine, à un angle totalement
+différent), le moulin et la grange lointaine (tous deux côté amont du
+ruisseau, d<0, donc naturellement loin). Marge minimale trouvée : 23
+unités (maisons vs routes — volontairement serré, "sur le passage"
+plutôt que loin dans les champs), toutes les autres marges > 35.
+
+**Effet de bord positif, vérifié** : `HOUSE_HIDE_R=140` (la mécanique
+de cachette dans les maisons, réglée en v0.53 après 3 itérations parce
+que les ennemis "tout-terrain" ne passaient presque jamais assez près
+des maisons d'alors) devrait maintenant se déclencher BEAUCOUP plus
+souvent — les maisons sont désormais à 23-300 unités des routes au
+lieu de plusieurs centaines. Pas retouché (pas nécessaire, la
+mécanique elle-même n'a pas changé) mais noté en commentaire à côté de
+`HOUSE_HIDE_R` pour la prochaine fois qu'on y touche.
+
+Vérifié en Playwright :
+- Balayage caméra (plusieurs rotations) : les deux hameaux bien visibles
+  le long de leurs routes respectives, le tronçon "chemin" (tireté, plus
+  fin) clairement visible entre le pont et le donjon sur les deux
+  captures qui le cadrent — capture à l'appui.
+- 8 vagues forcées en rafale (beaucoup d'ennemis actifs simultanément,
+  cachettes/engins de siège/tout le reste du jeu en action avec les
+  nouvelles positions) : aucune erreur console.
+- Vérification numérique indépendante de toutes les contraintes de
+  collision listées ci-dessus, script tenu à part du script de
+  génération.
+
+**Pas fait / hors scope de cette passe** : le "cœur de village"
+(église/grange/fontaine/place, `VILLAGE_EXTRAS`) reste où il était,
+volontairement — la consigne d'origine nomme spécifiquement "maisons"
+(`HOUSES`), et ce cœur de village est déjà noté ailleurs dans ce
+fichier comme son propre ensemble intentionnellement décoratif/séparé
+des routes. Pas de changement non plus à l'arrivée par bateau (v0.78,
+toujours indépendante des routes) ni à `roadAngleAt`/au pathing des
+ennemis — seule la géométrie statique qu'ils traversent a changé.

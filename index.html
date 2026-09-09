@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.78</button>
+  <button id="versionBtn">v0.79</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.79</b> — les routes traversent maintenant deux petits hameaux avant de laisser place à un chemin qui continue seul jusqu'au donjon, au lieu d'un accès direct : "routes → village → chemin → donjon"</div>
   <div><b>v0.78</b> — arrivée par bateau : de temps en temps, un bateau débarque un petit groupe d'ennemis directement sur la berge du ruisseau, une menace séparée des vagues normales</div>
   <div><b>v0.77</b> — le bélier : un nouvel engin de siège très résistant, très lent, qui rampe depuis loin jusqu'au mur pour frapper très fort au contact ; le trébuchet se fabrique maintenant loin du donjon et tire à distance (projectile visible) au lieu de rester collé au mur</div>
   <div><b>v0.76</b> — le cours d'eau est maintenant infranchissable pour le seigneur aussi (pas seulement les ennemis) : seul le pont permet de passer d'une rive à l'autre</div>
@@ -1375,6 +1376,15 @@
   // on a now-genuinely-constant world width, not an artifact.
   const ROAD_WIDTH = 8;               // linear half-width, world units — convert to angle via /r where used
   function roadHalfAngle(r) { return ROAD_WIDTH / Math.max(1, r); }
+  // rayon de bascule "route" -> "chemin" (item 3, consigne du 2026-09-08 :
+  // "réseau en deux temps" plutôt qu'un accès direct route→donjon) — au-
+  // delà, c'est la route qui traverse le hameau (voir HOUSES) ; en-deçà,
+  // le chemin qui continue seul jusqu'au donjon (voir drawRoadRun/
+  // drawRoadSeg). Choisi juste sous le rayon de la maison la plus proche
+  // (232) pour que la bascule tombe pile à la sortie du hameau. Purement
+  // visuel — roadAngleAt/roadHalfAngle restent identiques des deux côtés,
+  // donc aucun changement au pathing/à la vitesse des ennemis.
+  const VILLAGE_R = 210;
   const ROAD_WIND_AMP = 0.16;         // how far the road snakes off its base angle at its widest — réduit (était 0.55) : demandé plus droite, "beaucoup moins" de serpentage, mais pas parfaitement rectiligne
   const ROAD_WIND_FREQ = 0.011;       // how tightly it winds per world unit of radius
   const ROAD_CHANCE = 0.4;            // fraction of new spawns that pick a road
@@ -1599,26 +1609,41 @@
   });
   const BUSH_RADIUS = 20;
 
-  // a handful of little houses out in the field (demandé en session : "un
-  // groupe un peu loin" + "une maison toute seule", pour commencer à
-  // donner une impression de village) — box + a small pitched roof, drawn
-  // with the same flat quads as everything else so it automatically picks
-  // up the phosphore/filaire treatment for free
-  // village étendu (demandé en session, dicté : "faut rajouter des
-  // maisons") — les 3 premières restent telles quelles (le groupe et la
-  // maison isolée d'origine), 5 de plus ajoutées en périphérie, dont
-  // plusieurs nettement "plus loin" (jusqu'à 430 contre 260-300 pour les
-  // premières) pour donner une vraie impression de hameau étalé plutôt
-  // qu'un unique petit cluster.
+  // a handful of little houses out in the field — box + a small pitched
+  // roof, drawn with the same flat quads as everything else so it
+  // automatically picks up the phosphore/filaire treatment for free
+  // REFONTE (item 3, consigne du 2026-09-08, "vraie refonte géométrique"
+  // confirmée par Pierre) : "routes → centre-ville (maisons) → chemin →
+  // donjon" au lieu d'un accès direct route→donjon. Les 8 maisons
+  // n'étaient auparavant PAS alignées avec les routes (à ±0.68-2.5 rad de
+  // ROAD_ANGLES≈±2.1/-2.3, pur décor sans rapport avec le trajet des
+  // ennemis) — regroupées maintenant en deux petits hameaux, un par
+  // route, dans la bande r≈230-300 (au-delà des douves max=178, avant le
+  // reste du trajet) : 4 maisons près de ROAD_ANGLES[0]=2.1 (±0.55 rad),
+  // 4 près de ROAD_ANGLES[1]=-2.3 (±0.55 rad). Au-delà de VILLAGE_R (voir
+  // plus bas, où routes/drawRoadRun basculent en "chemin") se trouve donc
+  // la route, PUIS le hameau, PUIS le chemin qui continue seul jusqu'au
+  // donjon — le "réseau en deux temps" demandé, sans toucher au pathing
+  // des ennemis (roadAngleAt/HOUSE_HIDE_R inchangés : ils marchent
+  // exactement comme avant, ils traversent juste maintenant un vrai
+  // hameau en chemin plutôt qu'un décor sans rapport).
+  // Positions générées par recherche aléatoire sous contraintes (script à
+  // part) puis vérifiées numériquement (même méthode que tout le reste de
+  // la session) contre : les douves max, le ruisseau (échantillonné sur
+  // toute sa longueur), les deux routes (échantillonnées), le point de
+  // débarquement des bateaux (v0.78), le cœur de village/la ferme, le
+  // moulin et la grange lointaine — marge minimale trouvée : 23 unités
+  // (maisons vs routes, volontairement serré pour rester "sur le
+  // passage" plutôt que loin dedans les champs), toutes les autres > 35.
   const HOUSES = [
-    { x: 260 * Math.cos(1.0), z: 260 * Math.sin(1.0) },      // the lone house
-    { x: 300 * Math.cos(-0.85), z: 300 * Math.sin(-0.85) },  // the group, two close together
-    { x: 288 * Math.cos(-0.68), z: 288 * Math.sin(-0.68) },
-    { x: 340 * Math.cos(2.5), z: 340 * Math.sin(2.5) },
-    { x: 360 * Math.cos(-2.6), z: 360 * Math.sin(-2.6) },  // était -2.4 : collision vérifiée numériquement avec route[1] (angle -2.3, marge -26) — décalé, marge >65 maintenant
-    { x: 410 * Math.cos(1.7), z: 410 * Math.sin(1.7) },      // plus loin
-    { x: 430 * Math.cos(-1.9), z: 430 * Math.sin(-1.9) },    // plus loin
-    { x: 390 * Math.cos(0.15), z: 390 * Math.sin(0.15) }     // plus loin
+    { x: 280.1 * Math.cos(2.325), z: 280.1 * Math.sin(2.325) },
+    { x: 267.0 * Math.cos(1.693), z: 267.0 * Math.sin(1.693) },
+    { x: 298.8 * Math.cos(2.607), z: 298.8 * Math.sin(2.607) },
+    { x: 291.9 * Math.cos(1.930), z: 291.9 * Math.sin(1.930) },
+    { x: 252.9 * Math.cos(-2.732), z: 252.9 * Math.sin(-2.732) },
+    { x: 232.2 * Math.cos(-1.929), z: 232.2 * Math.sin(-1.929) },
+    { x: 283.1 * Math.cos(-2.136), z: 283.1 * Math.sin(-2.136) },
+    { x: 286.3 * Math.cos(-1.760), z: 286.3 * Math.sin(-1.760) }
   // yaw : orientation propre du bâtiment (indépendante de son angle
   // autour du donjon) — signalé en session : sans ça, chaque maison
   // pointait dans le même axe monde, "toutes parallèles" les unes aux
@@ -1657,6 +1682,12 @@
   //    mais parce que la géométrie du parcours rend "moins de 70" presque
   //    impossible à atteindre. Élargi à 140, qui couvre la zone où le
   //    trafic mesuré est réellement dense.
+  // note ajoutée avec la refonte du réseau routes/village (v0.79) : les
+  // 8 maisons ci-dessus ont bougé, maintenant regroupées PRÈS des routes
+  // (voir HOUSES) plutôt qu'à ±0.68-2.5 rad comme au moment du diagnostic
+  // ci-dessus — ce rapprochement ne peut que faciliter le déclenchement
+  // de cette mécanique (les ennemis tout-terrain passent maintenant bien
+  // plus près), donc HOUSE_HIDE_R=140 n'a pas eu besoin d'être retouché.
   const HOUSE_HIDE_R = 140;             // distance d'une maison pour pouvoir s'y cacher / en être délogé
   const HOUSE_HIDE_CHANCE_PER_SEC = 0.2; // probabilité/seconde (jet à chaque frame, proportionnel à dt) — ~45 % de se cacher sur une traversée type de 3s
 
@@ -5784,7 +5815,10 @@
       [seg.r1 * Math.cos(seg.a1 + hw1), seg.r1 * Math.sin(seg.a1 + hw1)],
       [seg.r1 * Math.cos(seg.a1 - hw1), seg.r1 * Math.sin(seg.a1 - hw1)]
     ].map(([x, z]) => project(x, 0.5, z, rot));
-    ctx.fillStyle = '#9c8360';
+    // réseau en deux temps (VILLAGE_R) : au-delà du hameau, la route
+    // (teinte claire habituelle) ; en-deçà, le chemin qui continue seul
+    // jusqu'au donjon (teinte plus sombre, terre battue plutôt que route)
+    ctx.fillStyle = seg.r0 < VILLAGE_R ? '#6e5c40' : '#9c8360';
     buildQuad(pts);
   }
 
@@ -5818,12 +5852,34 @@
     const hw1 = roadHalfAngle(last.r1);
     leftPts.push(project(last.r1 * Math.cos(last.a1 - hw1), 0.5, last.r1 * Math.sin(last.a1 - hw1), rot));
     rightPts.push(project(last.r1 * Math.cos(last.a1 + hw1), 0.5, last.r1 * Math.sin(last.a1 + hw1), rot));
-    ctx.lineWidth = Math.max(1, 1.2 * scale);
+    // réseau en deux temps (VILLAGE_R, item 3 consigne du 2026-09-08) :
+    // route (trait plein habituel) au-delà du hameau, chemin (plus fin,
+    // tireté) en-deçà jusqu'au donjon. Segments triés du donjon vers
+    // l'extérieur (r0 croissant) dans `run` — un simple changement de
+    // largeur/tireté, pas de couleur : en Phosphore/Filaire, wrapPhosphor
+    // écrase de toute façon toute couleur littérale (piège déjà repéré
+    // plusieurs fois cette session) — seules les propriétés hors-couleur
+    // du contexte (lineWidth, setLineDash) survivent pour distinguer
+    // visuellement les deux tronçons.
+    let splitIdx = run.findIndex(seg => seg.r0 >= VILLAGE_R);
+    if (splitIdx === -1) splitIdx = run.length; // toute la run est "chemin"
     for (const pts of [leftPts, rightPts]) {
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.stroke();
+      if (splitIdx > 0) {
+        ctx.lineWidth = Math.max(1, 0.7 * scale);
+        ctx.setLineDash([5 * scale, 4 * scale]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i <= splitIdx; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (splitIdx < pts.length - 1) {
+        ctx.lineWidth = Math.max(1, 1.2 * scale);
+        ctx.beginPath();
+        ctx.moveTo(pts[splitIdx].x, pts[splitIdx].y);
+        for (let i = splitIdx + 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
     }
   }
 
