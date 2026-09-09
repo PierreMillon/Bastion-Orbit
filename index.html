@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.77</button>
+  <button id="versionBtn">v0.78</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.78</b> — arrivée par bateau : de temps en temps, un bateau débarque un petit groupe d'ennemis directement sur la berge du ruisseau, une menace séparée des vagues normales</div>
   <div><b>v0.77</b> — le bélier : un nouvel engin de siège très résistant, très lent, qui rampe depuis loin jusqu'au mur pour frapper très fort au contact ; le trébuchet se fabrique maintenant loin du donjon et tire à distance (projectile visible) au lieu de rester collé au mur</div>
   <div><b>v0.76</b> — le cours d'eau est maintenant infranchissable pour le seigneur aussi (pas seulement les ennemis) : seul le pont permet de passer d'une rive à l'autre</div>
   <div><b>v0.75</b> — une grange au loin, plus loin le long du ruisseau que le moulin, pour ancrer visuellement la continuité de l'eau vers le bord de la carte</div>
@@ -1917,6 +1918,25 @@
   const STREAM_WIND_AMP = 16;
   const STREAM_WIND_FREQ = 0.018;
   const STREAM_SEG_COUNT = 48;
+  // débarquement par bateau (item 4, consigne du 2026-09-08 : "une partie
+  // des ennemis arrive par l'eau en bateau" + confirmé par Pierre : une
+  // vague dédiée de temps en temps, séparée des vagues normales, pas
+  // mélangée). Position vérifiée numériquement (script à part, même
+  // méthode que pour tous les autres bâtiments) : d=+140 (côté aval du
+  // pont, à l'écart du couloir du pont ET du confluent affluent/moulin/
+  // grange lointaine, tous côté amont/d négatif), berge côté donjon
+  // (BOAT_BANK=-1). Résultat : r≈215 du donjon — bien au-delà des douves
+  // max (178), marge >130 unités vs la maison/route les plus proches.
+  const BOAT_LANDING_D = 140;
+  const BOAT_BANK = -1;
+  const BOAT_BANK_MARGIN = 15;
+  const BOAT_APPROACH_D = 420; // point de départ, loin en aval — < streamHalfLen() (>=SPAWN_R>=480) donc toujours dans la portion dessinée du ruisseau
+  const BOAT_SPEED = 30;       // unités/s le long du courant, vers BOAT_LANDING_D
+  // pas précisé par Pierre ("de temps en temps") — choix raisonnable pour
+  // que ça reste un évènement ponctuel plutôt qu'un raz-de-marée, à
+  // ajuster si besoin une fois vu en jeu réel
+  const BOAT_CREW = 3;
+  const BOAT_EVENT_MIN_INTERVAL = 50, BOAT_EVENT_MAX_INTERVAL = 80; // secondes entre deux débarquements, indépendant des vagues normales
 
   // reflets scintillants (choix de Pierre parmi 5 maquettes comparées,
   // voir BACKLOG.md — "variation D") : des points de lumière isolés qui
@@ -2152,6 +2172,8 @@
     // grace keeps the hug visually lingering a moment after release
     calin: { held: false, grace: 0, hugging: false },
     siegeEngines: [],
+    boats: [], // débarquements par le ruisseau (consigne du 2026-09-08) — voir BOAT_EVENT_MIN_INTERVAL
+    boatTimer: BOAT_EVENT_MIN_INTERVAL + Math.random() * (BOAT_EVENT_MAX_INTERVAL - BOAT_EVENT_MIN_INTERVAL),
     particles: [], // short-lived death effects (smoke/sparkle), purely visual
     floatingTexts: [], // nombres d'or flottants (Partie 2.4 : "rien ne se passe en silence") — voir spawnFloatingGold
     bridges: [], // { angle, hp, maxHp } — planks laid across the moat
@@ -2378,6 +2400,48 @@
       state: 'approach', timer: 0, jumpFrom: 0, jumpT: 0,
       mood: 'walk', moodTimer: 1 + Math.random() * 2
     });
+  }
+
+  // débarquement par bateau : même forme d'ennemi que spawnEnemy(), juste
+  // positionné directement au point de débarquement plutôt qu'au rayon de
+  // spawn habituel — rejoint ensuite exactement le même comportement
+  // 'approach' que n'importe quel autre ennemi (marche vers le mur, peut
+  // se cacher dans une maison, former un engin de siège, etc.), sans
+  // toucher au reste de l'IA.
+  function spawnBoatEnemy(angle, r) {
+    if (!state.villagePanic) villageTriggerPanic();
+    state.enemies.push({
+      angle, r,
+      speed: 24 + state.wave * 1.5,
+      hp: enemyHp(state.wave), maxHp: enemyHp(state.wave),
+      wt: Math.random() * 10, wanderSeed: Math.random() * 10,
+      hopping: false, hopT: 0, fleeing: false,
+      builder: false, buildTimer: 0, ladder: false, roadIdx: -1,
+      state: 'approach', timer: 0, jumpFrom: 0, jumpT: 0,
+      mood: 'walk', moodTimer: 1 + Math.random() * 2
+    });
+  }
+
+  function spawnBoat() {
+    state.boats.push({ d: BOAT_APPROACH_D, crew: BOAT_CREW });
+  }
+
+  // avance chaque bateau le long du courant vers BOAT_LANDING_D ; une fois
+  // arrivé, débarque son équipage (spawnBoatEnemy) et disparaît
+  function updateBoats(dt) {
+    for (const b of state.boats) b.d -= BOAT_SPEED * dt;
+    const landed = state.boats.filter(b => b.d <= BOAT_LANDING_D);
+    if (landed.length) {
+      const g = streamGeometry();
+      for (const b of landed) {
+        const c = streamPointAt(g, BOAT_LANDING_D);
+        const lx = c.x + g.rx * BOAT_BANK * (STREAM_HALF_WIDTH + BOAT_BANK_MARGIN);
+        const lz = c.z + g.rz * BOAT_BANK * (STREAM_HALF_WIDTH + BOAT_BANK_MARGIN);
+        const angle = Math.atan2(lz, lx), r = Math.hypot(lx, lz);
+        for (let i = 0; i < b.crew; i++) spawnBoatEnemy(angle + (Math.random() - 0.5) * 0.2, r);
+      }
+      state.boats = state.boats.filter(b => b.d > BOAT_LANDING_D);
+    }
   }
 
   // audit difficulté : "dents de scie" plutôt qu'une ligne droite — sans
@@ -4049,6 +4113,16 @@
       clusterSiegeEngines();
       state.siegeTimer = SIEGE_CHECK_INTERVAL;
     }
+
+    // débarquement par bateau : évènement indépendant des vagues normales
+    // ("de temps en temps", pas mélangé — confirmé par Pierre), sur son
+    // propre minuteur plutôt que lié à state.wave/startWave
+    state.boatTimer -= dt;
+    if (state.boatTimer <= 0) {
+      spawnBoat();
+      state.boatTimer = BOAT_EVENT_MIN_INTERVAL + Math.random() * (BOAT_EVENT_MAX_INTERVAL - BOAT_EVENT_MIN_INTERVAL);
+    }
+    updateBoats(dt);
 
     // enemies
     separateEnemies(dt);
@@ -6027,6 +6101,41 @@
     }
   }
 
+  // bateau de débarquement : "pavé simple, style actuel" (item 4, consigne
+  // du 2026-09-08) — un simple quad en bois posé sur l'eau, glissant le
+  // long de la ligne centrale du ruisseau (pas la berge — il est SUR
+  // l'eau) jusqu'à BOAT_LANDING_D, avec des pips d'équipage à bord (même
+  // langage visuel que les engins de siège) plutôt qu'un rendu détaillé.
+  function drawBoat(b, rot) {
+    const g = streamGeometry();
+    const c = streamPointAt(g, b.d);
+    const hl = 14, hw = 6;
+    const corners = [
+      [c.x + g.tx * hl + g.rx * hw, c.z + g.tz * hl + g.rz * hw],
+      [c.x + g.tx * hl - g.rx * hw, c.z + g.tz * hl - g.rz * hw],
+      [c.x - g.tx * hl - g.rx * hw, c.z - g.tz * hl - g.rz * hw],
+      [c.x - g.tx * hl + g.rx * hw, c.z - g.tz * hl + g.rz * hw]
+    ].map(([x, z]) => project(x, 1, z, rot));
+    ctx.fillStyle = '#3b2a1f';
+    ctx.strokeStyle = '#20140c';
+    ctx.lineWidth = Math.max(1, 1.5 * scale);
+    ctx.beginPath();
+    ctx.moveTo(corners[0].x, corners[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(corners[i].x, corners[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    const cp = project(c.x, 7, c.z, rot);
+    const pipR = 2 * scale, gap = 4 * scale;
+    const startX = cp.x - ((b.crew - 1) * gap) / 2;
+    for (let i = 0; i < b.crew; i++) {
+      ctx.beginPath();
+      ctx.arc(startX + i * gap, cp.y, pipR, 0, Math.PI * 2);
+      ctx.fillStyle = '#e8d9a0';
+      ctx.fill();
+    }
+  }
+
   // custom pixel-art heart for the câlin icon, replacing the ❤ emoji —
   // demandé en session, avec une image de référence à respecter "en
   // respectant la grille de pixel scrupuleusement" : chaque case de la
@@ -6254,6 +6363,12 @@
     const nearBushes = liveBushes.filter(b => Math.cos(b.angle - rot) >= 0);
     const farSiege = state.siegeEngines.filter(s => Math.cos(s.angle - rot) < 0);
     const nearSiege = state.siegeEngines.filter(s => Math.cos(s.angle - rot) >= 0);
+    // le bateau se déplace le long du courant (son angle autour du donjon
+    // change avec .d, pas stocké tel quel) — classé par sa position
+    // courante à chaque frame, comme n'importe quel autre point (pointFar)
+    const boatFarG = streamGeometry();
+    const farBoats = state.boats.filter(b => { const c = streamPointAt(boatFarG, b.d); return pointFar(c.x, c.z, rot); });
+    const nearBoats = state.boats.filter(b => { const c = streamPointAt(boatFarG, b.d); return !pointFar(c.x, c.z, rot); });
     const farBridges = state.bridges.filter(b => Math.cos(b.angle - rot) < 0);
     const nearBridges = state.bridges.filter(b => Math.cos(b.angle - rot) >= 0);
     const road0Runs = roadRuns(0, rot), road1Runs = roadRuns(1, rot);
@@ -6323,6 +6438,7 @@
     }
     for (const e of far) drawEnemy(e, rot);
     for (const s of farSiege) drawSiegeEngine(s, rot);
+    for (const b of farBoats) drawBoat(b, rot);
     for (const br of farBridges) drawBridge(br, rot);
     if (princessFar) drawPrincess(rot);
     if (playerFar) drawPlayer(rot);
@@ -6350,6 +6466,7 @@
     }
     for (const e of near) drawEnemy(e, rot);
     for (const s of nearSiege) drawSiegeEngine(s, rot);
+    for (const b of nearBoats) drawBoat(b, rot);
     for (const br of nearBridges) drawBridge(br, rot);
     if (princessNear) drawPrincess(rot);
     if (playerNear) drawPlayer(rot);

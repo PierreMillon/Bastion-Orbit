@@ -1029,10 +1029,9 @@ tenir compte des maisons-cachettes et du cheval une fois codés.
    deux temps au lieu d'un accès direct route→donjon. Refonte de la
    génération de routes/maisons actuelle (`HOUSES`, `ROAD_ANGLES`).
    *Pas fait, gros chantier de géométrie.*
-4. **Arrivée par bateau** : en plus des routes, une partie des ennemis
-   arrive par l'eau en bateau (pavé simple, style actuel à dessiner).
-   Une fois arrivés (routes ou bateau), les ennemis se dispatchent pour
-   choisir où construire leurs engins de siège. *Pas fait.*
+4. **Arrivée par bateau** → fait en v0.78 (voir plus bas pour le détail
+   complet). Confirmé par Pierre : vague dédiée de temps en temps,
+   séparée des vagues normales, pas mélangée.
 5. **Maisons = cachettes indestructibles** → fait en v0.53 (3 itérations,
    chacune mesurée en jeu, pas juste raisonnée à froid). Un ennemi qui
    approche (pas un bâtisseur ni un porteur d'échelle, qui ont leur
@@ -2202,3 +2201,81 @@ gardent exactement leur comportement d'avant (formés et figés au pied
 du mur) — seuls le trébuchet et le bélier ont une notion de portée/
 distance, cohérent avec le fait que seul le trébuchet était visé
 explicitement par la consigne pour le tir à distance.
+
+## Arrivée par bateau (item 4 de la consigne du 2026-09-08) → fait en v0.78
+
+Confirmé par Pierre en session : une vague dédiée de temps en temps,
+séparée des vagues normales, pas mélangée avec elles.
+
+**Choix d'implémentation** : entièrement indépendant du système de
+vagues (`state.wave`/`startWave`) — son propre minuteur
+(`state.boatTimer`, `BOAT_EVENT_MIN_INTERVAL`/`MAX_INTERVAL` = 50-80s,
+aléatoire dans cette fourchette) déclenche `spawnBoat()` peu importe
+l'état de la vague en cours. Les ennemis débarqués rejoignent
+`state.enemies` en état `'approach'` normal (via `spawnBoatEnemy`,
+copie de `flushHouseEnemy` juste positionnée ailleurs) — ils marchent,
+peuvent se cacher dans une maison, former un engin de siège, tout
+comme n'importe quel autre ennemi, sans toucher au reste de l'IA ni à
+`waveSpawnCount`/`enemyHp` (aucun risque pour l'équilibrage déjà
+réglé). Vérifié explicitement que la condition de fin de vague
+(`toSpawn===0 && enemies.length===0 && siegeEngines.length===0`) ne
+regarde pas `state.boats` — comportement voulu : un bateau en approche
+n'empêche pas la vague normale de s'enchaîner, exactement "séparé, pas
+mélangé".
+
+- **Point de débarquement** (`BOAT_LANDING_D=140`) : choisi côté aval
+  du pont (d positif), à l'écart du couloir du pont ET du confluent
+  affluent/moulin/grange lointaine (tous côté amont, d négatif) —
+  vérifié numériquement (script à part, même méthode que pour tous les
+  bâtiments de la session) : marge >130 unités vs la maison/route la
+  plus proche, largement au-delà des douves max (178, le point de
+  débarquement est à r≈215 du donjon). Berge côté donjon
+  (`BOAT_BANK=-1`) pour que les ennemis débarqués aient une marche
+  cohérente vers le mur.
+- **Trajet** : le bateau part de `BOAT_APPROACH_D=420` (loin en aval,
+  toujours dans la portion dessinée du ruisseau puisque
+  `streamHalfLen()>=SPAWN_R>=480`) et glisse le long de la ligne
+  centrale du ruisseau (pas la berge — il est sur l'eau) à
+  `BOAT_SPEED=30` unités/s vers `BOAT_LANDING_D`. Une fois arrivé,
+  débarque son équipage (`BOAT_CREW=3`, nombre pas précisé par Pierre —
+  choix raisonnable pour que ça reste un évènement ponctuel plutôt
+  qu'un raz-de-marée, à ajuster si besoin une fois vu en jeu réel) et
+  disparaît.
+- **Visuel** (`drawBoat`) : "pavé simple, style actuel à dessiner" pris
+  au sens propre — un simple quad en bois orienté le long du courant,
+  avec des pips d'équipage au-dessus (même langage visuel que les
+  engins de siège), pas de rendu détaillé. Classé far/near comme
+  n'importe quel point mobile (`pointFar`, recalculé chaque frame
+  puisque son angle autour du donjon change avec `.d`, contrairement
+  aux engins de siège qui restent fixes une fois formés).
+
+Vérifié en Playwright (hooks de debug temporaires : bateau forcé,
+avance accélérée jusqu'au débarquement, position lue en direct — pas
+juste supposé) :
+- Bateau créé à `d=420` (confirmé), avance à exactement 30 unités/s
+  (`d=390` après 1s).
+- Avancé artificiellement jusqu'au seuil : débarquement confirmé —
+  `state.boats` vidé, exactement `BOAT_CREW=3` nouveaux ennemis ajoutés
+  à `state.enemies`, tous en état `'approach'`.
+- Capture visuelle (caméra recentrée sur l'angle réel du bateau, lu via
+  un hook dédié plutôt que deviné) : le bateau apparaît bien comme un
+  petit quad filaire sur le ruisseau, dans le même style vert phosphore
+  que le reste du jeu — confirme au passage que `wrapPhosphor` écrase
+  bien la couleur brune littérale choisie dans le code par la couleur
+  phosphore active, comme établi plus tôt cette session pour d'autres
+  éléments.
+- Balayage d'erreurs général : aucune erreur console.
+
+Tous les hooks de debug temporaires (`__DEBUG_SPAWN_BOAT`,
+`__DEBUG_BOAT_STATE`, `__DEBUG_FASTFORWARD_BOAT`, `__DEBUG_SET_THETA`,
+`__DEBUG_BOAT_SCREEN_POS`) retirés avant ce commit.
+
+**Pas fait / hors scope de cette passe** : "les ennemis se dispatchent
+pour choisir où construire leurs engins de siège" (deuxième moitié de
+l'item 4 dans la consigne d'origine) — un ennemi débarqué par bateau
+peut toujours rejoindre un engin de siège au pied du mur exactement
+comme n'importe quel autre ennemi (via `clusterSiegeEngines`,
+inchangé), mais il n'y a pas de logique de "choix de meilleur
+emplacement" dédiée — jugé hors scope de cette demande précise
+(arrivée par bateau), déjà noté ailleurs dans ce fichier comme son
+propre chantier séparé.
