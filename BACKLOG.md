@@ -1518,20 +1518,10 @@ correctif, aucune erreur console.
 ## Demandes en attente, pas commencées (trop grosses pour cette
 ## rafale) — détaillées ici pour ne rien perdre
 
-- **Moulin (watermill)** — une maison avec une roue à aubes posée sur
-  l'eau, qui tourne dans le bon sens par rapport au courant (vrai
-  mécanisme de moulin à eau à rechercher, pas inventé au hasard). Pas
-  commencé.
-- **Zoom pincé (pinch-to-zoom) tactile** — mécanique de caméra
-  entièrement nouvelle, décrite en détail par Pierre (zoom classique à
-  deux doigts, ancré sur le point pincé, reste zoomé au relâchement, la
-  rotation par glissement continue de fonctionner normalement mais se
-  sent "plus rapide" une fois zoomé, le centre de rotation reste
-  toujours le donjon, dézoom max = vue actuelle par défaut). Questions
-  restées ouvertes côté implémentation (niveau de zoom max, persistance
-  entre sessions, comportement souris/desktop en plus du tactile) — à
-  clarifier avant de s'y attaquer, chantier séparé (nouvelle gestion
-  multi-touch par-dessus le drag-to-rotate existant, à ne pas casser).
+(Note : le moulin et le zoom pincé, listés ici à l'origine, sont
+maintenant faits — voir plus bas dans ce fichier pour le détail. Note
+laissée volontairement pour ne pas perdre la trace de l'historique de
+cette rafale de demandes.)
 
 ## Ruisseau : portée pleine hors-écran, particules ÷3, ondulation "poisson" → fait en v0.64
 
@@ -1981,3 +1971,61 @@ scope demandé.
 Vérifié en Playwright (capture zoomée sur la vue cosy) : damier 8x8
 bien visible entre les deux figures, alternance claire des cases,
 aucune erreur console.
+
+## Zoom pincé à deux doigts (dernier des 6 gros chantiers, plus les questions restées ouvertes) → fait en v0.74
+
+Décrit en détail par Pierre, avec deux questions de clarification déjà
+répondues en session (AskUserQuestion) : dézoome max = vue
+d'aujourd'hui (confirmé), repart à zéro/dézoomé à CHAQUE chargement,
+pas persisté (confirmé — donc pas de sauvegarde localStorage, juste
+une valeur par défaut).
+
+Implémenté comme un simple HABILLAGE visuel par-dessus le rendu
+existant (`ctx.translate(camPanX,camPanY); ctx.scale(camZoom,camZoom);`
+autour de tout le dessin du monde dans `render()`) plutôt qu'en
+touchant `project()`/`rot` — la rotation continue à tourner autour du
+donjon exactement comme avant (le zoom n'est qu'une loupe posée
+dessus), et les épaisseurs de trait/tailles de texte suivent le zoom
+automatiquement (comportement natif de `ctx.scale()`, aucun des
+centaines d'appels `lineWidth = ... * scale` dans le fichier n'a eu
+besoin d'être touché).
+
+- Détection du pincement : `activePointers` (Map pointerId→{x,y}) sur
+  les événements `pointerdown`/`pointermove`/`pointerup` déjà en place
+  pour le glissé de rotation — à 2 doigts actifs, bascule en mode
+  pincement (`startPinch`) et suspend la rotation ; au retour à 1 doigt,
+  reprend la rotation depuis la position ACTUELLE du doigt restant
+  (pas l'ancienne, pour éviter un saut).
+- Ancrage au point pincé : `pinchAnchorX/Y` capture, à l'ouverture du
+  pincement, le point du monde (en repère "avant zoom") actuellement
+  sous le milieu des deux doigts ; à chaque mouvement, `camPanX/Y` est
+  recalculé pour que CE point reste sous le milieu courant des doigts
+  — exactement "le point où j'ai zoomé reste sous mes doigts".
+- `toScreen()` : les boutons flottants DOM (moulin/église) et la
+  détection de tap sur un bâtiment (`handleCanvasTap`) sont passés par
+  cette fonction pour rester alignés avec le monde zoomé — sinon ils
+  auraient dérivé de leur ancre dès qu'on zoome.
+- La bannière FIGHT!/la neige restent volontairement HORS du repère
+  zoomé (`ctx.restore()` juste avant leur dessin) : ce sont des
+  éléments HUD écran-fixe, pas des éléments du monde.
+
+Vérifié en Playwright (PointerEvent synthétiques à deux pointerId
+distincts, dispatchés directement sur le canvas — la vraie simulation
+tactile multi-doigts n'est pas disponible dans cet environnement) :
+- Pincement écarté (20px → 400px, centré fixe) : zoom clampé à 4 (max),
+  pan calculé exactement `mid - anchor*zoom` (vérifié à la valeur
+  près : -1920/-1200 pour anchor=640/400, zoom=4).
+- Repincement resserré vers 20px : zoom et pan reviennent exactement à
+  1/0 — dézoom max = vue par défaut, confirmé.
+- Relâcher un seul doigt puis glisser avec l'autre : zoom reste
+  inchangé, la rotation (theta) reprend et bouge normalement — la
+  chasse au donjon reste centrée dessus (aucune touche à `rot`).
+- Capture visuelle à zoom=4 : donjon nettement agrandi, UI DOM
+  (boutons, jauge d'or) restée à taille fixe comme attendu, aucune
+  erreur console. Re-testé ensuite que le moulin (tap + achat + suivi
+  caméra) fonctionne toujours identiquement à zoom=1 par défaut — pas
+  de régression.
+
+Pas fait (hors du scope confirmé par les réponses de Pierre) : pas de
+comportement souris/desktop dédié (molette pour zoomer) — resté
+tactile uniquement, comme décrit dans la demande d'origine.

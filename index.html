@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.73</button>
+  <button id="versionBtn">v0.74</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.74</b> — zoom pincé à deux doigts : ancré sur le point pincé, reste zoomé au relâchement, la rotation continue de fonctionner normalement pendant qu'on est zoomé</div>
   <div><b>v0.73</b> — un vrai échiquier 8x8 dans la scène cosy, à la table où le seigneur et la princesse se retrouvent déjà près du feu</div>
   <div><b>v0.72</b> — un petit cours d'eau secondaire (3x moins large) part du ruisseau et se déverse dans les douves dès leur construction, avec des particules qui s'éteignent avant d'atteindre l'eau stagnante</div>
   <div><b>v0.71</b> — le seigneur est ralenti dans les douves en sortie (30%, seulement 10% avec le cheval), comme confirmé en session</div>
@@ -2813,15 +2814,78 @@
   // relâchement avec peu de mouvement et peu de temps écoulé depuis le
   // pointerdown compte comme un tap plutôt qu'un glissé de rotation
   let downX = 0, downY = 0, downT = 0;
+
+  // ---- zoom pincé (demandé en session, longuement clarifié) ----
+  // "si j'écarte mes doigts, je zoome... si je relâche, je reste zoomé à
+  // cet endroit... si je continue à bouger avec mon doigt pour tourner la
+  // map, ça change rien à la mécanique globale, ça tourne juste plus vite
+  // visuellement... le centre de rotation ça reste toujours le château...
+  // si je dézoome, je reviens au dézoome maximum qui est l'écran
+  // d'aujourd'hui". Confirmé via question de clarification : repart à
+  // zéro (dézoomé) à chaque chargement, pas persisté.
+  //
+  // Implémenté comme une simple transformation d'affichage par-dessus le
+  // rendu existant (ctx.translate+scale autour du point pincé, voir
+  // render()) plutôt qu'en touchant project()/rot — la rotation continue
+  // de tourner autour du donjon exactement comme avant, le zoom n'est
+  // qu'un habillage visuel dessus. camPanX/camPanY/camZoom sont dans le
+  // repère ÉCRAN (pas le monde) : à zoom=1 (dézoomé, par défaut), pan=0,
+  // le rendu est identique à avant cette fonctionnalité.
+  let camZoom = 1, camPanX = 0, camPanY = 0;
+  const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 4;
+  const activePointers = new Map(); // pointerId -> {x,y}, pour détecter le pincement à deux doigts
+  let pinchStartDist = 0, pinchStartZoom = 1, pinchAnchorX = 0, pinchAnchorY = 0;
+  let pinchedThisGesture = false; // évite qu'un pincement termine en tap sur un bâtiment
+  function pinchMidpoint() {
+    const pts = [...activePointers.values()];
+    return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+  }
+  function startPinch() {
+    const pts = [...activePointers.values()];
+    pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    pinchStartZoom = camZoom;
+    const mid = pinchMidpoint();
+    // le point actuellement affiché sous le milieu des deux doigts, en
+    // repère "avant zoom" — reste fixe à l'écran pendant tout le
+    // pincement (voir la formule camPanX/Y plus bas)
+    pinchAnchorX = (mid.x - camPanX) / camZoom;
+    pinchAnchorY = (mid.y - camPanY) / camZoom;
+    pinchedThisGesture = true;
+  }
   canvas.addEventListener('pointerdown', e => {
     ensureAudio();
-    dragging = true;
-    state.omega = 0;
-    lastX = e.clientX;
-    lastT = performance.now();
-    downX = e.clientX; downY = e.clientY; downT = lastT;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 1) {
+      pinchedThisGesture = false;
+      dragging = true;
+      state.omega = 0;
+      lastX = e.clientX;
+      lastT = performance.now();
+      downX = e.clientX; downY = e.clientY; downT = lastT;
+    } else if (activePointers.size === 2) {
+      dragging = false; // le pincement prend le relais, pas de rotation parasite au 2e doigt
+      startPinch();
+    }
   });
   canvas.addEventListener('pointermove', e => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size >= 2) {
+      const pts = [...activePointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const mid = pinchMidpoint();
+      if (pinchStartDist > 10) {
+        camZoom = Math.max(CAM_ZOOM_MIN, Math.min(CAM_ZOOM_MAX, pinchStartZoom * (dist / pinchStartDist)));
+      }
+      // garde le point ancré (pinchAnchor, en repère avant-zoom) fixe
+      // sous le milieu actuel des deux doigts, même s'ils ont eux-mêmes
+      // un peu bougé (pincement + léger glissé à deux doigts) — même
+      // formule que le calcul initial de camPan à l'ouverture du zoom
+      // (voir resize(), qui remet camPanX/Y à 0 par défaut)
+      camPanX = mid.x - pinchAnchorX * camZoom;
+      camPanY = mid.y - pinchAnchorY * camZoom;
+      return;
+    }
     if (!dragging) return;
     const now = performance.now();
     const dx = e.clientX - lastX;
@@ -2833,12 +2897,33 @@
     lastX = e.clientX;
     lastT = now;
   });
-  canvas.addEventListener('pointerup', e => {
-    dragging = false;
-    const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
-    if (moved < 8 && performance.now() - downT < 400) handleCanvasTap(e.clientX, e.clientY);
-  });
-  canvas.addEventListener('pointercancel', () => dragging = false);
+  function endPointer(e) {
+    activePointers.delete(e.pointerId);
+    if (activePointers.size === 1) {
+      // il reste un doigt : reprend la rotation depuis SA position
+      // actuelle, sans saut (pas depuis l'ancien lastX du doigt parti)
+      const [remaining] = activePointers.values();
+      dragging = true;
+      state.omega = 0;
+      lastX = remaining.x;
+      lastT = performance.now();
+    } else if (activePointers.size === 0) {
+      dragging = false;
+      if (!pinchedThisGesture) {
+        const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+        if (moved < 8 && performance.now() - downT < 400) handleCanvasTap(e.clientX, e.clientY);
+      }
+      pinchedThisGesture = false;
+    }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  // convertit une position déjà projetée (project(x,y,z,rot)) en
+  // coordonnées écran RÉELLES, en tenant compte du zoom/pan actuel — pour
+  // tout ce qui doit rester aligné avec le monde zoomé mais vit HORS du
+  // canvas (boutons flottants DOM) ou compare à un clientX/clientY brut
+  // (détection de tap)
+  function toScreen(p) { return { x: camPanX + p.x * camZoom, y: camPanY + p.y * camZoom }; }
 
   // boutons flottants ancrés à un bâtiment du monde (voir #moulinBtn dans
   // le HTML) — un vrai tap sur le bâtiment bascule sa visibilité ; la
@@ -2849,16 +2934,17 @@
   const WORLD_TAP_RADIUS = 42; // rayon de détection du tap sur un bâtiment, en pixels écran
   function handleCanvasTap(clientX, clientY) {
     const rot = state.theta - Math.PI / 4;
+    const tapR = WORLD_TAP_RADIUS * camZoom; // le bâtiment paraît plus grand à l'écran une fois zoomé
     const m = moulinGeometry();
-    const mPos = project(m.houseX, 10, m.houseZ, rot);
-    if (Math.hypot(clientX - mPos.x, clientY - mPos.y) < WORLD_TAP_RADIUS) {
+    const mPos = toScreen(project(m.houseX, 10, m.houseZ, rot));
+    if (Math.hypot(clientX - mPos.x, clientY - mPos.y) < tapR) {
       moulinBtnVisible = !moulinBtnVisible;
       updateMoulinBtn();
       return; // un seul bâtiment à la fois — pas la peine de tester l'église si le moulin a déjà pris le tap
     }
     if (EGLISE_EXTRA) {
-      const ePos = project(EGLISE_EXTRA.x, 20, EGLISE_EXTRA.z, rot);
-      if (Math.hypot(clientX - ePos.x, clientY - ePos.y) < WORLD_TAP_RADIUS) {
+      const ePos = toScreen(project(EGLISE_EXTRA.x, 20, EGLISE_EXTRA.z, rot));
+      if (Math.hypot(clientX - ePos.x, clientY - ePos.y) < tapR) {
         egliseBtnVisible = !egliseBtnVisible;
         updateEgliseBtn();
       }
@@ -6020,15 +6106,23 @@
     // refreshBuyButtons(), pas par frame de rendu)
     if (moulinBtnVisible) {
       const m = moulinGeometry();
-      const pos = project(m.houseX, 26, m.houseZ, rot);
+      const pos = toScreen(project(m.houseX, 26, m.houseZ, rot));
       moulinBtn.style.left = pos.x + 'px';
       moulinBtn.style.top = pos.y + 'px';
     }
     if (egliseBtnVisible && EGLISE_EXTRA) {
-      const pos = project(EGLISE_EXTRA.x, 92, EGLISE_EXTRA.z, rot); // au-dessus du clocher
+      const pos = toScreen(project(EGLISE_EXTRA.x, 92, EGLISE_EXTRA.z, rot)); // au-dessus du clocher
       egliseBtn.style.left = pos.x + 'px';
       egliseBtn.style.top = pos.y + 'px';
     }
+
+    // zoom pincé : tout ce qui suit (le monde du jeu) est dessiné dans ce
+    // repère translaté+mis à l'échelle — restauré juste avant les
+    // éléments HUD écran (bannière FIGHT!, neige) qui doivent rester à
+    // taille/position fixes, pas zoomer avec le monde
+    ctx.save();
+    ctx.translate(camPanX, camPanY);
+    ctx.scale(camZoom, camZoom);
 
     // active moat: real water filling the whole slowed zone, once at least
     // one tier is bought — darkens/deepens with level (also stronger slow
@@ -6188,6 +6282,8 @@
     for (const pr of state.projectiles) drawProjectile(pr, rot);
     for (const pt of state.particles) drawParticle(pt, rot);
     for (const f of state.floatingTexts) drawFloatingText(f, rot);
+
+    ctx.restore(); // fin du repère zoomé — la bannière et la neige restent en écran fixe
 
     drawFightBanner();
     drawSnow();
