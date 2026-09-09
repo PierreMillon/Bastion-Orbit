@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.89</button>
+  <button id="versionBtn">v0.90</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.90</b> — la roue à aubes du moulin, jusque-là plate (2D), a maintenant une vraie épaisseur</div>
   <div><b>v0.89</b> — la prière au prêtre est maintenant gratuite et répétable (soin complet immédiat + bonus de résistance de 100% pendant 30s, 45s de délai) ; le palier 1 de la zone d'église redevient un achat normal dehors. Corrige aussi : les fenêtres du moulin/de l'église pouvaient se refermer accidentellement en cliquant près du bouton</div>
   <div><b>v0.88</b> — correctif du v0.87 : la neige avait une direction correcte mais restait figée à l'écran pendant la rotation de caméra (une pause visible) ; elle a maintenant une vraie position dans le monde, comme n'importe quel décor, et tourne avec la caméra sans à-coup</div>
   <div><b>v0.87</b> — la neige tombait toujours tout droit vers le bas de l'écran, vers le joueur, quelle que soit l'orientation de la caméra ; elle suit maintenant le sens réel du courant du ruisseau, et tourne avec la caméra plutôt que de rester figée à l'écran</div>
@@ -2214,6 +2215,11 @@
   const MOULIN_WHEEL_R = 14;
   const MOULIN_WHEEL_SEGS = 12;
   const MOULIN_SPIN_RATE = 1.1; // rad/s — positif = undershot correct, voir drawMoulinWheel
+  // épaisseur de la roue (demandé en session, 2026-09-09 : "elle doit
+  // avoir une épaisseur pour pouvoir fonctionner", elle était plate/2D
+  // avant) — le long de l'essieu, perpendiculaire au plan de la roue
+  // (voir drawMoulinWheel)
+  const MOULIN_WHEEL_THICKNESS = 6;
   // demandé en session : le ruisseau doit vraiment serpenter (contrairement
   // aux routes, qu'on veut désormais plus droites) — un simple décalage
   // sinusoïdal latéral le long de sa ligne centrale, nul à d=0 (le
@@ -6037,28 +6043,49 @@
   function drawMoulinWheel(m, rot) {
     const { g, wheelX, wheelZ } = m;
     const centerY = MOULIN_WHEEL_R; // le bas de la roue touche juste l'eau (y=0)
-    const rim = [];
+    // épaisseur : deux jantes (proche/loin), décalées le long de l'essieu
+    // (rx,rz — perpendiculaire au plan de la roue, qui est lui-même dans
+    // le plan courant/vertical, voir plus haut) plutôt qu'un disque plat.
+    // Même idiome que les autres formes du jeu (deux anneaux reliés par
+    // des montants, voir drawWallBand/drawCastle) appliqué à un cercle.
+    const halfT = MOULIN_WHEEL_THICKNESS / 2;
+    const nearX = wheelX - g.rx * halfT, nearZ = wheelZ - g.rz * halfT;
+    const farX = wheelX + g.rx * halfT, farZ = wheelZ + g.rz * halfT;
+    const rimNear = [], rimFar = [];
     for (let i = 0; i < MOULIN_WHEEL_SEGS; i++) {
       const theta = state.time * MOULIN_SPIN_RATE + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
       const along = Math.cos(theta) * MOULIN_WHEEL_R; // le long du courant (tx,tz)
       const up = Math.sin(theta) * MOULIN_WHEEL_R;    // vertical
-      const wx = wheelX + g.tx * along, wz = wheelZ + g.tz * along;
-      rim.push(project(wx, centerY + up, wz, rot));
+      rimNear.push(project(nearX + g.tx * along, centerY + up, nearZ + g.tz * along, rot));
+      rimFar.push(project(farX + g.tx * along, centerY + up, farZ + g.tz * along, rot));
     }
-    const hub = project(wheelX, centerY, wheelZ, rot);
+    const hubNear = project(nearX, centerY, nearZ, rot);
     ctx.lineWidth = Math.max(1, 1.3 * scale);
     ctx.strokeStyle = '#8a6a42';
-    // jante
+    // jante lointaine, tracée en premier (dessous)
     ctx.beginPath();
-    ctx.moveTo(rim[0].x, rim[0].y);
-    for (let i = 1; i < rim.length; i++) ctx.lineTo(rim[i].x, rim[i].y);
+    ctx.moveTo(rimFar[0].x, rimFar[0].y);
+    for (let i = 1; i < rimFar.length; i++) ctx.lineTo(rimFar[i].x, rimFar[i].y);
     ctx.closePath();
     ctx.stroke();
-    // rayons — un sur deux seulement, plus lisible qu'une roue pleine de traits
-    for (let i = 0; i < rim.length; i += 2) {
+    // montants entre les deux jantes — un sur trois, assez pour lire
+    // l'épaisseur sans surcharger le dessin
+    for (let i = 0; i < rimNear.length; i += 3) {
       ctx.beginPath();
-      ctx.moveTo(hub.x, hub.y);
-      ctx.lineTo(rim[i].x, rim[i].y);
+      ctx.moveTo(rimNear[i].x, rimNear[i].y);
+      ctx.lineTo(rimFar[i].x, rimFar[i].y);
+      ctx.stroke();
+    }
+    // jante proche + rayons, par-dessus (comme avant l'épaississement)
+    ctx.beginPath();
+    ctx.moveTo(rimNear[0].x, rimNear[0].y);
+    for (let i = 1; i < rimNear.length; i++) ctx.lineTo(rimNear[i].x, rimNear[i].y);
+    ctx.closePath();
+    ctx.stroke();
+    for (let i = 0; i < rimNear.length; i += 2) {
+      ctx.beginPath();
+      ctx.moveTo(hubNear.x, hubNear.y);
+      ctx.lineTo(rimNear[i].x, rimNear[i].y);
       ctx.stroke();
     }
   }

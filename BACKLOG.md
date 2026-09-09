@@ -3102,3 +3102,21 @@ seulement (0.5×2), confirmant le multiplicateur ; achat direct du
 palier 1 de l'église (tap sur l'église, sans passer par le prêtre) →
 accepté immédiatement, -25 or, libellé "Bénir le terrain" puis
 "Agrandir la zone sacrée" ensuite. Aucune erreur console.
+
+## Item 2 : épaisseur de la roue du moulin → fait en v0.90
+
+La roue était un simple cercle 2D (jante + rayons) dans le plan
+courant/vertical, sans aucune extension le long de son essieu — plate,
+pas de "vraie roue qui tourne". Fait : deux jantes (proche/loin,
+`MOULIN_WHEEL_THICKNESS = 6`, décalées le long de `g.rx/g.rz`, l'axe
+perpendiculaire au plan de la roue — c'est aussi l'axe de rotation
+réel d'une roue à aubes), reliées par quelques montants (un point sur
+trois, assez pour lire l'épaisseur sans charger le dessin) — même
+idiome que le reste du jeu (deux anneaux + montants pour donner du
+volume à une forme, comme les bandes du donjon). Jante proche + rayons
+gardés par-dessus, inchangés visuellement dans leur détail.
+
+Vérifié visuellement (capture zoomée ×3 deviceScaleFactor, la roue est
+petite à l'écran par défaut) : la double jante + montants se lit
+clairement comme une épaisseur, plus un disque plat. Aucune erreur
+console.
