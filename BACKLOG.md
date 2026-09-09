@@ -2687,3 +2687,61 @@ avec bouton Fermer atteignable ET sur un viewport court (360×560,
 même test que le bug v0.80 — pas re-tombé dedans), fermeture
 fonctionnelle. Aucune erreur console. 8 vagues forcées en rafale en
 jeu normal sans erreur non plus (régression générale).
+
+## Engins de siège : vrais soldats individuels (item "grouille de vie",
+consigne du 2026-09-08 : "vrais soldats individuels" choisi contre
+l'option juste-visuelle) → fait en v0.85
+
+L'équipage d'un engin de siège (`se.crew`, un simple compteur) devient
+`se.soldiers`, un tableau de vraies entrées individuelles : chacune a
+sa position locale propre (`da`/`dr`, coordonnées polaires autour du
+centre de l'engin) et sa phase d'animation (`seed`) pour un léger
+balancement sur place — même langage que `drawVillager` (qui dansait
+déjà de cette façon). `crew` disparaît complètement au profit de
+`soldiers.length` partout où il était lu (régénération de PV, rendu
+de la barre, capacité `siegeCrewCap`).
+
+**Rendu** : la rangée de pips abstraite au-dessus de la barre de vie
+est retirée ; à la place, chaque soldat est un petit `drawBallSprite`
+(même famille que `drawEnemy`, rayon réduit) positionné autour du
+centre de l'engin avec un léger bob vertical + balancement latéral
+(`Math.sin(state.time * ... + soldier.seed)`) — ça grouille visiblement
+sans que les soldats aient besoin de vraiment se déplacer, ce qui
+aurait demandé une logique de mouvement/collision individuelle bien
+plus lourde pour un gain de lisibilité minime.
+
+**Choix de scope, tranché sans repasser par une question** (suivant la
+consigne explicite de ce créneau : trancher moi-même sauf doute
+réellement profond) : je n'ai PAS ajouté de ciblage séparé
+équipage-vs-machine — l'engin reste une seule cible de sortie
+cliquable, cohérent avec la décision "pas fait" déjà notée plus haut
+dans ce fichier ("la sortie tue déjà l'équipage un par un... sans
+ajouter deux cibles cliquables séparées à l'écran"). "Vrais soldats
+individuels" est donc interprété comme : de vraies entrées de données
+individuelles + un vrai rendu individuel (le "grouille de vie"
+demandé), mais toujours *une* unité pour l'interaction du joueur — pas
+une refonte du ciblage. Si en jouant ça manque, c'est facile à
+ajouter après coup sur cette base.
+
+Aucun changement de nombre (capacité par palier, régénération PV/s,
+coût en or, dégâts de sortie) — uniquement la structure de données et
+le rendu.
+
+Vérifié via des hooks de debug temporaires (`__DEBUG_SPAWN_CLUSTER`,
+`__DEBUG_FORCE_CLUSTER`, `__DEBUG_SIEGE_INFO`, `__DEBUG_SORTIE_HIT`,
+tous retirés avant ce commit — `grep -c "__DEBUG_"` revenu à 1) :
+formation d'un groupe de 5 attaquants regroupés → engin palier 3 (le
+max, 5-2=3) avec bien 5 soldats dans le tableau ; renfort d'un 6e
+traînard → accepté jusqu'au plafond (`tierIdx+3=6`), PV remontant en
+même temps (régénération bien indexée sur `soldiers.length`) ; 6
+coups de sortie successifs → un soldat retiré à chaque fois,
+disparition de l'engin + or gagné exactement au 6e coup (0 soldat
+restant). Capture d'écran en mode Filaire (le défaut) : les petites
+silhouettes individuelles sont bien visibles, groupées autour de
+l'icône de l'engin, distinctes du fond. Tentative de vérifier aussi en
+style Couleur via `localStorage` — sans effet, le chargement au
+démarrage n'accepte que 'phosphore'/'filaire' (Couleur volontairement
+mis en pause depuis une consigne antérieure, voir plus haut dans ce
+fichier) ; pas re-testé plus loin, le rendu Filaire suffit à confirmer
+visuellement le comportement. Aucune erreur console. 8 vagues forcées
+en rafale en jeu normal sans erreur non plus (régression générale).

@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.84</button>
+  <button id="versionBtn">v0.85</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.85</b> — les engins de siège ont maintenant un vrai équipage de soldats individuels visibles (postés autour de l'engin, se balançant sur place), plutôt qu'une simple rangée de pips abstraite — la sortie les abat toujours un par un</div>
   <div><b>v0.84</b> — nouvelle section "Astuces" dans le menu : explique toutes les mécaniques du jeu avec les vrais chiffres (dégâts, coûts, seuils, timings), en français et en anglais</div>
   <div><b>v0.83</b> — les ennemis aussi peuvent boire à la fontaine pour se soigner (rare, un détour risqué) : nouveau 5e palier de la zone sacrée de l'église qui s'étend jusqu'à la fontaine pour vraiment menacer ce détour ; le premier palier de la zone se débloque maintenant en priant le prêtre dans le donjon, plutôt qu'en touchant l'église dehors</div>
   <div><b>v0.82</b> — fontaine-soin : affaibli en sortie, le seigneur se précipite se soigner à la fontaine du village plutôt que de continuer à se battre — un vrai choix tactique, s'éloigner du combat pour survivre</div>
@@ -3037,19 +3038,30 @@
   // and top it out at 3; same +1 pattern for every tier)
   function siegeCrewCap(tierIdx) { return tierIdx + 3; }
 
+  // vrais soldats individuels (task 10, "ça doit grouiller de vie") : chaque
+  // membre d'équipage est une entrée à part (position locale + phase
+  // d'animation propre) plutôt qu'un simple compteur — se.crew devient
+  // se.soldiers.length partout. da/dr placent le soldat autour du centre de
+  // l'engin (coordonnées polaires locales), seed anime son balancement sur
+  // place (même langage que drawVillager) sans qu'il ait besoin de vraiment
+  // se déplacer.
+  function makeSiegeSoldier() {
+    return { da: Math.random() * Math.PI * 2, dr: 5 + Math.random() * 7, seed: Math.random() * 100 };
+  }
+
   function clusterSiegeEngines() {
     // stalled soldiers near an existing, not-yet-full engine reinforce its
     // crew instead of only ever founding brand new ones — a straggler that
     // arrives late still has something useful to do
     for (const se of state.siegeEngines) {
       const cap = siegeCrewCap(se.tierIdx);
-      if (se.crew >= cap) continue;
+      if (se.soldiers.length >= cap) continue;
       const sx = se.r * Math.cos(se.angle), sz = se.r * Math.sin(se.angle);
       for (const e of state.enemies) {
-        if (se.crew >= cap) break;
+        if (se.soldiers.length >= cap) break;
         if (e.dead || e.state !== 'attackBase') continue;
         const ex = e.r * Math.cos(e.angle), ez = e.r * Math.sin(e.angle);
-        if (Math.hypot(sx - ex, sz - ez) < SIEGE_GROUP_RADIUS) { e.dead = true; se.crew++; }
+        if (Math.hypot(sx - ex, sz - ez) < SIEGE_GROUP_RADIUS) { e.dead = true; se.soldiers.push(makeSiegeSoldier()); }
       }
     }
 
@@ -3075,7 +3087,8 @@
       // only as many as fit as crew are actually absorbed — any extra
       // stragglers in the same spot stay regular attackBase enemies rather
       // than vanishing for nothing
-      for (let i = 0; i < crew; i++) group[i].dead = true;
+      const soldiers = [];
+      for (let i = 0; i < crew; i++) { group[i].dead = true; soldiers.push(makeSiegeSoldier()); }
       ax /= group.length; az /= group.length;
       const angle = Math.atan2(az, ax);
       // trébuchet/bélier se fabriquent loin du donjon plutôt que collés au
@@ -3086,7 +3099,7 @@
       const r = (tier.ranged || tier.crawl) ? SIEGE_RANGED_R : Math.hypot(ax, az);
       state.siegeEngines.push({
         angle, r,
-        tierIdx, crew, hp: tier.hp, maxHp: tier.hp, atkTimer: tier.cooldown, growH: 0
+        tierIdx, soldiers, hp: tier.hp, maxHp: tier.hp, atkTimer: tier.cooldown, growH: 0
       });
     }
   }
@@ -4260,11 +4273,13 @@
             // équipage vivant: sortie kills crew one at a time, not a
             // shared hp pool — ranged fire alone only chips hp, and living
             // crew heals it right back (see the regen in the enemies
-            // loop), so this is the only thing that actually ends one
-            sortieTarget.crew = Math.max(0, sortieTarget.crew - hitMul);
+            // loop), so this is the only thing that actually ends one.
+            // vrais soldats individuels : chaque coup retire réellement des
+            // entrées du tableau plutôt que de décrémenter un compteur
+            sortieTarget.soldiers.splice(0, hitMul);
             spawnBurst(sortieTarget.r * Math.cos(sortieTarget.angle), 0,
               sortieTarget.r * Math.sin(sortieTarget.angle), 'smoke');
-            if (sortieTarget.crew <= 0) {
+            if (sortieTarget.soldiers.length <= 0) {
               state.siegeEngines = state.siegeEngines.filter(s => s !== sortieTarget);
               state.gold += 5;
               goldNum.textContent = state.gold;
@@ -4710,7 +4725,7 @@
       // there, they patch it back up — fast enough that ranged fire alone
       // (floored above, never actually finishes it) barely dents the
       // *effective* hp over time. Only killing the crew via sortie matters.
-      if (s.crew > 0 && s.hp < s.maxHp) s.hp = Math.min(s.maxHp, s.hp + SIEGE_HP_REGEN_PER_CREW * s.crew * dt);
+      if (s.soldiers.length > 0 && s.hp < s.maxHp) s.hp = Math.min(s.maxHp, s.hp + SIEGE_HP_REGEN_PER_CREW * s.soldiers.length * dt);
       if (tier.isTower) {
         s.growH = Math.min(TOWER_MAX_H, s.growH + TOWER_GROW_RATE * dt);
         if (s.growH < TOWER_DANGER_H) continue;
@@ -6540,18 +6555,21 @@
     ctx.fillStyle = '#c9503f';
     ctx.fillRect(pos.x - rad, pos.y - rad - 8, rad * 2 * Math.max(0, s.hp / s.maxHp), 3);
 
-    // équipage vivant: a small pip row above the bar shows how many crew
-    // are still inside — makes it visible *why* the bar keeps refilling
-    // instead of it just looking broken, and gives the sortie a clear
-    // headcount to work through
-    const cap = siegeCrewCap(s.tierIdx);
-    const pipR = 2.2 * scale, gap = 6 * scale;
-    const startX = pos.x - ((cap - 1) * gap) / 2;
-    for (let i = 0; i < cap; i++) {
-      ctx.beginPath();
-      ctx.arc(startX + i * gap, pos.y - rad - 14, pipR, 0, Math.PI * 2);
-      ctx.fillStyle = i < s.crew ? '#e8d9a0' : 'rgba(255,255,255,0.25)';
-      ctx.fill();
+    // vrais soldats individuels (task 10) : l'équipage n'est plus une
+    // rangée de pips abstraite au-dessus de la barre, mais de vrais petits
+    // soldats (même langage visuel que drawEnemy, en plus petit) postés
+    // autour de l'engin, avec un léger balancement sur place (comme
+    // drawVillager) — ça "grouille de vie" sans qu'ils aient besoin de se
+    // déplacer réellement. Chacun est aussi ce que la sortie retire un par
+    // un (voir soldiers.splice côté sortie).
+    const sRad = 5 * scale;
+    for (const sol of s.soldiers) {
+      const bob = Math.sin(state.time * 3 + sol.seed) * 1.2;
+      const sway = Math.sin(state.time * 1.3 + sol.seed * 1.7) * 1.5;
+      const lx = x + Math.cos(sol.da) * (sol.dr + sway);
+      const lz = z + Math.sin(sol.da) * (sol.dr + sway);
+      const spos = project(lx, 1.5 + bob, lz, rot);
+      drawBallSprite('siegeSoldier', sRad, '#e8d9a0', '#5a4a28', spos);
     }
   }
 
