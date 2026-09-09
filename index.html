@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.88</button>
+  <button id="versionBtn">v0.89</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.89</b> — la prière au prêtre est maintenant gratuite et répétable (soin complet immédiat + bonus de résistance de 100% pendant 30s, 45s de délai) ; le palier 1 de la zone d'église redevient un achat normal dehors. Corrige aussi : les fenêtres du moulin/de l'église pouvaient se refermer accidentellement en cliquant près du bouton</div>
   <div><b>v0.88</b> — correctif du v0.87 : la neige avait une direction correcte mais restait figée à l'écran pendant la rotation de caméra (une pause visible) ; elle a maintenant une vraie position dans le monde, comme n'importe quel décor, et tourne avec la caméra sans à-coup</div>
   <div><b>v0.87</b> — la neige tombait toujours tout droit vers le bas de l'écran, vers le joueur, quelle que soit l'orientation de la caméra ; elle suit maintenant le sens réel du courant du ruisseau, et tourne avec la caméra plutôt que de rester figée à l'écran</div>
   <div><b>v0.86</b> — rentabilité : détruire un engin de siège rapportait un forfait fixe (5 or) qu'il ait 2 ou 6 soldats à bord ; chaque soldat abattu en sortie rapporte maintenant 1 or, immédiatement, comme n'importe quel ennemi — plus un bonus de 3 or au coup de grâce</div>
@@ -710,10 +711,12 @@
       <p>30 or de départ, ×1.35 de coût et de revenu par niveau, versé toutes les 5s, 6 paliers au maximum.</p>
 
       <h3>La zone sacrée de l'église</h3>
-      <p>Le premier palier (25 or) se débloque en allant prier le prêtre dans le donjon (bouton 🔥, en bas à droite) — pas en touchant l'église elle-même.</p>
-      <p>Les paliers suivants (55 / 100 / 180 / 320 or) s'achètent ensuite dehors, en touchant l'église.</p>
+      <p>Les 5 paliers (25 / 55 / 100 / 180 / 320 or) s'achètent en touchant l'église, dehors — augmenter la puissance de l'église est payant, prier ne l'est pas (voir le prêtre ci-dessous).</p>
       <p>Un ennemi qui entre dans la zone perd la moitié de sa vie maximum ; s'il en ressort puis y revient, il perd l'autre moitié — deux passages suffisent toujours à le tuer, jamais plus.</p>
       <p>Au 5e palier, la zone s'étend jusqu'à la fontaine du village — de quoi menacer les ennemis qui viendraient s'y soigner (voir plus bas).</p>
+
+      <h3>Le prêtre</h3>
+      <p>Dans le donjon (bouton 🔥, en bas à droite) : une prière GRATUITE et répétable — n'a rien à voir avec l'achat des paliers de l'église ci-dessus. Soigne instantanément le seigneur et la princesse au maximum, et donne au seigneur un bonus de résistance de 100% (moitié des dégâts encaissés) pendant 30 secondes. 45 secondes de délai avant la prière suivante.</p>
 
       <h3>La fontaine</h3>
       <p>Le seigneur, en sortie, sous 35% de ses PV, se précipite s'y soigner en priorité — même avant un combat en cours. 4 secondes pour un plein depuis 0 PV.</p>
@@ -771,10 +774,12 @@
       <p>30 gold to start, ×1.35 cost and income per level, paid out every 5s, 6 levels max.</p>
 
       <h3>The church's sacred ground</h3>
-      <p>The first tier (25 gold) unlocks by going to pray with the priest inside the donjon (🔥 button, bottom right) — not by touching the church itself.</p>
-      <p>Further tiers (55 / 100 / 180 / 320 gold) are then bought outside, by touching the church.</p>
+      <p>All 5 tiers (25 / 55 / 100 / 180 / 320 gold) are bought by touching the church, outside — upgrading the church's power costs gold, praying doesn't (see the priest below).</p>
       <p>An enemy entering the zone loses half its maximum HP; if it leaves and comes back in, it loses the other half — always exactly two passes to kill it, never more.</p>
       <p>At tier 5, the zone stretches all the way to the village fountain — threatening enemies who'd try to heal there (see below).</p>
+
+      <h3>The priest</h3>
+      <p>Inside the donjon (🔥 button, bottom right): a FREE, repeatable prayer — unrelated to buying the church's tiers above. Instantly heals the lord and the princess to full, and gives the lord a 100% resistance bonus (half the damage taken) for 30 seconds. 45 seconds before the next prayer.</p>
 
       <h3>The fountain</h3>
       <p>The lord, while sallying, below 35% HP, rushes there to heal first — even ahead of an ongoing fight. 4 seconds for a full heal from 0 HP.</p>
@@ -859,8 +864,7 @@
       moulin_max: 'Moulin au maximum',
       eglise_btn_start: 'Bénir le terrain', eglise_btn_upgrade: 'Agrandir la zone sacrée',
       eglise_max: 'Zone sacrée au maximum',
-      eglise_pray_first: "Va d'abord prier au donjon",
-      priest_pray: 'Prier', priest_done: 'Terrain déjà béni',
+      priest_pray: 'Prier',
       faq_btn: 'Astuces',
       restart_full: 'Recommencer depuis le début',
       difficulty_prefix: 'Difficulté : ',
@@ -895,8 +899,7 @@
       moulin_max: 'Mill maxed out',
       eglise_btn_start: 'Bless the ground', eglise_btn_upgrade: 'Expand the sacred ground',
       eglise_max: 'Sacred ground maxed out',
-      eglise_pray_first: 'Go pray at the donjon first',
-      priest_pray: 'Pray', priest_done: 'Ground already blessed',
+      priest_pray: 'Pray',
       faq_btn: 'Tips',
       restart_full: 'Restart from the beginning',
       difficulty_prefix: 'Difficulty: ',
@@ -2466,6 +2469,8 @@
       wanderTimer: 2, wanderTarget: DOOR_ANGLE
     }, // 0 = up on the platform, 1 = down in the garden
     princessDead: false,
+    prayerBuffTimer: 0,  // >0 tant que le bonus de défense de la prière est actif
+    prayerCooldown: 0,   // >0 tant que la prière suivante n'est pas encore disponible
     repairHeld: false, // true while the Réparer button is pressed and held
     sortieHeld: false, // true while the Sortie button is pressed and held
     // calin (hug): held while the Descendre/Remonter button is held down
@@ -3041,7 +3046,11 @@
 
   function hurtPlayer(n) {
     const p = state.player;
-    p.hp -= n;
+    // prière (task 12, consigne du 2026-09-09) : bonus de résistance
+    // temporaire — "100% de bonus de défense" pris au sens propre, moitié
+    // des dégâts encaissés tant que le bonus est actif
+    const mul = state.prayerBuffTimer > 0 ? PRAYER_DEF_MUL : 1;
+    p.hp -= n * mul;
     if (p.hp <= 0) showGameOver(t('gameover_fell') + state.wave);
   }
 
@@ -3392,9 +3401,22 @@
   function toScreen(p) { return { x: camPanX + p.x * camZoom, y: camPanY + p.y * camZoom }; }
 
   // boutons flottants ancrés à un bâtiment du monde (voir #moulinBtn dans
-  // le HTML) — un vrai tap sur le bâtiment bascule sa visibilité ; la
+  // le HTML) — un vrai tap sur le bâtiment OUVRE sa fenêtre d'achat ; la
   // position (left/top) est recalculée chaque frame dans render() tant
   // qu'il est visible, pour suivre la rotation de la caméra.
+  //
+  // signalé en session (2026-09-09) : c'était un BASCULE (toggle) avant —
+  // un tap sur le bâtiment fermait la fenêtre si elle était déjà ouverte.
+  // Problème concret : le bouton flottant est positionné pile au-dessus
+  // du bâtiment (voir .worldBtn, translate(-50%,-100%)) — donc un tap qui
+  // rate légèrement le petit bouton (visant pourtant "à côté" de lui, pas
+  // sur le bâtiment) retombe souvent sur le canevas juste en dessous,
+  // encore dans le rayon de détection du bâtiment, et refermait la
+  // fenêtre sans que ce soit voulu. Un tap sur le bâtiment n'ouvre plus
+  // que la fenêtre désormais (jamais ne la referme) — elle reste
+  // affichée tant qu'elle a quelque chose à proposer (prix/état déjà mis
+  // à jour chaque frame, voir refreshBuyButtons()), pas besoin de la
+  // refermer pour que le jeu reste jouable.
   const moulinBtn = document.getElementById('moulinBtn');
   let moulinBtnVisible = false;
   const WORLD_TAP_RADIUS = 42; // rayon de détection du tap sur un bâtiment, en pixels écran
@@ -3404,14 +3426,14 @@
     const m = moulinGeometry();
     const mPos = toScreen(project(m.houseX, 10, m.houseZ, rot));
     if (Math.hypot(clientX - mPos.x, clientY - mPos.y) < tapR) {
-      moulinBtnVisible = !moulinBtnVisible;
+      moulinBtnVisible = true;
       updateMoulinBtn();
       return; // un seul bâtiment à la fois — pas la peine de tester l'église si le moulin a déjà pris le tap
     }
     if (EGLISE_EXTRA) {
       const ePos = toScreen(project(EGLISE_EXTRA.x, 20, EGLISE_EXTRA.z, rot));
       if (Math.hypot(clientX - ePos.x, clientY - ePos.y) < tapR) {
-        egliseBtnVisible = !egliseBtnVisible;
+        egliseBtnVisible = true;
         updateEgliseBtn();
       }
     }
@@ -3444,32 +3466,27 @@
 
   const egliseBtn = document.getElementById('egliseBtn');
   let egliseBtnVisible = false;
+  // prière gratuite (task 12, consigne du 2026-09-09) : "prier ne coûte
+  // rien, payer sert à AUGMENTER LA PUISSANCE de l'église, c'est
+  // différent" — le palier 1 redevient un achat normal ici, comme les
+  // paliers suivants (annule le détour v0.83 qui le remplaçait par la
+  // prière ; le prêtre fait maintenant tout autre chose, voir plus bas).
   function updateEgliseBtn() {
     if (!egliseBtnVisible) { egliseBtn.hidden = true; return; }
     egliseBtn.hidden = false;
-    // le 1er palier se débloque désormais au prêtre, dans le donjon (voir
-    // priestBtn plus bas) — le bouton dehors reste visible au tap (pour
-    // ne pas dérouter le joueur qui touche l'église) mais n'achète plus
-    // rien tant que ce n'est pas fait, juste un rappel désactivé
-    if (state.egliseZoneLevel === 0) {
-      egliseBtn.textContent = t('eglise_pray_first');
-      egliseBtn.classList.remove('unaffordable');
-      egliseBtn.disabled = true;
-      return;
-    }
     if (state.egliseZoneLevel >= EGLISE_ZONE_TIERS.length) {
       egliseBtn.textContent = t('eglise_max');
       egliseBtn.classList.remove('unaffordable');
       egliseBtn.disabled = true;
     } else {
       const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
-      egliseBtn.textContent = affordText(t('eglise_btn_upgrade'), cost);
+      const label = state.egliseZoneLevel === 0 ? t('eglise_btn_start') : t('eglise_btn_upgrade');
+      egliseBtn.textContent = affordText(label, cost);
       egliseBtn.classList.toggle('unaffordable', state.gold < cost);
       egliseBtn.disabled = false;
     }
   }
   egliseBtn.addEventListener('click', () => {
-    if (state.egliseZoneLevel === 0) return; // faut d'abord prier au donjon
     if (state.egliseZoneLevel >= EGLISE_ZONE_TIERS.length) return;
     const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
     if (state.gold < cost) return;
@@ -3481,11 +3498,15 @@
   });
 
   // le prêtre, dans le donjon (voir cosyPerson(PRIEST_X,PRIEST_Z,...) dans
-  // renderCosyScene) : seul moyen de débloquer le 1er palier de la zone
-  // sacrée — les paliers suivants restent achetés dehors, sur l'église
-  // elle-même, comme avant (confirmé par Pierre). Bouton flottant
-  // repositionné dans updatePriestBtn (repère du canvas cosy, pas
-  // project()/rot du monde extérieur — la scène cosy ne tourne jamais).
+  // renderCosyScene) : une prière GRATUITE et répétable — plus un moyen
+  // d'acheter quoi que ce soit (ça, c'est le rôle d'egliseBtn dehors,
+  // ci-dessus). Soigne le seigneur et la princesse au maximum d'un coup,
+  // et donne un bonus de résistance temporaire au seigneur (voir
+  // hurtPlayer/PRAYER_DEF_MUL) — un cooldown (PRAYER_COOLDOWN, plus long
+  // que la durée du bonus) empêche d'enchaîner les prières pour garder le
+  // bonus actif en continu ; pas demandé explicitement mais nécessaire —
+  // sans lui, entrer/sortir du donjon en boucle rendrait le seigneur
+  // quasi invulnérable en permanence, gratuitement.
   const priestBtn = document.getElementById('priestBtn');
   function updatePriestBtn() {
     if (cosyOverlay.hidden) { priestBtn.hidden = true; return; }
@@ -3494,27 +3515,23 @@
     const pos = cosyIso(PRIEST_X, 0.9, PRIEST_Z); // un peu au-dessus de sa tête
     priestBtn.style.left = (rect.left + pos.x * (rect.width / COSY_W)) + 'px';
     priestBtn.style.top = (rect.top + pos.y * (rect.height / COSY_H)) + 'px';
-    if (state.egliseZoneLevel >= 1) {
-      priestBtn.textContent = t('priest_done');
-      priestBtn.classList.remove('unaffordable');
+    priestBtn.classList.remove('unaffordable'); // gratuite : jamais grisée pour manque d'or
+    if (state.prayerCooldown > 0) {
+      priestBtn.textContent = `${t('priest_pray')} (${Math.ceil(state.prayerCooldown)}s)`;
       priestBtn.disabled = true;
     } else {
-      const cost = EGLISE_ZONE_TIERS[0].cost;
-      priestBtn.textContent = affordText(t('priest_pray'), cost);
-      priestBtn.classList.toggle('unaffordable', state.gold < cost);
+      priestBtn.textContent = t('priest_pray');
       priestBtn.disabled = false;
     }
   }
   priestBtn.addEventListener('click', () => {
-    if (state.egliseZoneLevel >= 1) return;
-    const cost = EGLISE_ZONE_TIERS[0].cost;
-    if (state.gold < cost) return;
-    state.gold -= cost;
-    goldNum.textContent = state.gold;
-    state.egliseZoneLevel = 1;
+    if (state.prayerCooldown > 0) return;
+    state.player.hp = state.player.maxHp;
+    if (!state.princessDead) state.princess.hp = state.princess.maxHp;
+    state.prayerBuffTimer = PRAYER_BUFF_DURATION;
+    state.prayerCooldown = PRAYER_COOLDOWN;
     playHammer();
     updatePriestBtn();
-    updateEgliseBtn(); // au cas où le bouton dehors serait déjà affiché
   });
 
   // ---- UI ----
@@ -3775,6 +3792,15 @@
   // l'arche éclairée (x=3.3, z=0), décalé en z pour ne pas être dans
   // l'arche elle-même ni gêner les tonneaux (5.6,1.4)/(6.3,2.1)
   const PRIEST_X = 3.3, PRIEST_Z = 1.8;
+  // prière gratuite (task 12) : "100% de bonus de défense" pris au sens
+  // propre (moitié des dégâts encaissés — voir hurtPlayer), pendant
+  // PRAYER_BUFF_DURATION ("une vague ou deux" en début de partie, valeur
+  // au jugé). Cooldown strictement plus long que le bonus lui-même —
+  // sinon rien n'empêcherait de le garder actif en continu, gratuitement,
+  // simplement en re-priant dès qu'il retombe.
+  const PRAYER_DEF_MUL = 0.5;
+  const PRAYER_BUFF_DURATION = 30;
+  const PRAYER_COOLDOWN = 45;
   const CHESS_CX = 5.9, CHESS_CZ = 4.3, CHESS_Y = 0.16;
   const CHESS_HALF_W = 0.42, CHESS_HALF_D = 0.3;
   function drawChessBoard() {
@@ -4047,6 +4073,9 @@
     const p = state.player;
 
     state.time += dt; // horloge simple, réutilisée par l'animation de l'eau (voir drawWaterGlints)
+
+    if (state.prayerBuffTimer > 0) state.prayerBuffTimer = Math.max(0, state.prayerBuffTimer - dt);
+    if (state.prayerCooldown > 0) state.prayerCooldown = Math.max(0, state.prayerCooldown - dt);
 
     updateVillagers(dt); // mécanique des paysans, voir plus haut
 
@@ -4734,8 +4763,7 @@
           const lx = e.r * Math.cos(e.angle), lz = e.r * Math.sin(e.angle);
           const def = nearestDefender(lx, lz);
           if (def.type === 'player') {
-            p.hp -= 1;
-            if (p.hp <= 0) showGameOver(t('gameover_fell') + state.wave);
+            hurtPlayer(1); // centralisé — voir le bonus de défense de la prière
           } else {
             def.ref.hp -= 2;
           }

@@ -3019,3 +3019,86 @@ texte exact). Mécaniques prévues :
 Tout ce lot est noté maintenant, rien perdu — j'attaque les items
 bornés (2, 3, 4) en premier, le lot 1 (chemins) en chantier séparé
 juste après, le lot 5 (maison + IA villageois dédiée) à la suite.
+
+## Item 4 : popups moulin/église ne se ferment plus au clic à côté → fait
+en v0.89
+
+**Diagnostic** : `handleCanvasTap()` faisait un vrai BASCULE (toggle) —
+un tap sur le bâtiment fermait la fenêtre si elle était déjà ouverte.
+Le bouton flottant (`#moulinBtn`/`#egliseBtn`) est positionné pile
+au-dessus du bâtiment (`.worldBtn`, `translate(-50%,-100%)`). Un tap
+qui vise "à côté" du petit bouton mais rate légèrement retombe
+souvent sur le CANEVAS juste en dessous, encore dans le rayon de
+détection (`WORLD_TAP_RADIUS=42px × zoom`) du bâtiment — ce qui
+redéclenchait le bascule et refermait la fenêtre sans que ce soit
+voulu. Exactement le symptôme décrit par Pierre.
+
+**Fait** : un tap sur le bâtiment n'ouvre plus JAMAIS ne referme la
+fenêtre — `moulinBtnVisible`/`egliseBtnVisible` passent de `!x` (bascule)
+à `true` (ouverture pure, idempotente). Une fois ouverte, la fenêtre
+reste affichée en permanence (prix/état déjà rafraîchis chaque frame
+par `refreshBuyButtons()`) — pas besoin de la refermer pour que le jeu
+reste jouable, et c'est même un peu plus pratique (affordabilité
+visible en permanence, comme un bouton d'achat classique de jeu de
+gestion).
+
+Vérifié en Playwright avec des hooks de debug temporaires (retirés
+avant commit) : tap sur le moulin → ouvert ; un 2e tap AU MÊME endroit
+(le cas exact du bug) → toujours ouvert, pas refermé ; un tap loin de
+tout bâtiment → toujours ouvert. Aucune erreur console.
+
+## Item 3 : prière gratuite (soin + bonus de résistance temporaire),
+achat du palier 1 de l'église redevient payant dehors → fait en v0.89
+
+Consigne explicite : "prier ne coûte rien — payer sert à AUGMENTER LA
+PUISSANCE de l'église, c'est différent." Annule le détour de v0.83
+(la prière remplaçait l'achat du palier 1) : les DEUX mécaniques sont
+maintenant bien séparées.
+
+**Prière** (`priestBtn`, dans le donjon) : gratuite, répétable. Un
+clic soigne instantanément le seigneur ET la princesse (si vivante) au
+maximum, et pose `state.prayerBuffTimer = 30s` — pendant ce temps,
+`hurtPlayer()` applique `PRAYER_DEF_MUL = 0.5` à tous les dégâts subis
+par le seigneur ("100% de bonus de défense" pris au sens propre :
+moitié des dégâts encaissés). `state.prayerCooldown = 45s` empêche de
+répéter la prière avant ce délai.
+
+**Choix non explicitement demandé, tranché moi-même** : le cooldown de
+45s (strictement plus long que les 30s du buff). Sans lui, rien
+n'empêchait d'entrer/ressortir du donjon en boucle pour garder le
+bonus actif en continu, gratuitement — le jeu ne se met pas en pause
+pendant que la scène du donjon est ouverte (vérifié dans `loop()` :
+`update(dt)` tourne sans interruption), donc c'était un vrai risque de
+rendre le seigneur quasi invulnérable pour zéro coût. Durées (30s/45s)
+choisies au jugé pour correspondre à "une vague ou deux" en early-game
+— faciles à retoucher si le retour en jeu dit que c'est trop fort/trop
+faible.
+
+**Bonus de défense appliqué au seigneur seulement, pas à la
+princesse** : elle ne prend jamais de dégâts progressifs (juste un
+déclencheur de mort instantanée à moins de 18 unités, voir
+`PRINCESS_DANGER_R`) — "bonus de résistance" n'a donc pas de sens
+mécanique pour elle. Le soin instantané, lui, s'applique bien aux
+deux (même geste que le câlin, qui soignait déjà les deux ensemble).
+
+**Nettoyage fait dans le même commit** (même mécanique touchée) : la
+duplication de code qui infligeait des dégâts au seigneur hors de
+`hurtPlayer()` (le coup direct d'un ennemi monté sur la plate-forme)
+a été routée à travers `hurtPlayer()` — sinon le bonus de défense
+aurait été ignoré pour cette seule source de dégâts, un bug silencieux
+facile à rater. Clés i18n mortes retirées (`eglise_pray_first`,
+`priest_done`), `eglise_btn_start` ("Bénir le terrain", clé existante
+mais plus utilisée depuis v0.83) réactivée pour le palier 1. Section
+Astuces mise à jour (FR/EN) : nouvelle sous-section "Le prêtre",
+zone d'église simplifiée (les 5 paliers achetés pareil, dehors).
+
+Vérifié en Playwright avec des hooks de debug temporaires (retirés
+avant commit, `grep -c "__DEBUG_"` revenu à 1) : prière avec PV bas →
+soin complet, or inchangé, buff+cooldown posés ; re-clic (forcé,
+Playwright refuse de cliquer un vrai bouton `disabled`, ce qui
+confirme déjà que l'UI bloque bien le spam) pendant le cooldown →
+aucun soin, comme attendu ; `hurtPlayer(2)` pendant le buff → -1 PV
+seulement (0.5×2), confirmant le multiplicateur ; achat direct du
+palier 1 de l'église (tap sur l'église, sans passer par le prêtre) →
+accepté immédiatement, -25 or, libellé "Bénir le terrain" puis
+"Agrandir la zone sacrée" ensuite. Aucune erreur console.
