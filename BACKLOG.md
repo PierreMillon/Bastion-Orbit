@@ -1815,7 +1815,7 @@ avant que le script n'atteigne leur ancien emplacement plus bas).
 Vérifié en Playwright : balayage de 24 angles de caméra, aucune erreur
 console.
 
-## Le ruisseau devient infranchissable, sauf au pont ("très important") → fait en v0.68 (ennemis) ; joueur pas encore couvert
+## Le ruisseau devient infranchissable, sauf au pont ("très important") → fait en v0.68 (ennemis), v0.76 (joueur)
 
 Signalé "très important" : "le cours d'eau est beaucoup trop rapide,
 personne ne peut le traverser, il faut absolument passer par le pont."
@@ -1847,11 +1847,8 @@ contre au moins 1 avec la première version. Capture visuelle : les
 ennemis s'agglutinent bien le long de la berge/route vers le pont
 plutôt que de traverser n'importe où. Aucune erreur console.
 
-Pas fait : le joueur (sortie) n'est pas encore soumis à la même
-contrainte — son modèle de mouvement (lissage vers une cible, pas un
-simple décrément radial comme les ennemis) demanderait une intégration
-plus soignée, mise de côté pour ne pas risquer de casser le mouvement
-de sortie existant sans temps de test dédié. Noté pour plus tard.
+Joueur : voir plus bas ("→ fait en v0.76") pour l'extension au seigneur
+et les deux vrais bugs supplémentaires trouvés en l'implémentant.
 
 ## Zone sacrée de l'église (3e des 6 gros chantiers) → fait en v0.70
 
@@ -2060,3 +2057,76 @@ visible. Aucune erreur console.
 
 À corriger si l'intention réelle de Pierre était différente — la
 formulation d'origine reste ambiguë malgré cette interprétation.
+
+## Le ruisseau infranchissable s'applique maintenant aussi au seigneur → fait en v0.76
+
+Reprise du "Pas fait" laissé en v0.68 : `avoidStream(e, dt)` ne
+bloquait que les ennemis, pas le joueur en sortie. Appliquée telle
+quelle au joueur (`avoidStream(p, dt)` dans la même section du
+mouvement, juste après le lissage de `p.r`) — deux vrais bugs trouvés
+en la testant sérieusement (traces image par image via hooks de debug
+temporaires, jamais supposé que ça marchait sans mesurer) :
+
+**Bug n°1 — tunnel en un seul pas.** Le test "suis-je dans l'eau
+maintenant ?" est un test PONCTUEL : à faible fréquence d'image (`dt`
+plafonné à 0.05s dans `loop()`) ou juste un mouvement rapide
+(`ANGLE_SPEED=1.6rad/s` à rayon ~300 fait jusqu'à ~24 unités/frame de
+déplacement tangentiel), un seul pas de mouvement peut traverser toute
+la largeur bloquée (~34 unités) sans que `perp` ne soit JAMAIS mesuré
+à l'intérieur entre les deux frames — invisible pour un test ponctuel.
+Fix : `e.streamSide` mémorise de quel côté l'entité était classée la
+dernière fois qu'elle était loin de l'eau ; si le côté a changé pendant
+qu'elle est encore hors du couloir du pont, c'est qu'elle vient de
+traverser en un pas — renvoyée du côté d'où elle venait plutôt que
+d'accepter sa nouvelle position (vraie détection de collision balayée,
+pas un test ponctuel). Ce bug touchait aussi la version ennemis
+existante depuis v0.68 (même fonction partagée), simplement jamais
+observé là car leur mouvement par frame est bien plus petit.
+
+**Bug n°2 — la garde `if (p.groundPos > 0.5)` coupait la protection
+en pleine traversée.** L'appel à `avoidStream` pour le joueur était
+gardé par `p.groundPos > 0.5` (l'idée : sur la plateforme, `p.r` reste
+près de `PLAYER_R`, jamais assez près du ruisseau pour compter). Mais
+`groundPos` s'apaise vers 0 dès que `p.behavior` redevient `'combat'`
+(retour vers la plateforme) — ce qui peut arriver AVANT que `p.r` soit
+réellement redescendu près de la plateforme, en particulier si le
+joueur relâche la sortie en pleine traversée du ruisseau. Résultat
+mesuré : le joueur glissait alors librement à travers l'eau, `perp`
+descendant continûment de +37 à -13 sans aucune correction, la
+protection s'étant simplement arrêtée en chemin. Fix : suppression
+totale de la garde, `avoidStream(p, dt)` appelé à chaque frame comme
+pour les ennemis (aucune régression : à rayon proche de `PLAYER_R` la
+position n'est de toute façon jamais près du ruisseau, donc l'appel
+est un no-op inoffensif dans ce cas).
+
+**Piège de méthodologie de test rencontré en chemin** (gardé en note
+pour la prochaine fois) : mon premier test forçait `p.r`/`p.angle`
+dans l'eau et `p.behavior='sortie'` SANS `state.sortieHeld=true` — or
+`p.behavior` est recalculé CHAQUE frame à partir des drapeaux d'entrée
+en direct (pas persisté), donc dès la frame suivante il retombait à
+`'combat'`/retour plateforme, rendant le test non représentatif (même
+résultat avant/après un vrai fix, suggérant à tort que le fix ne
+servait à rien). Corrigé en donnant une vraie cible de sortie
+(`wanderAngle`/`wanderR` de l'autre côté du ruisseau, `sortieHeld=true`)
+pour le scénario réaliste, ET en gardant un hook séparé pour le cas
+limite (sortie relâchée en pleine traversée) qui a justement révélé le
+bug n°2 ci-dessus — les deux scénarios comptent.
+
+Vérifié en Playwright, deux scénarios distincts :
+- Sortie tenue avec vraie cible en face : 91 échantillons sur 1.5s,
+  0 violation, `perp` reste épinglé exactement à ±17 (la limite de
+  berge) pendant toute la traversée vers le pont.
+- Sortie relâchée en pleine traversée (le cas qui a révélé le bug
+  n°2) : 91 échantillons sur 1.5s, 0 violation après le double fix
+  (contre une vraie brèche mesurée avant : `perp≈-0.8` à `d≈-80`, en
+  plein milieu de l'eau, hors du couloir du pont).
+- Non-régression côté ennemis (fonction partagée touchée) : 28
+  échantillons sur ~20s de jeu avec vagues forcées, 0 violation —
+  toujours bloqués comme en v0.68.
+- Balayage d'erreurs console général : aucune erreur (hors un 404
+  réseau déjà présent avant ce changement, sans rapport).
+
+Tous les hooks de debug temporaires (`__DEBUG_FORCE_PLAYER_INTO_STREAM`,
+`__DEBUG_FORCE_PLAYER_INTO_STREAM_UNHELD`, `__DEBUG_STREAM_CHECK`,
+`__DEBUG_PLAYER_STREAM_PERP`, `__DEBUG_TRACE_PLAYER_STREAM`) retirés
+avant ce commit.

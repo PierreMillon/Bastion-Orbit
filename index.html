@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.75</button>
+  <button id="versionBtn">v0.76</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.76</b> — le cours d'eau est maintenant infranchissable pour le seigneur aussi (pas seulement les ennemis) : seul le pont permet de passer d'une rive à l'autre</div>
   <div><b>v0.75</b> — une grange au loin, plus loin le long du ruisseau que le moulin, pour ancrer visuellement la continuité de l'eau vers le bord de la carte</div>
   <div><b>v0.74</b> — zoom pincé à deux doigts : ancré sur le point pincé, reste zoomé au relâchement, la rotation continue de fonctionner normalement pendant qu'on est zoomé</div>
   <div><b>v0.73</b> — un vrai échiquier 8x8 dans la scène cosy, à la table où le seigneur et la princesse se retrouvent déjà près du feu</div>
@@ -2750,22 +2751,39 @@
     const x = e.r * Math.cos(e.angle), z = e.r * Math.sin(e.angle);
     const dx = x - g.cx, dz = z - g.cz;
     let d = dx * g.tx + dz * g.tz; // ≈ position le long du courant
-    if (Math.abs(d) < BRIDGE_SPAN_HALF + STREAM_AVOID_MARGIN) return; // couloir du pont : on laisse passer
+    if (Math.abs(d) < BRIDGE_SPAN_HALF + STREAM_AVOID_MARGIN) { e.streamSide = undefined; return; } // couloir du pont : on laisse passer, oublie le côté mémorisé
     const p0 = streamPointAt(g, d);
     const perp = (x - p0.x) * g.rx + (z - p0.z) * g.rz; // distance latérale signée
     const limit = STREAM_HALF_WIDTH + STREAM_AVOID_MARGIN;
-    if (Math.abs(perp) >= limit) return; // assez loin de l'eau, rien à faire
-    // bloqué : glisse le long de la berge vers le pont (d -> 0) tout en
-    // restant collé au bord (perp fixé à la limite). BUG trouvé en
-    // testant (vérifié via un hook de debug, pas juste supposé) : corriger
-    // perp puis changer l'angle polaire brut (r,angle autour du DONJON)
-    // pour "dériver vers le pont" invalidait le clamp qu'on venait de
-    // faire — le ruisseau n'est pas un cercle centré sur le donjon, donc
-    // tourner à rayon constant pouvait replonger dans l'eau un peu plus
-    // loin. Fix : tout le calcul (y compris la dérive) se fait dans le
-    // repère du ruisseau (d, perp), converti en (r, angle) une seule fois
-    // à la fin.
     const side = perp >= 0 ? 1 : -1;
+    // BUG trouvé en testant sur le joueur (hook de debug qui trace perp
+    // image par image, pas juste supposé) : à faible fréquence d'image
+    // (dt plafonné à 0.05s dans loop(), ou juste un mouvement rapide —
+    // ANGLE_SPEED=1.6rad/s à un rayon de 300 fait ~24 unités/frame de
+    // déplacement tangentiel au pire cas), un seul pas de mouvement peut
+    // "tunneler" à travers toute la largeur bloquée (~34 unités) SANS que
+    // perp ne soit jamais mesuré à l'intérieur — un simple test "suis-je
+    // dans l'eau maintenant ?" ne le voit donc jamais. Fix : mémoriser de
+    // quel côté (e.streamSide) l'entité était la dernière fois qu'elle
+    // était classée loin de l'eau, et si le côté a changé pendant qu'elle
+    // était encore hors du couloir du pont, c'est qu'elle vient de
+    // traverser en un pas — la renvoie du côté d'où elle venait plutôt
+    // que d'accepter sa nouvelle position.
+    if (e.streamSide !== undefined && e.streamSide !== side) {
+      const nx0 = p0.x + g.rx * e.streamSide * limit, nz0 = p0.z + g.rz * e.streamSide * limit;
+      e.r = Math.hypot(nx0, nz0);
+      e.angle = Math.atan2(nz0, nx0);
+      return; // reste collé au bord d'où elle venait, pas de dérive ce tour-ci
+    }
+    if (Math.abs(perp) >= limit) { e.streamSide = side; return; } // assez loin de l'eau, mémorise le côté et laisse faire
+    e.streamSide = side;
+    // bloqué : glisse le long de la berge vers le pont (d -> 0) tout en
+    // restant collé au bord (perp fixé à la limite). Deuxième bug déjà
+    // trouvé et corrigé ici (voir commentaire git) : tout le calcul, y
+    // compris la dérive, se fait dans le repère du ruisseau (d, perp),
+    // converti en (r, angle) une seule fois à la fin — pas en tournant à
+    // rayon polaire constant autour du donjon, qui replongerait dans l'eau
+    // un peu plus loin (le ruisseau n'est pas un cercle centré dessus).
     d += Math.sign(-d) * Math.min(Math.abs(d), STREAM_AVOID_STEER_SPEED * dt);
     const p = streamPointAt(g, d);
     const nx = p.x + g.rx * side * limit, nz = p.z + g.rz * side * limit;
@@ -3712,6 +3730,18 @@
       const cap = PLAYER_WALK_SPEED * speedMul * dt;
       p.r += Math.abs(eased) > cap ? Math.sign(eased) * cap : eased;
     }
+    // le ruisseau est infranchissable pour le seigneur aussi (repris du
+    // même chantier que pour les ennemis, "très important, personne ne
+    // peut traverser") — avoidStream ne touche que .r/.angle, réutilisable
+    // tel quel sur le joueur. BUG trouvé en testant le cas limite (relâcher
+    // sortieHeld en pleine traversée) : un gate `if (p.groundPos > 0.5)`
+    // semblait inoffensif (sur la plateforme p.r reste près de PLAYER_R,
+    // jamais assez près du ruisseau) mais coupait la protection PENDANT le
+    // trajet retour, dès que groundPos repasse sous 0.5 en s'apaisant vers 0
+    // — alors que p.r est encore loin (~180+), en pleine traversée. Le
+    // joueur glissait alors à travers l'eau sans correction. Pas de gate :
+    // appelé à chaque frame, comme pour les ennemis.
+    avoidStream(p, dt);
 
     // ground position (0 = up on the platform, 1 = down through the door,
     // sortied out) eases the same organic way
