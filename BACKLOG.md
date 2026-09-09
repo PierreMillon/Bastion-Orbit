@@ -2369,3 +2369,50 @@ fichier comme son propre ensemble intentionnellement décoratif/séparé
 des routes. Pas de changement non plus à l'arrivée par bateau (v0.78,
 toujours indépendante des routes) ni à `roadAngleAt`/au pathing des
 ennemis — seule la géométrie statique qu'ils traversent a changé.
+
+## Bug bloquant : menu inatteignable sur écran court, obligeait à fermer l'app → fait en v0.80
+
+Signalé en session ("il y a un premier avec le menu... je peux pas
+glisser donc il s'affiche en grand et donc après ben je suis bloqué,
+je dois fermer l'application"). Traité en priorité (bug bloquant),
+avant de continuer sur le reste du backlog.
+
+**Cause trouvée, reproduite avant de corriger** (pas juste supposée) :
+`#menu` contient 12 lignes (2 liens, 6 boutons, 2 curseurs de volume,
+la ligne FPS, le bouton Fermer). Sur un écran court, cette liste
+dépasse la hauteur de la fenêtre. `body` a `overflow:hidden` et
+`touch-action:none` (nécessaires pour le canvas de jeu et le
+pincement de zoom, voir v0.74) — mais rien ne rendait `#menu`
+lui-même défilable, donc RIEN ne pouvait faire remonter le bas de la
+liste à l'écran. Le bouton Fermer, dernier de la liste, devenait
+littéralement hors-écran et incliquable.
+
+Reproduit en Playwright (viewport 360×560, volontairement court) AVANT
+correction : `#closeMenu` mesuré à `y=594` alors que la fenêtre ne
+fait que 560 de haut — 34px sous le bord visible, molette/glissé tactile
+sans aucun effet (position identique avant/après tentative de scroll).
+Confirme exactement le bug décrit.
+
+**Fix** : `#menu`/`#overlay` reçoivent `overflow-y: auto` +
+`-webkit-overflow-scrolling: touch` + `touch-action: pan-y` — chacun
+défile maintenant dans son propre conteneur, indépendamment de
+`overflow:hidden` sur `body` (qui reste inchangé, toujours nécessaire
+pour le jeu lui-même).
+
+Vérifié en Playwright :
+- Même viewport court : après un glissé tactile réel (`TouchEvent`
+  synthétiques) suivi d'un scroll forcé au maximum, `#closeMenu`
+  remonte à `y=496`, dans l'écran. `#menu` confirmé scrollable
+  (`overflowY: auto`, `scrollHeight=653 > clientHeight=560`).
+- Clic sur Fermer après avoir scrollé : le menu se ferme bien
+  (`hidden=true`) — pas juste visible, vraiment cliquable/fonctionnel.
+- Non-régression sur écran normal (1280×800, capture à l'appui) : le
+  menu tient déjà entièrement, reste centré comme avant, Fermer
+  cliquable sans scroll — aucun changement visuel quand le contenu
+  tient dans l'écran.
+- Balayage d'erreurs général : aucune erreur console.
+
+Même correctif appliqué à `#overlay` (écran de fin de partie) par
+cohérence/prudence, bien que son contenu plus court soit peu
+susceptible de déborder — coût nul, évite le même piège si du texte
+plus long y est ajouté un jour.

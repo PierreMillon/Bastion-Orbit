@@ -203,6 +203,19 @@
     text-align: center;
     padding: 20px;
     z-index: 20;
+    /* bug signalé en session : sur un écran court, le menu (12 lignes —
+       liens, boutons, curseurs, bouton Fermer) dépasse la hauteur de
+       l'écran ; body a `overflow:hidden`/`touch-action:none` (nécessaire
+       pour le canvas de jeu/le pincement de zoom), donc RIEN ne pouvait
+       faire défiler le bas du menu — le bouton Fermer devenait
+       littéralement inatteignable, obligeant à fermer l'appli. Reproduit
+       et vérifié en Playwright (viewport court, boundingBox de #closeMenu
+       hors écran, aucun scroll possible avant ce correctif) avant de
+       corriger : le menu/l'écran de fin défilent maintenant chacun dans
+       leur propre conteneur, indépendamment du reste de la page. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   #menu[hidden], #overlay[hidden] { display: none; }
@@ -492,10 +505,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.79</button>
+  <button id="versionBtn">v0.80</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.80</b> — correctif bloquant : sur un écran court, le menu (bouton ☰) pouvait dépasser en bas, avec le bouton Fermer inatteignable et aucun moyen de faire défiler — obligeait à fermer l'application. Le menu et l'écran de fin défilent maintenant chacun correctement</div>
   <div><b>v0.79</b> — les routes traversent maintenant deux petits hameaux avant de laisser place à un chemin qui continue seul jusqu'au donjon, au lieu d'un accès direct : "routes → village → chemin → donjon"</div>
   <div><b>v0.78</b> — arrivée par bateau : de temps en temps, un bateau débarque un petit groupe d'ennemis directement sur la berge du ruisseau, une menace séparée des vagues normales</div>
   <div><b>v0.77</b> — le bélier : un nouvel engin de siège très résistant, très lent, qui rampe depuis loin jusqu'au mur pour frapper très fort au contact ; le trébuchet se fabrique maintenant loin du donjon et tire à distance (projectile visible) au lieu de rester collé au mur</div>
