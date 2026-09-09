@@ -691,17 +691,9 @@ l'avancement.
 
 ### Partie 1 — corrections Bastion Orbit
 
-**A. Engins de siège à distance** — *pas fait*. Aujourd'hui les ennemis
-attendent d'être trop près du donjon pour lancer les engins (voir
-`SIEGE_GROUP_RADIUS`/`clusterSiegeEngines`). Il faut qu'ils se
-FABRIQUENT au loin (visibles à l'écran, mais loin du donjon), puis
-agissent selon leur nature : le trébuchet tire à distance depuis là où
-il est construit (aujourd'hui `SIEGE_TIERS` n'a pas de portée — tous les
-tiers restent stationnaires au pied du mur une fois formés). Un nouveau
-type, le **bélier** (n'existe pas encore) : s'approche très lentement
-mais frappe très fort. **Validation Pierre en attente** avant
-d'implémenter le bélier précisément (stats, comportement exact) — ne pas
-deviner ses chiffres sans confirmation.
+**A. Engins de siège à distance** → fait en v0.77 (voir plus bas pour le
+détail complet). Bélier confirmé par Pierre ("très tanky, très lent,
+gros dégâts au contact") et implémenté avec ces stats exactes.
 
 **B. Ça doit grouiller de vie** — *pas fait*. Le "rendu multi-soldats"
 déjà noté ailleurs dans ce fichier comme jamais fait : des vrais groupes
@@ -2130,3 +2122,83 @@ Tous les hooks de debug temporaires (`__DEBUG_FORCE_PLAYER_INTO_STREAM`,
 `__DEBUG_FORCE_PLAYER_INTO_STREAM_UNHELD`, `__DEBUG_STREAM_CHECK`,
 `__DEBUG_PLAYER_STREAM_PERP`, `__DEBUG_TRACE_PLAYER_STREAM`) retirés
 avant ce commit.
+
+## Bélier + engins de siège à distance (item A de la consigne du 2026-09-08) → fait en v0.77
+
+Repris après validation explicite de Pierre en session ("le bélier :
+très tanky, très lent, gros dégâts au contact") — stats implémentées
+telles quelles, pas devinées.
+
+**Choix d'implémentation, pour rester à faible risque** : plutôt que de
+toucher au pathing des ennemis (tout le monde continue de marcher
+jusqu'au mur exactement comme avant — zéro changement à l'équilibrage
+déjà réglé via le simulateur de difficulté), seul le POINT DE FORMATION
+de l'engin fini change pour les tiers concernés. `clusterSiegeEngines()`
+se déclenche toujours de la même façon (un groupe d'ennemis stagne
+ensemble au mur), mais l'engin qui en sort apparaît directement
+positionné loin du donjon (`SIEGE_RANGED_R = 300`) pour les tiers
+`ranged`/`crawl`, plutôt qu'au point exact du regroupement — lit comme
+"il vient d'être monté là-bas", sans exiger de refonte de l'IA
+d'approche.
+
+- **`SIEGE_RANGED_R = 300`** : choisi nettement au-delà d'`ATTACK_RANGE`
+  (260, la portée de tir des tourelles et du seigneur sur les remparts)
+  — ni l'un ni l'autre ne peut toucher un engin à distance sans sortir,
+  cohérent avec l'esprit "le trébuchet exploite une portée que les
+  défenseurs n'ont pas". Reste nettement en-deçà de `SPAWN_R` (≥480),
+  donc toujours bien visible à l'écran.
+- **Trébuchet (tier 2)** : `ranged: true`. Se fabrique maintenant à
+  `SIEGE_RANGED_R` et y reste fixe — ne s'approche jamais. Au lieu
+  d'infliger ses dégâts instantanément au mur à chaque cooldown, tire
+  maintenant un vrai projectile visible (`fireSiegeShot`, trajectoire
+  lobée `sin(t·π)`, ~0.7s de vol) qui applique les dégâts à l'impact —
+  mêmes dégâts/cadence qu'avant (`tier.dmg`/`tier.cooldown` inchangés),
+  juste rendus visuellement plutôt qu'abstraits.
+- **Bélier (nouveau tier 4)** : `crawl: true`, `hp: 55` (le plus tanky
+  de tous), `dmg: 22` (le plus fort de tous), `cooldown: 3.4`. Se
+  fabrique aussi à `SIEGE_RANGED_R`, puis rampe vers le mur
+  (`BELIER_CRAWL_SPEED = 4` unités/s, soit ~57s pour traverser — "très
+  lentement" au sens propre) sans attaquer tant qu'il n'a pas atteint
+  `BASE_R`. Une fois au contact, mêlée classique (dégâts instantanés au
+  mur, comme l'arbalète, pas de projectile — il est littéralement
+  collé au mur). Rejoint naturellement le tier le plus élevé de la
+  formule existante (`Math.min(group.length - 2, SIEGE_TIERS.length - 1)`,
+  aucun changement de formule nécessaire) — ne peut apparaître qu'avec
+  les plus gros regroupements (6+ attaquants au même endroit), déjà
+  rares d'après le réglage précédent de `SIEGE_GROUP_RADIUS`, donc
+  reste un évènement tardif/rare comme attendu pour un engin aussi
+  fort.
+- Visuel : `drawSiegeEngine` réutilisé tel quel (couleur/rayon indexés
+  par tier, tableau `colors` étendu à 5 entrées) — le bélier hérite
+  automatiquement du plus grand rayon (`13 + tierIdx*3`), cohérent avec
+  "gros et lent". `drawProjectile` distingue `pr.siegeShot` (caillou
+  gris plus gros, trajectoire en arc) du tir tendu existant (flèche/
+  carreau, inchangé).
+
+Vérifié en Playwright (hooks de debug temporaires injectant directement
+un engin dans `state.siegeEngines` à un tier/rayon donné, pas juste
+supposé) :
+- Trébuchet forcé à `r=300` : reste exactement à 300 après 3.5s (aucun
+  déplacement), `castleH` baisse de 10 (son `dmg`) après le premier
+  cycle tir+impact — le projectile fait bien son travail.
+- Bélier forcé à `r=300` : après 2s, `r≈292` — exactement
+  `300 - 4×2 = 292`, la vitesse de reptation est correcte.
+- Bélier forcé juste au-dessus du mur (`r=75`) : après 4s (>cooldown),
+  `r` s'est arrêté pile à `BASE_R=74` (ne descend pas en-dessous) et
+  `castleH` a baissé de 22 (son `dmg`, dégât de contact appliqué une
+  fois arrivé). Son hp a légèrement baissé (55→54.05) entre-temps — pas
+  un bug : à `r=74` il est maintenant à portée des tourelles/du
+  seigneur, qui le prennent pour cible comme n'importe quelle menace
+  (confirme au passage que la mise à portée fonctionne dans les deux
+  sens).
+- Balayage d'erreurs général (vagues forcées en rafale) : aucune erreur
+  console, ni avec le hook de debug ni en jeu normal.
+
+Tous les hooks de debug temporaires (`__DEBUG_SPAWN_SIEGE`,
+`__DEBUG_SIEGE_STATE`) retirés avant ce commit.
+
+**Pas fait / hors scope de cette passe** : le bouclier et l'arbalète
+gardent exactement leur comportement d'avant (formés et figés au pied
+du mur) — seuls le trébuchet et le bélier ont une notion de portée/
+distance, cohérent avec le fait que seul le trébuchet était visé
+explicitement par la consigne pour le tir à distance.

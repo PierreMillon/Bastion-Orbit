@@ -492,10 +492,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.76</button>
+  <button id="versionBtn">v0.77</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.77</b> — le bélier : un nouvel engin de siège très résistant, très lent, qui rampe depuis loin jusqu'au mur pour frapper très fort au contact ; le trébuchet se fabrique maintenant loin du donjon et tire à distance (projectile visible) au lieu de rester collé au mur</div>
   <div><b>v0.76</b> — le cours d'eau est maintenant infranchissable pour le seigneur aussi (pas seulement les ennemis) : seul le pont permet de passer d'une rive à l'autre</div>
   <div><b>v0.75</b> — une grange au loin, plus loin le long du ruisseau que le moulin, pour ancrer visuellement la continuité de l'eau vers le bord de la carte</div>
   <div><b>v0.74</b> — zoom pincé à deux doigts : ancré sur le point pincé, reste zoomé au relâchement, la rotation continue de fonctionner normalement pendant qu'on est zoomé</div>
@@ -1421,12 +1422,26 @@
   const SIEGE_TIERS = [
     { name: 'bouclier', hp: 6, passive: true, rangedResist: 0.2 },
     { name: 'arbalète', hp: 8, dmg: 5, cooldown: 1.6 },
-    { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2 },
-    { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true }
+    { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2, ranged: true },
+    { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true },
+    // bélier (consigne du 2026-09-08, stats confirmées par Pierre : "très
+    // tanky, très lent, gros dégâts au contact") — seul tier `crawl` : se
+    // fabrique loin comme le trébuchet, mais au lieu de tirer à distance il
+    // avance en rampant vers le mur (BELIER_CRAWL_SPEED) et ne frappe
+    // qu'une fois arrivé au contact, en mêlée, très fort. hp très élevé —
+    // il doit survivre toute la traversée sous le feu des tourelles.
+    { name: 'bélier', hp: 55, dmg: 22, cooldown: 3.4, crawl: true }
   ];
   const SIEGE_GROUP_RADIUS = 68;  // how close stalled enemies must be to combine — raised (était 45) : les tiers 2/3 (trébuchet, tour) demandent 4-5 attaquants au même endroit, trop rare pour jamais apparaître avec un rayon aussi serré
   const SIEGE_CHECK_INTERVAL = 1.2;
   const SIEGE_HP_REGEN_PER_CREW = 1.5; // hp/s per living crew member — fast enough that ranged fire alone can't wear one down
+  // engins de siège "à distance" (consigne du 2026-09-08) : trébuchet/bélier
+  // se fabriquent loin du donjon plutôt que collés au mur (SIEGE_RANGED_R,
+  // nettement au-delà d'ATTACK_RANGE=260 pour que ni les tourelles ni le
+  // seigneur sur les remparts ne puissent les toucher sans sortir), mais
+  // encore bien en-deçà de SPAWN_R (>=480) pour rester visibles à l'écran.
+  const SIEGE_RANGED_R = 300;
+  const BELIER_CRAWL_SPEED = 4; // unités/s — ~57s pour traverser de SIEGE_RANGED_R au mur, "très lentement"
   const TOWER_GROW_RATE = 0.28;   // height gained per second, capped at TOWER_MAX_H
   const TOWER_MAX_H = 4;
   const TOWER_DANGER_H = 3;       // tall enough to start hitting the platform directly
@@ -2451,6 +2466,19 @@
     playShoot();
   }
 
+  // tir du trébuchet (consigne du 2026-09-08, engins de siège à distance) :
+  // même famille de projectile que fire(), mais dans l'autre sens (un
+  // engin ennemi vise le donjon, pas un défenseur qui vise un ennemi) et
+  // vers un point fixe plutôt qu'une cible qui bouge — siegeShot: true
+  // distingue la branche d'impact dans la boucle de mise à jour des
+  // projectiles. Vol plus lent qu'une flèche (dur=0.7s) pour lire comme
+  // un caillou lobé, pas un tir tendu.
+  function fireSiegeShot(s, dmg) {
+    const from = { x: s.r * Math.cos(s.angle), y: 0, z: s.r * Math.sin(s.angle) };
+    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true });
+    playShoot();
+  }
+
   // ranged fire can target siege engines too now (not just regular
   // enemies) — the shield tier just shrugs most of it off via
   // rangedResist, it's no longer a hard exclusion
@@ -2694,8 +2722,15 @@
       // than vanishing for nothing
       for (let i = 0; i < crew; i++) group[i].dead = true;
       ax /= group.length; az /= group.length;
+      const angle = Math.atan2(az, ax);
+      // trébuchet/bélier se fabriquent loin du donjon plutôt que collés au
+      // mur (voir SIEGE_RANGED_R) — le groupe s'est bien formé au pied du
+      // mur (ils y ont marché comme les autres, sinon ils ne se
+      // regrouperaient jamais), mais l'engin fini apparaît directement
+      // positionné au loin, même angle, comme s'il venait d'y être monté
+      const r = (tier.ranged || tier.crawl) ? SIEGE_RANGED_R : Math.hypot(ax, az);
       state.siegeEngines.push({
-        angle: Math.atan2(az, ax), r: Math.hypot(ax, az),
+        angle, r,
         tierIdx, crew, hp: tier.hp, maxHp: tier.hp, atkTimer: tier.cooldown, growH: 0
       });
     }
@@ -4187,6 +4222,12 @@
         s.growH = Math.min(TOWER_MAX_H, s.growH + TOWER_GROW_RATE * dt);
         if (s.growH < TOWER_DANGER_H) continue;
       }
+      // bélier : avance en rampant depuis SIEGE_RANGED_R vers le mur —
+      // aucune attaque tant qu'il n'a pas fini sa (très lente) traversée
+      if (tier.crawl && s.r > BASE_R) {
+        s.r = Math.max(BASE_R, s.r - BELIER_CRAWL_SPEED * dt);
+        continue;
+      }
       if (tier.passive) continue;
       s.atkTimer -= dt;
       if (s.atkTimer <= 0) {
@@ -4196,6 +4237,12 @@
           const def = nearestDefender(lx, lz);
           if (def.type === 'player') hurtPlayer(1);
           else def.ref.hp -= tier.dmg;
+        } else if (tier.ranged) {
+          // trébuchet : tire un projectile visible depuis là où il est
+          // construit plutôt d'infliger les dégâts instantanément — même
+          // dégâts/cadence qu'avant, juste un temps de vol en plus (~0.7s,
+          // négligeable vu le cooldown de plusieurs secondes)
+          fireSiegeShot(s, tier.dmg);
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
           if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
@@ -4246,7 +4293,13 @@
       pr.t += dt / pr.dur;
       if (pr.t >= 1 && !pr.done) {
         pr.done = true;
-        if (!pr.target.dead) {
+        if (pr.siegeShot) {
+          // caillou de trébuchet : cible fixe (le donjon), pas une entité
+          // avec .hp — même dégâts que l'ancien contact instantané, juste
+          // appliqués à l'impact plutôt qu'au moment du tir
+          state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
+          if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+        } else if (!pr.target.dead) {
           const isSiege = pr.target.tierIdx !== undefined;
           const tier = isSiege ? SIEGE_TIERS[pr.target.tierIdx] : null;
           const resist = tier && tier.rangedResist ? tier.rangedResist : 1;
@@ -5935,7 +5988,7 @@
     }
     const pos = project(x, 0, z, rot);
     const rad = (13 + s.tierIdx * 3) * scale;
-    const colors = ['#5a6b8a', '#8a6a3b', '#7a3b2e', '#4a3b6b'];
+    const colors = ['#5a6b8a', '#8a6a3b', '#7a3b2e', '#4a3b6b', '#3b2a1f'];
     drawBallSprite('siege' + s.tierIdx, rad, colors[s.tierIdx], '#201828', pos);
     // jauge de rechargement (Partie 2.4) : seulement une fois l'engin
     // effectivement capable de tirer — un bouclier (passive) ne tire
@@ -6037,12 +6090,15 @@
     const tx = pr.target.r * Math.cos(pr.target.angle);
     const tz = pr.target.r * Math.sin(pr.target.angle);
     const x = pr.from.x * (1 - t) + tx * t;
-    const y = pr.from.y * (1 - t) + 0 * t;
+    // caillou de trébuchet : trajectoire lobée (bosse en sin(t·π)) plutôt
+    // que le tir tendu des flèches/carreaux — sinon, from.y=0 et target.y=0
+    // donneraient un projectile qui rase le sol tout du long
+    const y = pr.siegeShot ? Math.sin(t * Math.PI) * 55 : pr.from.y * (1 - t) + 0 * t;
     const z = pr.from.z * (1 - t) + tz * t;
     const pos = project(x, y, z, rot);
-    ctx.fillStyle = '#20180f';
+    ctx.fillStyle = pr.siegeShot ? '#6b6357' : '#20180f';
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 3.2 * scale, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, (pr.siegeShot ? 6 : 3.2) * scale, 0, Math.PI * 2);
     ctx.fill();
   }
 
