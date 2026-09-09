@@ -3120,3 +3120,97 @@ Vérifié visuellement (capture zoomée ×3 deviceScaleFactor, la roue est
 petite à l'écran par défaut) : la double jante + montants se lit
 clairement comme une épaisseur, plus un disque plat. Aucune erreur
 console.
+
+## Item 1 : refonte des chemins, PREMIÈRE PASSE (largeur réelle partout,
+jonction propre, tracé brisé/courbe) → fait en v0.91 — le recentrage
+de la place + le réaudit des maisons restent à faire, voir plus bas
+
+Le plus gros morceau du lot du 2026-09-09. Scindé en deux passes
+plutôt que tout d'un coup, vu la taille réelle et l'interdépendance
+des sous-parties — cohérent avec "approximatif d'abord, on itère
+après", et plus sûr qu'un big-bang sur quelque chose d'aussi visible.
+
+**Audit du système existant** (nécessaire avant de toucher quoi que ce
+soit) : le réseau de chemins a en réalité 4 morceaux — les deux routes
+principales (`ROAD_ANGLES`, tracé sinusoïdal continu via
+`roadAngleAt`), deux "bretelles" route→place, et un 3e chemin
+place→porte. Trouvé en lisant le code :
+- Les bretelles (`drawSingleLinePath`) étaient de VRAIES lignes SANS
+  LARGEUR — un commentaire de session antérieure expliquait pourquoi :
+  "un ruban qui rejoint une route existante fait croiser ses deux
+  bords avec les deux bords de la route, ça dessine une croix". Le
+  problème de jonction n'avait donc jamais été résolu, juste évité.
+- Le tronçon "chemin" (donjon→village, r<`VILLAGE_R`=210) des deux
+  routes principales était dessiné en pointillés
+  (`ctx.setLineDash`) — exactement ce que Pierre décrit ("y a pas de
+  traits pointillés").
+- Le caractère du tracé (une seule sinusoïde continue, amplitude
+  croissant en continu depuis le mur) ne distinguait pas "dans le
+  village" de "hors du village" — pas de vrais segments droits nulle
+  part.
+
+**Fait** :
+1. **Jonction bretelle/route sans croix** : nouvelle fonction
+   `roadNearEdgePoint(idx, r, versX, versZ)` — calcule la tangente
+   locale de la route (différence finie) et arrête la bretelle pile au
+   BORD de la route tourné vers la place, jamais sa ligne centrale.
+   Un vrai raccord en T. Les deux seules intersections du réseau sont
+   ces deux jonctions (les routes ne se croisent jamais entre elles,
+   le 3e chemin n'en touche aucune) — pas besoin d'un moteur de
+   découpe géométrique généraliste pour cette version.
+2. **Largeur réelle partout** : les bretelles réutilisent maintenant
+   `drawBowedSplitRoadPath`/`drawSimpleRoadPath` (déjà écrits pour le
+   3e chemin, juste jamais réutilisés) au lieu de
+   `drawSingleLinePath`/`drawSplitLinePath`/`drawBowedSplitPath`,
+   retirées (mortes après ce changement).
+3. **Plus de pointillés** : `ctx.setLineDash` retiré de `drawRoadRun`
+   — le tronçon "chemin" reste distingué de la "route" par sa largeur
+   seule (0.7 vs 1.2 × scale), pas par un motif tireté.
+4. **Tracé brisé dans le village, courbe au loin** : `roadAngleAt`
+   refondu en deux régimes plutôt qu'une sinusoïde unique. En-deçà de
+   `ROAD_VILLAGE_END_R=620` (couvre les deux hameaux + le pôle grange/
+   église/place), l'angle avance par PALIERS nets (`ROAD_KINKS`,
+   4 coudes fixes) — de vrais segments droits entre deux coudes. Le
+   premier coude est à `BASE_R+60` (pas collé au mur) pour garder
+   intacte la propriété "the wind straightens out on final approach"
+   (déjà en place : la route doit toujours rejoindre la porte en un
+   point propre). Au-delà de `ROAD_VILLAGE_END_R`, la sinusoïde
+   d'avant reprend, mais son amplitude ne recommence à croître qu'à
+   partir de cette frontière (continuité garantie : les deux régimes
+   coïncident exactement à `r = ROAD_VILLAGE_END_R`, le terme en sinus
+   valant 0 pile à cette limite).
+
+**Pourquoi pas la place/le réaudit des maisons dans cette même passe** :
+calculé la vraie position "au milieu entre l'église et le donjon" —
+l'église est à r≈449 du donjon (origine du monde), le milieu serait
+donc vers r≈225 — alors que la place actuelle (`PLAZA_X/Z`) est à
+r≈568, PLUS LOIN du donjon que l'église elle-même : clairement pas
+centrée, Pierre a raison. Mais la déplacer correctement demande la
+même rigueur qu'avant (script de vérification numérique contre
+maisons/grange/moulin/ruisseau/routes, comme pour HOUSES[7] en v0.79),
+et ça entraîne mécaniquement le réaudit des maisons qu'il demande
+explicitement ensuite — un vrai second chantier, pas une case à cocher
+vite fait en fin de passe déjà chargée. Noté honnêtement comme "pas
+fait" plutôt que bâclé.
+
+Vérifié en Playwright : 8 vagues forcées en rafale (les ennemis
+marchent sur les routes via `roadAngleAt`, y compris à travers les
+nouveaux coudes — aucune erreur, le viseur d'angle cible juste
+`roadAngleAt(idx, e.r)` chaque frame donc un coude se traduit par un
+virage un peu plus franc, pas un bug). Captures d'écran à plusieurs
+angles de caméra : coudes bien visibles (vrais segments droits) sur
+les deux routes, jonction bretelle/place sans croix visible à l'œil,
+plus aucun pointillé sur le réseau de chemins (les points encore
+visibles près du pont sont le ruisseau — un système de particules
+d'écoulement totalement différent et volontairement pointillé, pas
+une route). Aucune erreur console.
+
+## Reste du lot 1 (place recentrée + réaudit des maisons) → pas fait,
+prochaine passe
+
+À faire : repositionner `PLAZA_X/PLAZA_Z` entre l'église et le donjon
+(pas juste le milieu géométrique brut — vérifier contre toutes les
+contraintes existantes comme pour HOUSES[7]), puis réaudit complet de
+toutes les maisons/la grange/le moulin contre le nouveau tracé des
+chemins ET la nouvelle position de la place (script de vérification
+numérique, même méthode que le reste de la session).

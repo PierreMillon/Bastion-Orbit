@@ -540,10 +540,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.90</button>
+  <button id="versionBtn">v0.91</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.91</b> — première passe sur les chemins : plus de traits pointillés ni de bretelle à trait unique (vraie largeur partout), la jonction bretelle/route est maintenant propre (pas de croix), et le tracé devient de vrais segments droits reliés par des coudes francs dans le village, avec des courbes qui n'apparaissent qu'en s'en éloignant</div>
   <div><b>v0.90</b> — la roue à aubes du moulin, jusque-là plate (2D), a maintenant une vraie épaisseur</div>
   <div><b>v0.89</b> — la prière au prêtre est maintenant gratuite et répétable (soin complet immédiat + bonus de résistance de 100% pendant 30s, 45s de délai) ; le palier 1 de la zone d'église redevient un achat normal dehors. Corrige aussi : les fenêtres du moulin/de l'église pouvaient se refermer accidentellement en cliquant près du bouton</div>
   <div><b>v0.88</b> — correctif du v0.87 : la neige avait une direction correcte mais restait figée à l'écran pendant la rotation de caméra (une pause visible) ; elle a maintenant une vraie position dans le monde, comme n'importe quel décor, et tourne avec la caméra sans à-coup</div>
@@ -1623,13 +1624,47 @@
   // resize() precisely to survive every angle) — reusing it here means the
   // road always visibly runs off-screen too, at any rotation.
   function roadMaxR() { return SPAWN_R; }
-  // the wind straightens out on final approach — a road has to actually
-  // meet the wall at one clean point, not arrive wherever its last wiggle
-  // left it
+  // caractère du tracé (consigne du 2026-09-09) : "à l'intérieur du
+  // village, des lignes brisées, construit par l'homme ; dès que ça sort
+  // du village, ça devient de plus en plus des courbes, comme des vrais
+  // chemins". Avant : une seule sinusoïde continue de BASE_R jusqu'à
+  // roadMaxR() (voir le commentaire "the wind straightens out on final
+  // approach" plus bas, gardé pour la partie encore vraie) — pas de
+  // vrai segment droit, le village (les deux hameaux + grange/église/
+  // place, jusqu'à ROAD_VILLAGE_END_R) n'était pas spécialement plus
+  // droit que le reste.
+  //
+  // Nouveau modèle en deux temps :
+  //  - à l'intérieur du village (r < ROAD_VILLAGE_END_R) : quelques
+  //    coudes fixes (ROAD_KINKS) — l'angle saute par PALIERS nets à
+  //    quelques rayons choisis plutôt que de suivre une courbe, ce qui
+  //    donne de vrais segments droits reliés par des coins francs.
+  //  - au-delà : la sinusoïde d'avant, mais dont l'amplitude ne
+  //    recommence à croître qu'à partir de cette même frontière — donc
+  //    rigoureusement nulle juste après le dernier coude, puis de plus
+  //    en plus onduleuse en s'éloignant, comme un vrai chemin de
+  //    campagne.
+  // Le premier coude est assez loin du mur (BASE_R+60) pour garder "the
+  // wind straightens out on final approach" : au ras du mur, l'angle
+  // reste exactement `base`, donc la route rejoint toujours la porte en
+  // un point propre, jamais où son dernier coude l'aurait laissée.
+  const ROAD_VILLAGE_END_R = 620;
+  const ROAD_KINKS = [
+    { r: BASE_R + 60, da: 0.12 },
+    { r: 280, da: -0.16 },
+    { r: 420, da: 0.10 },
+    { r: 560, da: -0.08 }
+  ];
   function roadAngleAt(idx, r) {
     const base = ROAD_ANGLES[idx];
-    const t = Math.max(0, Math.min(1, (r - BASE_R) / (roadMaxR() - BASE_R)));
-    return base + Math.sin(r * ROAD_WIND_FREQ + idx * 7) * ROAD_WIND_AMP * t;
+    if (r < ROAD_VILLAGE_END_R) {
+      let a = base;
+      for (const k of ROAD_KINKS) if (r >= k.r) a += k.da;
+      return a;
+    }
+    const kinkTotal = ROAD_KINKS.reduce((s, k) => s + k.da, 0);
+    const t = Math.min(1, (r - ROAD_VILLAGE_END_R) / (roadMaxR() - ROAD_VILLAGE_END_R));
+    return base + kinkTotal + Math.sin(r * ROAD_WIND_FREQ + idx * 7) * ROAD_WIND_AMP * t;
   }
   const PRINCESS_EASE_RATE = 3.2;
   const PRINCESS_ATK_BONUS = 1.015;      // +1.5% player attack while she's up, raising morale
@@ -6353,25 +6388,25 @@
     leftPts.push(project(last.r1 * Math.cos(last.a1 - hw1), 0.5, last.r1 * Math.sin(last.a1 - hw1), rot));
     rightPts.push(project(last.r1 * Math.cos(last.a1 + hw1), 0.5, last.r1 * Math.sin(last.a1 + hw1), rot));
     // réseau en deux temps (VILLAGE_R, item 3 consigne du 2026-09-08) :
-    // route (trait plein habituel) au-delà du hameau, chemin (plus fin,
-    // tireté) en-deçà jusqu'au donjon. Segments triés du donjon vers
-    // l'extérieur (r0 croissant) dans `run` — un simple changement de
-    // largeur/tireté, pas de couleur : en Phosphore/Filaire, wrapPhosphor
-    // écrase de toute façon toute couleur littérale (piège déjà repéré
-    // plusieurs fois cette session) — seules les propriétés hors-couleur
-    // du contexte (lineWidth, setLineDash) survivent pour distinguer
-    // visuellement les deux tronçons.
+    // route (trait plein habituel) au-delà du hameau, chemin (plus fin)
+    // en-deçà jusqu'au donjon. Segments triés du donjon vers l'extérieur
+    // (r0 croissant) dans `run` — un simple changement de largeur, pas de
+    // couleur : en Phosphore/Filaire, wrapPhosphor écrase de toute façon
+    // toute couleur littérale (piège déjà repéré plusieurs fois cette
+    // session) — seule la largeur (lineWidth) survit pour distinguer
+    // visuellement les deux tronçons. Plus de pointillés (setLineDash) —
+    // retiré sur demande explicite (2026-09-09 : "y a pas de traits
+    // pointillés"), un chemin continu doit rester un vrai trait continu,
+    // même le tronçon le plus proche du donjon.
     let splitIdx = run.findIndex(seg => seg.r0 >= VILLAGE_R);
     if (splitIdx === -1) splitIdx = run.length; // toute la run est "chemin"
     for (const pts of [leftPts, rightPts]) {
       if (splitIdx > 0) {
         ctx.lineWidth = Math.max(1, 0.7 * scale);
-        ctx.setLineDash([5 * scale, 4 * scale]);
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i <= splitIdx; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.stroke();
-        ctx.setLineDash([]);
       }
       if (splitIdx < pts.length - 1) {
         ctx.lineWidth = Math.max(1, 1.2 * scale);
@@ -6387,17 +6422,6 @@
   // bretelles place<->routes et le troisième chemin place->porte, qui
   // n'ont pas besoin du serpentage/cache des deux routes principales
   // (voir roadSegs/roadRuns), juste deux points reliés.
-  // bretelle route<->place : une SEULE ligne (pas un ruban à deux bords)
-  // — signalé en session : un ruban qui rejoint une route existante fait
-  // croiser ses deux bords avec les deux bords de la route, ça dessine
-  // une croix au lieu d'un raccord propre. Une ligne simple n'a rien à
-  // croiser, elle rejoint juste le bord de la place, lisible comme un
-  // vrai embranchement plutôt qu'un carrefour en X.
-  function drawSingleLinePath(x0, z0, x1, z1, rot) {
-    const p0 = project(x0, 0.5, z0, rot), p1 = project(x1, 0.5, z1, rot);
-    ctx.lineWidth = Math.max(1, 1.2 * scale);
-    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-  }
   // le troisième chemin (place -> porte), lui, garde un vrai ruban à
   // deux bords : demandé explicitement que "les deux côtés du chemin
   // doivent toucher les deux bords de la porte" — largeur alignée sur
@@ -6424,14 +6448,15 @@
 
   // place du village + troisième chemin vers la porte (voir PLAZA_*/
   // "place du village" plus haut pour le contexte et le scope assumé) :
-  // une bretelle (ligne simple) depuis chacune des deux routes
-  // existantes jusqu'au BORD de la place (pas son centre — la fontaine y
-  // est, on ne veut pas qu'une bretelle la traverse), la place elle-même
-  // (un N-gone, même langage que l'ancienne fontaine), et le troisième
-  // chemin qui continue du bord de la place jusqu'à la porte PILE POIL
-  // (rayon R, pas BASE_R — R est le rayon du donjon lui-même, là où la
-  // porte est vraiment découpée dans le mur, voir cutout(DOOR_ANGLE...)
-  // plus bas ; largeur alignée sur DOOR_HALF_WIDTH).
+  // une bretelle (vrai ruban à deux bords, voir roadNearEdgePoint plus
+  // bas) depuis chacune des deux routes existantes jusqu'au BORD de la
+  // place (pas son centre — la fontaine y est, on ne veut pas qu'une
+  // bretelle la traverse), la place elle-même (un N-gone, même langage
+  // que l'ancienne fontaine), et le troisième chemin qui continue du
+  // bord de la place jusqu'à la porte PILE POIL (rayon R, pas BASE_R —
+  // R est le rayon du donjon lui-même, là où la porte est vraiment
+  // découpée dans le mur, voir cutout(DOOR_ANGLE...) plus bas ; largeur
+  // alignée sur DOOR_HALF_WIDTH).
   function plazaEdgePoint(towardAngle) {
     return { x: PLAZA_X + PLAZA_RADIUS * Math.cos(towardAngle), z: PLAZA_Z + PLAZA_RADIUS * Math.sin(towardAngle) };
   }
@@ -6440,28 +6465,6 @@
   // parce que drawPlazaAndPaths en a besoin par petit bout, pas juste une
   // fois pour tout le groupe (voir plus bas pourquoi).
   function pointFar(x, z, rot) { return Math.cos(Math.atan2(z, x) - rot) < 0; }
-  // découpe une ligne simple en petits bouts, chacun classé far/near par
-  // son propre milieu, et ne dessine que ceux qui correspondent à la passe
-  // demandée (wantFar) — BUG trouvé en session (signalé : "des traits qui
-  // ressemblent à des routes... qui viennent de nulle part, et qui vont
-  // nulle part") : l'ancien code classait tout le groupe place+chemins
-  // d'un seul bloc via UN SEUL angle (celui de la place), alors que les
-  // bretelles/le troisième chemin relient des points à des angles très
-  // différents (la place d'un côté, la route ou la porte de l'autre). Un
-  // segment dont les deux bouts sont de part et d'autre de la limite far/
-  // near de la caméra se dessinait donc ENTIER dans une seule passe —
-  // soit totalement devant le donjon (alors qu'une partie devrait être
-  // cachée derrière), ce qui lit comme un trait qui sort du donjon et
-  // traverse tout, sans lien logique avec rien autour.
-  function drawSplitLinePath(x0, z0, x1, z1, rot, wantFar, segs = 8) {
-    for (let i = 0; i < segs; i++) {
-      const t0 = i / segs, t1 = (i + 1) / segs;
-      const ax = x0 + (x1 - x0) * t0, az = z0 + (z1 - z0) * t0;
-      const bx = x0 + (x1 - x0) * t1, bz = z0 + (z1 - z0) * t1;
-      if (pointFar((ax + bx) / 2, (az + bz) / 2, rot) !== wantFar) continue;
-      drawSingleLinePath(ax, az, bx, bz, rot);
-    }
-  }
   // même découpage pour le troisième chemin (un vrai ruban à deux bords,
   // pas juste une ligne) — chaque petit bout redessine son propre
   // drawSimpleRoadPath, ce qui garde les deux bords parallèles et de la
@@ -6502,12 +6505,6 @@
     }
     return pts;
   }
-  function drawBowedSplitPath(x0, z0, x1, z1, rot, wantFar) {
-    const pts = bowedPathPoints(x0, z0, x1, z1);
-    for (let i = 0; i < pts.length - 1; i++) {
-      drawSplitLinePath(pts[i].x, pts[i].z, pts[i + 1].x, pts[i + 1].z, rot, wantFar, 2);
-    }
-  }
   // même principe pour le troisième chemin (place -> porte) : lui aussi
   // relie deux points d'angles très différents (la porte a un angle
   // MONDE fixe, DOOR_ANGLE, souvent très éloigné de celui de la place),
@@ -6522,13 +6519,41 @@
       drawSplitRoadPath(pts[i].x, pts[i].z, pts[i + 1].x, pts[i + 1].z, halfWidth, rot, wantFar, 2);
     }
   }
+  // jonction propre bretelle/route (task 14, consigne du 2026-09-09 :
+  // "à l'intersection... on coupe... comme si on pouvait circuler avec
+  // un seul doigt de manière continue") — avant, la bretelle rejoignait
+  // la ligne CENTRALE de la route, donc ses deux bords auraient croisé
+  // les deux bords de la route en X (documenté plus haut : c'est
+  // exactement pour ça qu'elle avait été réduite à une simple ligne
+  // sans largeur). Elle s'arrête maintenant pile au bord de la route
+  // tourné vers la place — un vrai raccord en T, sans croix, sans avoir
+  // besoin d'un moteur de découpe géométrique généraliste (les deux
+  // seules intersections du réseau sont ces deux jonctions bretelle/
+  // route — les routes elles-mêmes ne se croisent jamais entre elles,
+  // et le troisième chemin place->porte n'en touche aucune).
+  function roadNearEdgePoint(idx, r, towardX, towardZ) {
+    const a = roadAngleAt(idx, r);
+    const cx = r * Math.cos(a), cz = r * Math.sin(a);
+    // tangente locale par différence finie — assez pour une normale
+    const a2 = roadAngleAt(idx, r + 1);
+    const tx = (r + 1) * Math.cos(a2) - cx, tz = (r + 1) * Math.sin(a2) - cz;
+    const tlen = Math.hypot(tx, tz) || 1;
+    const px = -tz / tlen, pz = tx / tlen; // perpendiculaire unitaire à la route
+    const side = (towardX - cx) * px + (towardZ - cz) * pz >= 0 ? 1 : -1;
+    return { x: cx + px * side * ROAD_WIDTH, z: cz + pz * side * ROAD_WIDTH };
+  }
   function drawPlazaAndPaths(rot, wantFar) {
     for (let idx = 0; idx < 2; idx++) {
-      const a = roadAngleAt(idx, PLAZA_R);
-      const roadPt = { x: PLAZA_R * Math.cos(a), z: PLAZA_R * Math.sin(a) };
+      const roadPt = roadNearEdgePoint(idx, PLAZA_R, PLAZA_X, PLAZA_Z);
       const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
       const edge = plazaEdgePoint(edgeAngle);
-      drawBowedSplitPath(roadPt.x, roadPt.z, edge.x, edge.z, rot, wantFar);
+      if (phosphorStyle === 'couleur') {
+        if (pointFar((roadPt.x + edge.x) / 2, (roadPt.z + edge.z) / 2, rot) === wantFar) {
+          drawSimpleRoadPath(roadPt.x, roadPt.z, edge.x, edge.z, ROAD_WIDTH, rot);
+        }
+      } else {
+        drawBowedSplitRoadPath(roadPt.x, roadPt.z, edge.x, edge.z, ROAD_WIDTH, rot, wantFar);
+      }
     }
     const doorX = R * Math.cos(DOOR_ANGLE), doorZ = R * Math.sin(DOOR_ANGLE);
     const doorEdgeAngle = Math.atan2(doorZ - PLAZA_Z, doorX - PLAZA_X);
