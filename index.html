@@ -246,6 +246,11 @@
 
   #menu[hidden], #overlay[hidden] { display: none; }
 
+  /* récap de fin de partie (2026-09-10) : vague atteinte / or gagné /
+     record — en dessous du texte principal, plus discret */
+  #overlayStats { font-size: 13px; opacity: 0.85; line-height: 1.6; margin-top: -6px; }
+  #overlayRecord { color: #e8b96a; }
+
   #menu a, #overlay button, #menu button {
     padding: 12px 24px;
     border: none;
@@ -493,6 +498,7 @@
   body.phosphor #changelog b { color: var(--ph-line); }
   body.phosphor #menu,
   body.phosphor #overlay { background: rgba(4,10,8,0.94); color: var(--ph-text); }
+  body.phosphor #overlayRecord { color: var(--ph-line); }
   body.phosphor #menu button.ghost { border-color: var(--ph-dim); color: var(--ph-text); }
   body.phosphor #bottomStack button,
   body.phosphor #menu a, body.phosphor #overlay button, body.phosphor #menu button {
@@ -574,10 +580,11 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.96</button>
+  <button id="versionBtn">v0.97</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.97</b> — amélioration de l'expérience (à l'initiative de la session) : l'écran de fin de partie affiche maintenant la vague atteinte, l'or gagné et le record (persisté) ; un vrai tremblement d'écran sur les coups qui comptent (bélier au contact, caillou de trébuchet)</div>
   <div><b>v0.96</b> — nouvelle maison isolée près du bord de l'écran (visible sous tous les angles) ; un clic montre un message énigmatique et se referme comme le moulin/l'église ; les ennemis l'évitent toujours à bonne distance, et de temps en temps un·e villageois·e y va discrètement (rarement à deux) avant de revenir au village</div>
   <div><b>v0.95</b> — corrige les croisements de chemins : là où une bretelle recoupait une route, le petit bout pris dans le croisement disparaît maintenant au lieu de se superposer</div>
   <div><b>v0.94</b> — ajoute le zoom à la molette/au pincement trackpad (n'existait qu'au pincement tactile)</div>
@@ -878,6 +885,11 @@
 
 <div id="overlay" hidden>
   <div id="overlayText"></div>
+  <div id="overlayStats">
+    <div id="overlayWave"></div>
+    <div id="overlayGold"></div>
+    <div id="overlayRecord"></div>
+  </div>
   <button id="restartBtn">Recommencer</button>
 </div>
 
@@ -928,7 +940,9 @@
       ad_small: 'Scan en cours... 99% — ne fermez pas cette fenêtre',
       ad_continue: 'Continuer quand même →', restart_btn: 'Recommencer',
       gameover_castle: 'Votre château a été détruit, Seigneur. Vous avez perdu.',
-      gameover_fell: 'Tu es tombé à la vague '
+      gameover_fell: 'Tu es tombé à la vague ',
+      overlay_wave_reached: 'Vague atteinte : ', overlay_gold_earned: 'Or gagné : ',
+      overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague '
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -964,7 +978,9 @@
       ad_small: 'Scanning... 99% — do not close this window',
       ad_continue: 'Continue anyway →', restart_btn: 'Restart',
       gameover_castle: 'Your castle has been destroyed, my lord. You have lost.',
-      gameover_fell: 'You fell at wave '
+      gameover_fell: 'You fell at wave ',
+      overlay_wave_reached: 'Wave reached: ', overlay_gold_earned: 'Gold earned: ',
+      overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave '
     }
   };
   function detectLang() {
@@ -1104,6 +1120,18 @@
     const storedDiff = localStorage.getItem('bo_difficulty');
     const idx = DIFFICULTY_TIERS.findIndex(t => t.key === storedDiff);
     if (idx >= 0) difficultyIdx = idx;
+  } catch (e) { /* ignore */ }
+
+  // amélioration expérience (2026-09-10, à l'initiative de la session,
+  // "fonce" — pas de partie précédente à comparer, sans record de vague
+  // affiché la fin de partie ne donnait aucun objectif de rejeu) : la
+  // meilleure vague jamais atteinte, indépendante de la partie en cours
+  // (state se réinitialise à chaque Recommencer, pas ceci) — voir
+  // showGameOver().
+  let bestWaveEver = 0;
+  try {
+    const storedBest = parseInt(localStorage.getItem('bo_bestWave'), 10);
+    if (!isNaN(storedBest)) bestWaveEver = storedBest;
   } catch (e) { /* ignore */ }
 
   function wrapPhosphor(real) {
@@ -2624,6 +2652,7 @@
     castleH: CASTLE_MAX_H, // starts fully built — the lord has no reason to be rebuilding on wave 1
     fightBanner: 0,
     gold: 0,
+    totalGoldEarned: 0, // cumul jamais dépensé/décrémenté — juste pour le récap de fin de partie, voir showGameOver()
     moatLevel: 0,
     gardenLevel: 0,
     horseLevel: 0,
@@ -2639,6 +2668,11 @@
     princessDead: false,
     prayerBuffTimer: 0,  // >0 tant que le bonus de défense de la prière est actif
     prayerCooldown: 0,   // >0 tant que la prière suivante n'est pas encore disponible
+    // tremblement d'écran (2026-09-10, amélioration expérience — un coup
+    // qui fait vraiment mal au château ne "se sentait" pas) : shakeT
+    // décompte en temps réel dans render() (pas update(), pour continuer à
+    // se dissiper même une fois la partie terminée — voir triggerShake())
+    shakeT: 0, shakeMag: 0,
     repairHeld: false, // true while the Réparer button is pressed and held
     sortieHeld: false, // true while the Sortie button is pressed and held
     // calin (hug): held while the Descendre/Remonter button is held down
@@ -3193,6 +3227,7 @@
   // demandé explicitement en Partie 1.C).
   function spawnFloatingGold(x, y, z, amount, highlight) {
     if (amount === 0) return;
+    if (amount > 0) state.totalGoldEarned += amount;
     state.floatingTexts.push({
       x, y: y + 14, z,
       text: (amount > 0 ? '+' : '') + amount,
@@ -3207,6 +3242,18 @@
     if (state.waveState === 'gameover') return;
     state.waveState = 'gameover';
     document.getElementById('overlayText').textContent = text;
+    // récap (2026-09-10) : vague atteinte, or gagné, record — un but de
+    // rejeu concret plutôt qu'un simple "vous avez perdu" muet
+    const isRecord = state.wave > bestWaveEver;
+    if (isRecord) {
+      bestWaveEver = state.wave;
+      try { localStorage.setItem('bo_bestWave', String(bestWaveEver)); } catch (e) { /* ignore */ }
+    }
+    document.getElementById('overlayWave').textContent = t('overlay_wave_reached') + state.wave;
+    document.getElementById('overlayGold').textContent = t('overlay_gold_earned') + state.totalGoldEarned;
+    document.getElementById('overlayRecord').textContent = isRecord
+      ? t('overlay_new_record')
+      : t('overlay_best_wave') + bestWaveEver;
     document.getElementById('fakeAd').hidden = false;
   }
 
@@ -3216,6 +3263,17 @@
   // reduced (attackBase chipping, siege-engine bombardment).
   function castleDestroyed() {
     showGameOver(t('gameover_castle'));
+  }
+
+  const SHAKE_DURATION = 0.3; // secondes — même durée pour tous les impacts, seule l'ampleur varie
+  // tremblement d'écran : pris uniquement sur les coups qui comptent
+  // (impact du bélier au contact, caillou de trébuchet qui atterrit) —
+  // pas sur le grignotage routine du mur par les ennemis ordinaires
+  // (trop fréquent à plusieurs assaillants, ça deviendrait juste du bruit
+  // visuel permanent plutôt qu'un vrai signal d'impact)
+  function triggerShake(mag) {
+    state.shakeT = SHAKE_DURATION;
+    state.shakeMag = mag;
   }
 
   function hurtPlayer(n) {
@@ -4311,6 +4369,10 @@
 
   // ---- update ----
   let last = performance.now();
+  // écrit par loop() à chaque frame, lu par render() pour décompter
+  // shakeT indépendamment de update() (qui s'arrête une fois la partie
+  // terminée — voir triggerShake())
+  let frameDt = 0;
   function update(dt) {
     const p = state.player;
 
@@ -5056,6 +5118,7 @@
           fireSiegeShot(s, tier.dmg);
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
+          triggerShake(Math.min(14, tier.dmg * 0.5)); // arbalète : léger ; bélier (22 dmg) : net
           if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
         }
       }
@@ -5109,6 +5172,7 @@
           // avec .hp — même dégâts que l'ancien contact instantané, juste
           // appliqués à l'impact plutôt qu'au moment du tir
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
+          triggerShake(Math.min(14, pr.dmg * 0.5));
           if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
         } else if (!pr.target.dead) {
           const isSiege = pr.target.tierIdx !== undefined;
@@ -7203,8 +7267,23 @@
     // repère translaté+mis à l'échelle — restauré juste avant les
     // éléments HUD écran (bannière FIGHT!, neige) qui doivent rester à
     // taille/position fixes, pas zoomer avec le monde
+    // tremblement d'écran (voir triggerShake()) : décompte ici plutôt que
+    // dans update() pour continuer à se dissiper même après la fin de la
+    // partie ; décroissance linéaire, n'affecte que le monde dessiné au
+    // canevas (camPanX/Y), pas toScreen() donc pas les boutons DOM
+    // (moulin/église/sorcière) qui doivent rester tapables sans trembler
+    if (state.shakeT > 0) {
+      state.shakeT = Math.max(0, state.shakeT - frameDt);
+    }
+    let shakeX = 0, shakeY = 0;
+    if (state.shakeT > 0) {
+      const amt = state.shakeMag * (state.shakeT / SHAKE_DURATION);
+      shakeX = (Math.random() * 2 - 1) * amt;
+      shakeY = (Math.random() * 2 - 1) * amt;
+    }
+
     ctx.save();
-    ctx.translate(camPanX, camPanY);
+    ctx.translate(camPanX + shakeX, camPanY + shakeY);
     ctx.scale(camZoom, camZoom);
 
     // active moat: real water filling the whole slowed zone, once at least
@@ -7419,6 +7498,7 @@
       const fpsNum = document.getElementById('fpsNum');
       if (fpsNum) fpsNum.textContent = Math.round(fpsEMA);
     }
+    frameDt = dt;
     if (state.waveState !== 'gameover') update(dt);
     render();
     requestAnimationFrame(loop);

@@ -3468,3 +3468,85 @@ rapport, non corrigé ici).
 
 D'autres mécaniques pour cette maison pourraient venir plus tard (pas
 précisées par Pierre) — noté pour info, rien à construire maintenant.
+
+## Amélioration de l'expérience de jeu (à l'initiative de la session, 2026-09-10)
+
+Pierre a demandé de réfléchir, ordonner, et enchaîner directement —
+sans lister puis attendre un go. Réflexion (en regardant ce qui manque
+vraiment dans le jeu actuel, pas une liste générique) :
+
+1. **Record de vague + récap de fin de partie** → fait en v0.97
+2. **Tremblement d'écran sur les gros impacts** → fait en v0.97
+3. Accroche discrète au tout premier lancement (aucun onboarding
+   actuellement, un joueur qui arrive à froid doit tout deviner ou
+   aller chercher dans Astuces) → pas fait, prochaine étape naturelle
+4. Indicateur directionnel quand le château encaisse des dégâts hors
+   champ de caméra (un bélier qui tape de l'autre côté du donjon peut
+   passer inaperçu) → pas fait, à creuser
+5. Variété sonore (un seul type de bip synthétique pour toutes les
+   actions) → pas fait, plus cosmétique, priorité plus basse
+
+Choix d'ordre : 1 et 2 ont été retenus en premier parce que ce sont
+les deux manques les plus francs de "sensation" — mourir ne donnait
+aucun but de rejeu (juste "vous avez perdu", pas de repère), et les
+gros coups (bélier, trébuchet) ne "se sentaient" pas malgré des
+dégâts confirmés au chiffre. 3 et 4 demandent plus de jugement sur le
+ton/la forme (un tutoriel intrusif serait pire que rien), laissés en
+attente plutôt que bâclés dans la foulée.
+
+### 1. Record de vague + récap de fin de partie
+
+`bestWaveEver`, persisté (`localStorage['bo_bestWave']`), chargé une
+fois au démarrage (indépendant de `state`, qui se réinitialise à
+chaque Recommencer). Nouveau `state.totalGoldEarned`, incrémenté au
+seul point d'appel commun à tous les gains d'or (`spawnFloatingGold`,
+déjà existant depuis la Partie 2.4 — un seul endroit à toucher plutôt
+que les 6 sites de gain individuels).
+
+`showGameOver()` remplit maintenant 3 lignes sous le texte principal :
+vague atteinte, or gagné, et soit "🏆 Nouveau record !" soit "Record :
+vague N" — jamais les deux en même temps. `#overlayText` restait
+identique à avant (le texte de défaite lui-même n'a pas changé),
+seul le récap est nouveau.
+
+### 2. Tremblement d'écran
+
+Volontairement PAS branché sur le grignotage routine du mur (un
+ennemi ordinaire au contact, -6 PV château toutes les 1.2s) — avec
+plusieurs assaillants simultanés ça aurait donné un tremblement
+quasi permanent, du bruit plutôt qu'un signal. Branché uniquement sur
+les deux vrais impacts : le chip direct arbalète/bélier (`tier.dmg`,
+donc 5 pour l'arbalète — à peine perceptible — jusqu'à 22 pour le
+bélier — net) et l'atterrissage du caillou de trébuchet (`pr.dmg`,
+10). Magnitude = `min(14, dmg * 0.5)`, décroissance linéaire sur
+`SHAKE_DURATION = 0.3s`.
+
+Détail technique noté pour la suite : le décompte de `state.shakeT`
+se fait dans `render()` (nouveau `frameDt`, écrit par `loop()` à
+chaque frame) plutôt que dans `update()` — parce que `update()`
+s'arrête net une fois `waveState === 'gameover'` (voir `loop()`), et
+un shake déclenché sur le coup fatal serait resté bloqué à son
+intensité de départ pour toujours si son décompte avait dépendu de
+update(). N'affecte que `ctx.translate()` du monde dessiné au
+canevas — pas `toScreen()` (utilisé par les boutons DOM moulin/
+église/sorcière), qui doivent rester tapables sans trembler avec
+l'écran.
+
+**Vérifié en Playwright** (hooks de debug temporaires, retirés avant
+commit — `grep -c "__DEBUG_"` revenu à 1) :
+- Déclenchement à magnitude 14 → décalage non nul confirmé
+  (`shakeX≈-10, shakeY≈4` à un instant donné, aléatoire donc variable
+  d'un run à l'autre) juste après ; retombé exactement à `(0,0)` après
+  400ms (> les 300ms de `SHAKE_DURATION`). Premier essai de
+  vérification se trompait de variable (vérifiait `camPanX`/`camPanY`,
+  qui ne bougent jamais — le shake est un offset LOCAL à `render()`,
+  pas un changement permanent du pan) ; corrigé en exposant
+  temporairement l'offset lui-même.
+- Récap de fin de partie : `__DEBUG_FORCE_GAMEOVER` + best forcé à 0 →
+  "🏆 Nouveau record !" affiché, `bestWaveEver` mis à jour et persisté.
+- 8 vagues forcées en régression finale, aucune erreur console (seul
+  le 404 `favicon.ico`, absent du repo depuis toujours, sans rapport).
+
+Suite proposée à Pierre : passer au point 3 (accroche premier
+lancement) si validé, sinon reste en attente ici avec le reste de la
+liste ci-dessus.
