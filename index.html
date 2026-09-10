@@ -356,6 +356,43 @@
   }
   body.phosphor .volumeRow input[type="range"] { accent-color: var(--ph-line); }
 
+  /* carte procédurale (2026-09-10) : même carte pilule que .volumeRow */
+  #seedRow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 10px;
+    background: #b5482e;
+    color: #f2ead9;
+    font-size: 12.5px;
+    width: 100%;
+    max-width: 240px;
+    box-sizing: border-box;
+  }
+  #seedRow .seedCurrent { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #seedRow code { font-family: monospace; font-size: 13px; letter-spacing: 0.5px; }
+  #seedInputRow { display: flex; gap: 6px; }
+  #seedInput {
+    flex: 1; min-width: 0; border: none; border-radius: 6px;
+    padding: 6px 8px; font-size: 12px; font-family: inherit;
+    background: rgba(255,255,255,0.15); color: #f2ead9;
+  }
+  #seedInput::placeholder { color: rgba(242,234,217,0.6); }
+  #seedRow button {
+    border: none; border-radius: 6px; padding: 6px 10px;
+    font-size: 12px; font-family: inherit;
+    background: rgba(255,255,255,0.18); color: #f2ead9; cursor: pointer;
+  }
+  body.phosphor #seedRow {
+    background: var(--ph-fill);
+    border: 1px solid var(--ph-dim);
+    color: var(--ph-text);
+  }
+  body.phosphor #seedInput, body.phosphor #seedRow button {
+    background: rgba(0,0,0,0.3); color: var(--ph-text);
+  }
+
   /* fausse pub à la défaite : gag volontairement criard, aux antipodes du
      reste de l'interface (fond parchemin sobre) — c'est le but */
   #fakeAd {
@@ -606,7 +643,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.98</button>
+  <button id="versionBtn">v0.99</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -618,6 +655,7 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.99</b> — refonte procédurale du monde : routes, cœur de village, maisons, ferme et maison de la sorcière sont maintenant générés depuis une graine (rejet-échantillonnage en direct, contre les vraies routes/le vrai ruisseau/le vrai moulin) plutôt que placés à la main un par un — la vraie réponse aux croisements de routes qui recassaient régulièrement. Graine visible et partageable dans le menu, "Nouvelle carte" pour en tirer une autre, "Charger" pour reprendre celle d'un ami (même graine = même village, à l'identique)</div>
   <div><b>v0.98</b> — suite de l'amélioration de l'expérience : accroche discrète au tout premier lancement (une seule fois, jamais bloquante) ; petite flèche au bord de l'écran quand un coup au château vient de hors du cadre (surtout utile zoomé) ; sons d'achat distincts du coup de mêlée/réparation, le caillou de trébuchet sonne différemment d'un tir normal, jardin et tourelle ne sont plus silencieux à l'achat</div>
   <div><b>v0.97</b> — amélioration de l'expérience (à l'initiative de la session) : l'écran de fin de partie affiche maintenant la vague atteinte, l'or gagné et le record (persisté) ; un vrai tremblement d'écran sur les coups qui comptent (bélier au contact, caillou de trébuchet)</div>
   <div><b>v0.96</b> — nouvelle maison isolée près du bord de l'écran (visible sous tous les angles) ; un clic montre un message énigmatique et se referme comme le moulin/l'église ; les ennemis l'évitent toujours à bonne distance, et de temps en temps un·e villageois·e y va discrètement (rarement à deux) avant de revenir au village</div>
@@ -736,6 +774,16 @@
   <button id="cameraBtn">Caméra : Axonométrique</button>
   <button id="langBtn">Langue : Français</button>
   <button id="faqBtn">Astuces</button>
+  <!-- carte procédurale (2026-09-10) : graine visible/partageable, voir
+       buildWorld() plus haut dans le script -->
+  <div id="seedRow">
+    <div class="seedCurrent"><span id="seedLabel">Graine :</span> <code id="seedValue"></code></div>
+    <div id="seedInputRow">
+      <input type="text" id="seedInput" maxlength="24">
+      <button id="seedLoadBtn">Charger</button>
+    </div>
+    <button id="seedNewBtn">🎲 Nouvelle carte</button>
+  </div>
   <div class="volumeRow">
     <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
     <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
@@ -978,7 +1026,11 @@
       gameover_fell: 'Tu es tombé à la vague ',
       overlay_wave_reached: 'Vague atteinte : ', overlay_gold_earned: 'Or gagné : ',
       overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague ',
-      intro_hint: 'Glissez pour tourner la caméra et viser — dégâts bonus droit dans l\'axe. Sortie pour charger dehors, Réparer si le mur faiblit. Plus de détails dans ☰ Astuces.'
+      intro_hint: 'Glissez pour tourner la caméra et viser — dégâts bonus droit dans l\'axe. Sortie pour charger dehors, Réparer si le mur faiblit. Plus de détails dans ☰ Astuces.',
+      seed_label: 'Graine :', seed_placeholder: 'Coller une graine…', seed_load_btn: 'Charger',
+      seed_new_btn: '🎲 Nouvelle carte',
+      seed_confirm_new: 'Générer une nouvelle carte ? Le village actuel sera remplacé (note la graine ci-dessus si tu veux pouvoir y revenir).',
+      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1017,7 +1069,11 @@
       gameover_fell: 'You fell at wave ',
       overlay_wave_reached: 'Wave reached: ', overlay_gold_earned: 'Gold earned: ',
       overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave ',
-      intro_hint: 'Drag to turn the camera and aim — bonus damage dead-on. Sally to charge out, Repair if the wall weakens. More in ☰ Tips.'
+      intro_hint: 'Drag to turn the camera and aim — bonus damage dead-on. Sally to charge out, Repair if the wall weakens. More in ☰ Tips.',
+      seed_label: 'Seed:', seed_placeholder: 'Paste a seed…', seed_load_btn: 'Load',
+      seed_new_btn: '🎲 New map',
+      seed_confirm_new: 'Generate a new map? The current village will be replaced (note the seed above if you want to come back to it).',
+      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.'
     }
   };
   function detectLang() {
@@ -1055,6 +1111,10 @@
     document.getElementById('fpsLabel').textContent = t('fps_label');
     document.getElementById('closeMenu').textContent = t('close_menu');
     document.getElementById('faqBtn').textContent = t('faq_btn');
+    document.getElementById('seedLabel').textContent = t('seed_label');
+    document.getElementById('seedInput').placeholder = t('seed_placeholder');
+    document.getElementById('seedLoadBtn').textContent = t('seed_load_btn');
+    document.getElementById('seedNewBtn').textContent = t('seed_new_btn');
     document.getElementById('closeFaq').textContent = t('close_menu');
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
@@ -1712,7 +1772,10 @@
   // or go cross-country at normal speed to spread out and come from
   // several angles at once (encercler). Fixed world angles, well clear of
   // the door itself so they don't visually compete with it.
-  const ROAD_ANGLES = [DOOR_ANGLE + 2.1, DOOR_ANGLE - 2.3];
+  // valeurs réelles écrites par buildWorld() (voir §Génération procédurale
+  // du monde, juste avant HOUSES) — laissées "let" pour que buildWorld()
+  // puisse les remplir depuis une graine, plutôt que figées ici en dur.
+  let ROAD_ANGLES, ROAD_KINKS_BY_IDX;
   // a real road has a fixed physical width, not a fixed ANGLE — signalé en
   // session : with a constant angular half-width, the actual world-space
   // width grows with radius (arc length ≈ radius × angle), so in
@@ -1771,20 +1834,19 @@
   // reste exactement `base`, donc la route rejoint toujours la porte en
   // un point propre, jamais où son dernier coude l'aurait laissée.
   const ROAD_VILLAGE_END_R = 620;
-  const ROAD_KINKS = [
-    { r: BASE_R + 60, da: 0.12 },
-    { r: 280, da: -0.16 },
-    { r: 420, da: 0.10 },
-    { r: 560, da: -0.08 }
-  ];
+  // ROAD_KINKS_BY_IDX (déclarée plus haut) : un tableau de coudes PAR
+  // route, écrit par buildWorld() — v0.91 partageait une seule suite de
+  // coudes entre les deux routes (juste ajoutée à un angle de base
+  // différent), ici chacune a la sienne, générée indépendamment.
   function roadAngleAt(idx, r) {
     const base = ROAD_ANGLES[idx];
+    const kinks = ROAD_KINKS_BY_IDX[idx];
     if (r < ROAD_VILLAGE_END_R) {
       let a = base;
-      for (const k of ROAD_KINKS) if (r >= k.r) a += k.da;
+      for (const k of kinks) if (r >= k.r) a += k.da;
       return a;
     }
-    const kinkTotal = ROAD_KINKS.reduce((s, k) => s + k.da, 0);
+    const kinkTotal = kinks.reduce((s, k) => s + k.da, 0);
     const t = Math.min(1, (r - ROAD_VILLAGE_END_R) / (roadMaxR() - ROAD_VILLAGE_END_R));
     return base + kinkTotal + Math.sin(r * ROAD_WIND_FREQ + idx * 7) * ROAD_WIND_AMP * t;
   }
@@ -2061,20 +2123,326 @@
   // exigé ≥35 unités de marge partout. 7 des 8 maisons ont dû bouger
   // (seule house2 était déjà assez loin de tout), toutes retombent
   // maintenant entre 35 et 37 unités de marge.
-  const HOUSES = [
-    { x: 328.1 * Math.cos(2.365), z: 328.1 * Math.sin(2.365) },
-    { x: 267.0 * Math.cos(1.653), z: 267.0 * Math.sin(1.653) },
-    { x: 298.8 * Math.cos(2.607), z: 298.8 * Math.sin(2.607) },
-    { x: 324.9 * Math.cos(1.850), z: 324.9 * Math.sin(1.850) },
-    { x: 252.9 * Math.cos(-2.772), z: 252.9 * Math.sin(-2.772) },
-    { x: 232.2 * Math.cos(-1.889), z: 232.2 * Math.sin(-1.889) },
-    { x: 310.1 * Math.cos(-1.976), z: 310.1 * Math.sin(-1.976) },
-    { x: 309.6 * Math.cos(-2.559), z: 309.6 * Math.sin(-2.559) }
-  // yaw : orientation propre du bâtiment (indépendante de son angle
-  // autour du donjon) — signalé en session : sans ça, chaque maison
-  // pointait dans le même axe monde, "toutes parallèles" les unes aux
-  // autres au lieu de faire vrai petit village
-  ].map(h => ({ ...h, angle: Math.atan2(h.z, h.x), r: Math.hypot(h.x, h.z), yaw: Math.random() * Math.PI * 2, hiddenCount: 0 }));
+  // ---- Génération procédurale du monde (2026-09-10) ----
+  // Demandé par Pierre après un énième signalement de routes cassées :
+  // "on est en train de faire du micro-management qui perd du temps...
+  // il faut un truc plus général". Décidé ensemble : TOUT devient
+  // procédural (y compris les bâtiments repères — église/moulin/ferme/
+  // sorcière), régénéré uniquement à la demande (bouton "Nouvelle carte"
+  // dans le menu, jamais automatiquement), avec une graine visible et
+  // partageable (un ami tape la même graine, obtient le même village).
+  //
+  // Principe : un PRNG déterministe (mulberry32 — Math.random() n'est
+  // pas reproductible) pilote un rejet-échantillonnage EN DIRECT dans le
+  // navigateur, même méthode que les scripts Node hors-ligne des
+  // sessions précédentes (balayage/rejet contre des contraintes de
+  // marge), mais réutilisant les VRAIES fonctions du jeu (roadAngleAt,
+  // streamGeometry/streamPointAt, moulinGeometry) au lieu de les
+  // dupliquer côté script — ce qui avait causé au moins une divergence
+  // par le passé entre "ce qui est vérifié" et "ce qui est affiché".
+  //
+  // Portée assumée : la POSITION de chaque ancre (routes, cœur de
+  // village, maisons, ferme, sorcière) est procédurale ; la FORME de
+  // chaque petit groupe (l'écart église/grange autour du centre du
+  // village, l'écart ferme_maison/ferme_grange) reste la disposition
+  // dessinée à la main — seul le point d'ancrage bouge avec la graine,
+  // pas la composition interne. L'orientation (yaw) des bâtiments
+  // repères reste fixe aussi, pour limiter la portée du chantier —
+  // celle des maisons était déjà aléatoire (Math.random()) avant cette
+  // refonte, désormais tirée par le PRNG SEEDÉ (une même graine
+  // reproduit donc un village visuellement identique, orientations
+  // comprises).
+
+  // mulberry32 : PRNG déterministe minimal (domaine public) — pas besoin
+  // de qualité cryptographique ici, juste d'une reproductibilité exacte
+  // pour une graine donnée.
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // hache une graine TEXTE (tapée par un joueur, longueur libre) en un
+  // entier 32 bits — FNV-1a, déterministe, pas cryptographique
+  function hashSeedString(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function randomSeedString() {
+    return Math.random().toString(36).slice(2, 10).toUpperCase();
+  }
+  // graine courante : mémorisée (localStorage) pour que le monde reste
+  // STABLE d'une session à l'autre tant que le joueur ne demande pas
+  // explicitement une nouvelle carte (voir le menu, #seedNewBtn/
+  // #seedLoadBtn, câblés plus bas près du reste du menu)
+  let currentWorldSeed = randomSeedString();
+  try {
+    const stored = localStorage.getItem('bo_worldSeed');
+    if (stored) currentWorldSeed = stored;
+    else localStorage.setItem('bo_worldSeed', currentWorldSeed);
+  } catch (e) { /* ignore */ }
+
+  // géométrie ruisseau/moulin : déplacées ici (voir note à leur ancien
+  // emplacement, plus bas) — buildWorld() en a besoin pour vérifier les
+  // collisions pendant la génération, bien avant leur usage habituel
+  // (rendu du ruisseau/du moulin, beaucoup plus loin dans le fichier)
+  const STREAM_CROSS_R = 180;
+  const STREAM_HALF_WIDTH = 11;
+  const STREAM_WIND_AMP = 16;
+  const STREAM_WIND_FREQ = 0.018;
+  const MOULIN_D = -220;
+  const MOULIN_BANK = 1;
+  // idem pour ces deux-là : lues par buildWorld() bien avant leur usage
+  // habituel plus bas (rayon de la place, yaw église/grange dans
+  // VILLAGE_EXTRAS)
+  const PLAZA_RADIUS = 80;
+  const EGLISE_YAW = -0.35, GRANGE_YAW = 0.5;
+
+  // clearance : distance "libre" entre une position candidate et une
+  // contrainte — positif = dégagé, négatif = collision.
+  function circleClearance(x, z, r, ox, oz, orad) {
+    return Math.hypot(x - ox, z - oz) - r - orad;
+  }
+  // distance d'un cercle à un rectangle ORIENTÉ (repère local du
+  // rectangle, clampé sur ses demi-largeurs) — seule l'église est assez
+  // allongée (32×60) pour que ça vaille la peine ; les autres bâtiments
+  // sont traités comme des cercles, rayon = leur diagonale (conservateur
+  // pour toute orientation — utile pour les maisons, dont le yaw varie)
+  function rectClearance(x, z, r, rx, rz, halfW, halfH, yaw) {
+    const dx = x - rx, dz = z - rz;
+    const c = Math.cos(-yaw), s = Math.sin(-yaw);
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    const cx = Math.max(-halfW, Math.min(halfW, lx));
+    const cz = Math.max(-halfH, Math.min(halfH, lz));
+    return Math.hypot(lx - cx, lz - cz) - r;
+  }
+  // échantillonne les VRAIES routes (roadAngleAt, coudes compris) — pas
+  // une approximation à part, le tracé réellement dessiné
+  function roadClearanceAt(x, z, r) {
+    let min = Infinity;
+    for (let idx = 0; idx < ROAD_ANGLES.length; idx++) {
+      for (let rr = BASE_R; rr <= roadMaxR(); rr += 18) {
+        const a = roadAngleAt(idx, rr);
+        const d = Math.hypot(x - rr * Math.cos(a), z - rr * Math.sin(a));
+        if (d < min) min = d;
+      }
+    }
+    return min - r - ROAD_WIDTH;
+  }
+  function streamClearanceAt(x, z, r) {
+    const g = streamGeometry();
+    let min = Infinity;
+    for (let d = -900; d <= 900; d += 18) {
+      const p = streamPointAt(g, d);
+      const dd = Math.hypot(x - p.x, z - p.z);
+      if (dd < min) min = dd;
+    }
+    return min - r - STREAM_HALF_WIDTH;
+  }
+  function moulinClearanceAt(x, z, r) {
+    const m = moulinGeometry();
+    return circleClearance(x, z, r, m.houseX, m.houseZ, 26); // 26 ≈ diagonale de la maison du moulin (20×16)
+  }
+
+  // rejet-échantillonnage générique : essaie jusqu'à `tries` candidats,
+  // garde le meilleur (score le plus haut) ; s'arrête dès qu'un candidat
+  // atteint minScore — passer minScore=Infinity force à épuiser tous les
+  // essais et renvoyer le MEILLEUR trouvé (utile pour la sorcière : on
+  // veut la plus isolée POSSIBLE, pas juste "assez" isolée). Ne boucle
+  // jamais indéfiniment — essentiel pour tourner en direct dans le
+  // navigateur, contrairement aux scripts hors-ligne des sessions
+  // précédentes qui pouvaient se permettre de chercher longtemps.
+  function findPlacement(rng, candidateFn, scoreFn, minScore, tries) {
+    let best = null, bestScore = -Infinity;
+    for (let i = 0; i < tries; i++) {
+      const c = candidateFn(rng);
+      const s = scoreFn(c);
+      if (s > bestScore) { best = c; bestScore = s; }
+      if (s >= minScore) return c;
+    }
+    return best;
+  }
+
+  // le générateur lui-même. Ordre de placement (chaque étape peut
+  // vérifier tout ce qui a été placé avant elle, jamais après) : routes
+  // -> cœur de village (église/grange dérivées d'un même point
+  // d'ancrage) -> place -> maisons (2 hameaux de 4, un par route) ->
+  // ferme -> sorcière (la plus isolée possible, en dernier, contre tout
+  // le reste déjà posé).
+  function buildWorld(seedStr) {
+    const rng = mulberry32(hashSeedString(seedStr));
+
+    // routes : deux angles bien écartés de la porte (des deux côtés),
+    // chacune avec sa PROPRE suite de coudes (v0.91 en partageait une
+    // seule entre les deux routes — ici chaque route a la sienne, plus
+    // organique, moins "en miroir")
+    const a0 = DOOR_ANGLE + 1.7 + rng() * 1.0;
+    const a1 = DOOR_ANGLE - 1.7 - rng() * 1.0;
+    ROAD_ANGLES = [a0, a1];
+    function genKinks() {
+      const kinks = [];
+      let r = BASE_R + 60 + rng() * 20;
+      const n = 3 + Math.floor(rng() * 2);
+      for (let i = 0; i < n && r < ROAD_VILLAGE_END_R - 30; i++) {
+        kinks.push({ r: Math.round(r), da: (rng() - 0.5) * 0.28 });
+        r += 100 + rng() * 90;
+      }
+      return kinks;
+    }
+    ROAD_KINKS_BY_IDX = [genKinks(), genKinks()];
+
+    // cœur de village (église/grange/place/fontaine) : dans la plus
+    // large des deux poches laissées libres entre les deux routes (l'une
+    // passe "à travers" la direction de la porte, l'autre "derrière" le
+    // donjon), avec une marge par rapport à chaque route pour ne pas s'y
+    // coller
+    const gapThroughDoor = a0 - a1;
+    const gapBehind = Math.PI * 2 - gapThroughDoor;
+    const throughDoor = gapThroughDoor >= gapBehind;
+    const gapStart = throughDoor ? a1 : a0;
+    const gapSpan = throughDoor ? gapThroughDoor : gapBehind;
+    const villageCandidate = (rng) => ({
+      angle: gapStart + 0.35 + rng() * Math.max(0.1, gapSpan - 0.7),
+      r: 380 + rng() * 140
+    });
+    const scoreVillage = (c) => {
+      const cx = c.r * Math.cos(c.angle), cz = c.r * Math.sin(c.angle);
+      const ex = cx + 120, ez = cz + 30, gx = cx - 110, gz = cz - 30; // église/grange, même écart fixe qu'avant
+      let m = Math.min(
+        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40),
+        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8),
+        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8)
+      );
+      // le COULOIR donjon->église doit rester dégagé sur toute sa
+      // longueur, pas juste à ses deux bouts — sinon la place (qui se
+      // place le long de ce même rayon, voir plus bas) peut se retrouver
+      // sans aucun point dégagé où se caser (trouvé en auditant 30
+      // graines : ~7% échouaient avant ce correctif, la route ou le
+      // ruisseau coupait le milieu du trajet sans que les bouts ne s'en
+      // rendent compte)
+      const eAngle = Math.atan2(ez, ex), eR = Math.hypot(ex, ez);
+      for (let t = 0.2; t <= 0.9; t += 0.14) {
+        const rr = eR * t;
+        const px = rr * Math.cos(eAngle), pz = rr * Math.sin(eAngle);
+        m = Math.min(m, roadClearanceAt(px, pz, 60), streamClearanceAt(px, pz, 60));
+      }
+      return m;
+    };
+    const vc = findPlacement(rng, villageCandidate, scoreVillage, 70, 60);
+    VILLAGE_CENTER_ANGLE = vc.angle; VILLAGE_CENTER_R = vc.r;
+    const vcx = VILLAGE_CENTER_R * Math.cos(VILLAGE_CENTER_ANGLE);
+    const vcz = VILLAGE_CENTER_R * Math.sin(VILLAGE_CENTER_ANGLE);
+
+    // place : le long du rayon donjon->église (même formule que
+    // PLAZA_ANGLE plus bas, dupliquée ici pour la même raison que le
+    // code l'était déjà avant cette refonte — EGLISE_EXTRA n'existe pas
+    // encore à ce stade), balayage de R pour maximiser la marge
+    const eglx = vcx + 120, eglz = vcz + 30, grx = vcx - 110, grz = vcz - 30;
+    const plazaAngle = Math.atan2(eglz, eglx);
+    // plage large + beaucoup d'essais (recherche 1D le long d'un seul
+    // rayon, donc peu coûteuse) : un audit sur 30 graines a montré qu'une
+    // plage trop étroite (120-380, 50 essais) pouvait ne jamais croiser
+    // un point dégagé si le ruisseau/une route coupe justement CE rayon
+    // précis — corrigé en élargissant la recherche plutôt qu'en
+    // acceptant un score négatif (dans le mur/le ruisseau).
+    const plazaMaxR = Math.min(460, VILLAGE_CENTER_R - 10);
+    const plazaCandidate = (rng) => 90 + rng() * Math.max(30, plazaMaxR - 90);
+    const scorePlaza = (r) => {
+      const px = r * Math.cos(plazaAngle), pz = r * Math.sin(plazaAngle);
+      return Math.min(
+        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80),
+        rectClearance(px, pz, 80, eglx, eglz, 32, 60, EGLISE_YAW),
+        circleClearance(px, pz, 80, grx, grz, 32)
+      );
+    };
+    PLAZA_R = findPlacement(rng, plazaCandidate, scorePlaza, 25, 220);
+    const plx = PLAZA_R * Math.cos(plazaAngle), plz = PLAZA_R * Math.sin(plazaAngle);
+
+    // maisons : deux hameaux de 4, un par route, "sur le passage" (marge
+    // minimale voulue face à la route, pas juste maximisée comme le
+    // reste — trop loin et elles ne seraient plus "au bord du chemin")
+    const houses = [];
+    for (let side = 0; side < 2; side++) {
+      for (let k = 0; k < 4; k++) {
+        const candidate = (rng) => {
+          const r = 220 + rng() * 80;
+          return { r, angle: roadAngleAt(side, r) + (rng() - 0.5) * 1.1 };
+        };
+        const score = (c) => {
+          const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
+          if (roadClearanceAt(x, z, 23) < 6) return -1000; // dans la route : rejeté net
+          let m = Math.min(
+            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+            circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
+            Math.hypot(x, z) - BASE_R - 40
+          );
+          for (const h of houses) m = Math.min(m, circleClearance(x, z, 23, h.x, h.z, 23));
+          return m;
+        };
+        const c = findPlacement(rng, candidate, score, 25, 50);
+        const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
+        houses.push({ x, z, angle: c.angle, r: c.r, yaw: rng() * Math.PI * 2, hiddenCount: 0 });
+      }
+    }
+    HOUSES = houses;
+
+    // ferme : loin, près du bord garanti hors-écran (SPAWN_R_BASE),
+    // n'importe quel angle tant qu'il est dégagé de tout ce qui précède
+    const farmCandidate = (rng) => ({ angle: rng() * Math.PI * 2, r: 430 + rng() * 70 });
+    const scoreFarm = (c) => {
+      const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
+      const x2 = x + 75, z2 = z - 45; // ferme_maison, même écart fixe qu'avant
+      let m = Math.min(
+        roadClearanceAt(x, z, 30), roadClearanceAt(x2, z2, 24),
+        moulinClearanceAt(x, z, 30), moulinClearanceAt(x2, z2, 24),
+        streamClearanceAt(x, z, 30), streamClearanceAt(x2, z2, 24),
+        circleClearance(x, z, 30, vcx, vcz, 60), circleClearance(x, z, 30, plx, plz, PLAZA_RADIUS)
+      );
+      for (const h of houses) m = Math.min(m, circleClearance(x, z, 30, h.x, h.z, 23));
+      return m;
+    };
+    const farm = findPlacement(rng, farmCandidate, scoreFarm, 90, 80);
+    FARM_ANGLE = farm.angle; FARM_R = farm.r;
+    const fax = FARM_R * Math.cos(FARM_ANGLE), faz = FARM_R * Math.sin(FARM_ANGLE);
+
+    // sorcière : isolée à dessein, on veut la MEILLEURE trouvée (la plus
+    // isolée), pas juste "assez" — minScore=Infinity force findPlacement
+    // à épuiser tous ses essais plutôt que de s'arrêter au premier
+    // candidat correct
+    const witchCandidate = (rng) => ({ angle: rng() * Math.PI * 2, r: 455 + rng() * 45 });
+    const scoreWitch = (c) => {
+      const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
+      let m = Math.min(
+        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+        circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
+        circleClearance(x, z, 23, fax, faz, 30), circleClearance(x, z, 23, fax + 75, faz - 45, 24)
+      );
+      for (const h of houses) m = Math.min(m, circleClearance(x, z, 23, h.x, h.z, 23));
+      return m;
+    };
+    const witch = findPlacement(rng, witchCandidate, scoreWitch, Infinity, 120);
+    WITCH_ANGLE = witch.angle; WITCH_R = witch.r;
+  }
+
+  // ancres écrites par buildWorld() ci-dessus — groupées ici (plutôt que
+  // dispersées à leur ancienne place) pour que l'appel juste en dessous
+  // puisse toutes les remplir d'un coup, avant que le reste de ce bloc
+  // (VILLAGE_EXTRAS, FARM_BUILDINGS, etc., INCHANGÉS plus bas, toujours
+  // à leur place d'origine) ne les lise.
+  let HOUSES;
+  let VILLAGE_CENTER_ANGLE, VILLAGE_CENTER_R;
+  let PLAZA_R;
+  let FARM_ANGLE, FARM_R;
+  let WITCH_ANGLE, WITCH_R;
+  buildWorld(currentWorldSeed);
+
   const HOUSE_SIZE = 16; // half-width of the base
   // maisons-cachettes (demandé en session) : indestructibles, un ennemi
   // qui approche peut s'y réfugier et devient intouchable (tir à
@@ -2133,7 +2501,11 @@
   // les trois écartés davantage entre eux. Vérifié numériquement (script
   // à part, pas juste au jugé) contre les 8 maisons de HOUSES ET entre
   // eux trois : marge minimale ~36 unités, aucune collision.
-  const VILLAGE_CENTER_ANGLE = -1.55, VILLAGE_CENTER_R = 460;
+  // RENDU PROCÉDURAL (2026-09-10) : VILLAGE_CENTER_ANGLE/R ne sont plus
+  // figés ici — voir buildWorld() plus haut, qui les remplit par
+  // rejet-échantillonnage à chaque graine. Les commentaires ci-dessus
+  // restent pour l'historique de la méthode (même esprit, maintenant en
+  // direct plutôt qu'hors-ligne).
   const VILLAGE_CENTER_X = VILLAGE_CENTER_R * Math.cos(VILLAGE_CENTER_ANGLE);
   const VILLAGE_CENTER_Z = VILLAGE_CENTER_R * Math.sin(VILLAGE_CENTER_ANGLE);
   // yaw modéré (pas complètement aléatoire comme HOUSES) : ce trio est
@@ -2164,10 +2536,12 @@
   // fontaine est au centre de CETTE place (voir VILLAGE_EXTRAS
   // plus bas) — aucune nouvelle collision, juste la même intention
   // qu'avant appliquée à la nouvelle position.
+  // PLAZA_R : idem, procédural — voir buildWorld() (balayage de R le
+  // long de ce même rayon, pour maximiser la marge à chaque graine).
+  // PLAZA_RADIUS est déclarée plus haut (buildWorld() en a besoin avant
+  // ce point du fichier) — inchangée, 80, toujours fixe.
   const PLAZA_ANGLE = Math.atan2(VILLAGE_CENTER_Z + 30, VILLAGE_CENTER_X + 120); // direction donjon->église — mêmes coordonnées que l'entrée 'eglise' de VILLAGE_EXTRAS plus bas (déclarée deux fois : EGLISE_EXTRA n'existe pas encore ici)
-  const PLAZA_R = 246;
   const PLAZA_X = PLAZA_R * Math.cos(PLAZA_ANGLE), PLAZA_Z = PLAZA_R * Math.sin(PLAZA_ANGLE);
-  const PLAZA_RADIUS = 80; // marge ~56 unités par rapport à la contrainte la plus proche (maison[5]/l'église)
 
   // cachette (décidé à la place de Pierre, 2026-09-09, "choisis à ma
   // place") : la grange et l'église sont maintenant des cachettes
@@ -2177,8 +2551,8 @@
   // .r, aucun changement à cette logique nécessaire). Pas la fontaine —
   // trop petite pour être une cachette plausible.
   const VILLAGE_EXTRAS = [
-    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: 0.5, hiddenCount: 0 },
-    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: -0.35, hiddenCount: 0 },
+    { type: 'grange', x: VILLAGE_CENTER_X - 110, z: VILLAGE_CENTER_Z - 30, yaw: GRANGE_YAW, hiddenCount: 0 },
+    { type: 'eglise', x: VILLAGE_CENTER_X + 120, z: VILLAGE_CENTER_Z + 30, yaw: EGLISE_YAW, hiddenCount: 0 },
     { type: 'fontaine', x: PLAZA_X, z: PLAZA_Z } // au centre de la place, pas ailleurs
   ].map(b => ({ ...b, angle: Math.atan2(b.z, b.x), r: Math.hypot(b.x, b.z) }));
   // sous-ensemble "cachette" de VILLAGE_EXTRAS — évite de tester la
@@ -2200,8 +2574,9 @@
   // profondeur") — à l'opposé du village existant pour ne rien
   // chevaucher, à un rayon proche de SPAWN_R_BASE (480, la portée
   // garantie hors-écran la plus courte) sans dépendre de SPAWN_R lui-
-  // même (TDZ, comme HOUSES/VILLAGE_EXTRAS)
-  const FARM_ANGLE = 0.55, FARM_R = 470;  // était 0.85 : collision vérifiée numériquement avec le ruisseau (marge -31, ferme_grange dedans) — décalé, marge >100 maintenant
+  // même (TDZ, comme HOUSES/VILLAGE_EXTRAS). RENDU PROCÉDURAL
+  // (2026-09-10) : FARM_ANGLE/FARM_R ne sont plus figées ici, voir
+  // buildWorld() plus haut.
   const FARM_X = FARM_R * Math.cos(FARM_ANGLE), FARM_Z = FARM_R * Math.sin(FARM_ANGLE);
   const FARM_BUILDINGS = [
     { type: 'ferme_grange', x: FARM_X, z: FARM_Z, yaw: 1.1 },
@@ -2216,8 +2591,10 @@
   // séparé des deux (0.55 pour la ferme, ~-1.55/coeur du village),
   // vérifié numériquement (script à part, même méthode que les autres
   // bâtiments) : marge >300 unités contre tout à angle=-0.4, largement
-  // le point le plus isolé trouvé.
-  const WITCH_ANGLE = -0.4, WITCH_R = 478;
+  // le point le plus isolé trouvé. RENDU PROCÉDURAL (2026-09-10) :
+  // WITCH_ANGLE/WITCH_R ne sont plus figées ici, voir buildWorld() plus
+  // haut — la même idée (le point le plus isolé) tourne maintenant en
+  // direct, à chaque graine, plutôt qu'une seule fois hors-ligne.
   const WITCH_X = WITCH_R * Math.cos(WITCH_ANGLE), WITCH_Z = WITCH_R * Math.sin(WITCH_ANGLE);
   const WITCH_YAW = 2.4;
   // rayon "personne ne s'approche" — les ennemis en approche sont
@@ -2419,8 +2796,11 @@
   // radius, running out to the same guaranteed-off-screen distance as the
   // roads themselves (roadMaxR()), so it genuinely crosses the whole
   // visible map rather than stopping short near the crossing point.
-  const STREAM_CROSS_R = 180;
-  const STREAM_HALF_WIDTH = 11;
+  // STREAM_CROSS_R/STREAM_HALF_WIDTH/STREAM_WIND_AMP/STREAM_WIND_FREQ/
+  // MOULIN_D/MOULIN_BANK : déplacées plus haut (voir §Génération
+  // procédurale du monde, avant HOUSES) — buildWorld() en a besoin pour
+  // vérifier le ruisseau/le moulin pendant le placement des bâtiments,
+  // bien avant ce point du fichier.
   // pont en pierre (demandé en session : "deux fois plus imposant",
   // "des gros blocs qui font les murs sur les côtés et le sol", "en
   // volume... une sorte d'arche") — voir drawStoneBridge/drawStoneGrid
@@ -2450,8 +2830,6 @@
   // (d=-220, loin du croisement d=0) — vérifié numériquement (script à
   // part, même méthode que pour les autres bâtiments) contre les deux
   // routes et tous les autres bâtiments, marges > 60 unités partout.
-  const MOULIN_D = -220;      // position le long du ruisseau (axe tx,tz), loin du pont
-  const MOULIN_BANK = 1;      // quel côté de la berge (axe rx,rz)
   const MOULIN_HOUSE_SX = 20, MOULIN_HOUSE_SZ = 16, MOULIN_HOUSE_YAW = 0.2;
   const MOULIN_WHEEL_R = 14;
   const MOULIN_WHEEL_SEGS = 12;
@@ -2466,8 +2844,6 @@
   // sinusoïdal latéral le long de sa ligne centrale, nul à d=0 (le
   // croisement/pont reste bien aligné) et croissant/périodique de part et
   // d'autre.
-  const STREAM_WIND_AMP = 16;
-  const STREAM_WIND_FREQ = 0.018;
   const STREAM_SEG_COUNT = 48;
   // débarquement par bateau (item 4, consigne du 2026-09-08 : "une partie
   // des ennemis arrive par l'eau en bateau" + confirmé par Pierre : une
@@ -4114,6 +4490,29 @@
   // after a game over
   document.getElementById('menuRestartBtn').addEventListener('click', () => {
     if (!reloadIfUpdateAvailable()) location.reload();
+  });
+
+  // carte procédurale (2026-09-10) : régénérer change tout le monde
+  // (routes/village/maisons/ferme/sorcière), pas juste un détail — un
+  // confirm() natif avant de partir, pour ne pas perdre une carte qu'on
+  // aimait bien d'un tap accidentel. Les deux boutons rechargent la page
+  // (comme Recommencer) plutôt que de tenter une régénération à chaud —
+  // buildWorld() alimente beaucoup de caches ailleurs dans le fichier
+  // (routes, ruisseau, villageois...), un rechargement complet est plus
+  // sûr qu'un réinit partiel qui oublierait forcément quelque chose.
+  document.getElementById('seedValue').textContent = currentWorldSeed;
+  document.getElementById('seedNewBtn').addEventListener('click', () => {
+    if (!confirm(t('seed_confirm_new'))) return;
+    const s = randomSeedString();
+    try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
+    location.reload();
+  });
+  document.getElementById('seedLoadBtn').addEventListener('click', () => {
+    const s = document.getElementById('seedInput').value.trim();
+    if (!s) return;
+    if (!confirm(t('seed_confirm_load'))) return;
+    try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
+    location.reload();
   });
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });

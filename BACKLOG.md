@@ -3644,3 +3644,157 @@ hooks de debug retirés (`grep -c "__DEBUG_"` = 1).
 
 Reste en attente : rien — les 5 points de la réflexion "amélioration
 de l'expérience" sont maintenant tous traités.
+
+## Collision souple entre personnages (goulots d'étranglement type porte) → pas fait, en attente
+
+Demandé en session (2026-09-10), pendant la refonte procédurale du
+monde : actuellement rien n'empêche deux personnages (ennemis,
+villageois, le seigneur) d'occuper exactement la même position — pas
+de collision du tout entre eux (seulement avec les bâtiments/le
+ruisseau/etc., voir avoidBushes/avoidWitchHouse/avoidStream).
+
+Consigne de Pierre, à l'image des globules rouges dans un vaisseau :
+- Collision SOUPLE, pas un mur dur — comme s'ils étaient "un peu en
+  caoutchouc" : s'ils veulent se serrer (ex. converger vers un même
+  point d'intérêt), une répulsion élastique les pousse à se
+  contracter/se tasser entre eux plutôt que de se chevaucher ou de se
+  bloquer complètement.
+- Un goulot d'étranglement (la porte du donjon, explicitement citée)
+  ne doit laisser passer qu'UN SEUL personnage à la fois — pas deux de
+  front, même si la répulsion souple les autoriserait ailleurs à se
+  frôler d'assez près.
+
+Pas encore conçu : quel idiome technique (répulsion circulaire façon
+avoidBushes mais entre TOUS les personnages entre eux, à quelle force/
+rayon) ni comment détecter spécifiquement "dans une porte" pour y
+durcir la contrainte. À reprendre après la refonte procédurale du
+monde en cours.
+
+## Refonte procédurale du monde (routes, village, maisons, ferme, sorcière) → fait en v0.99
+
+Pierre, en plein milieu de la todo "amélioration de l'expérience" :
+*"il va falloir faire une refonte globale du système de placement...
+peut-être un système procédural... on est en train de faire du micro-
+management qui perd du temps qui est pas efficace"* — signalé une fois
+de plus après un croisement de routes cassé. Demande explicite de
+réfléchir avant d'agir et de le "bombarder de questions" plutôt que de
+trancher seul sur un chantier de cette taille.
+
+**Questions posées et réponses obtenues** (AskUserQuestion, 4
+questions) :
+1. Portée : "Tout, y compris les bâtiments repères" (pas juste les
+   routes — église/moulin/ferme/sorcière aussi procéduraux).
+2. Régénération : "Sur demande seulement" (pas à chaque partie, pas
+   automatique — un bouton dédié).
+3. Graine : "Visible et exportable pour les joueurs" (pas juste un
+   outil de dev interne — un ami peut la copier/coller).
+4. Priorité vs la petite todo en cours (accroche/indicateur/sons) :
+   "Je les finis vite d'abord" — fait en premier (voir entrée v0.98
+   ci-dessus), CE chantier est venu ensuite.
+
+### Principe retenu
+
+Un PRNG déterministe (`mulberry32`, seedé par un hachage FNV-1a de la
+graine texte — `Math.random()` n'est pas reproductible) pilote un
+rejet-échantillonnage EN DIRECT dans le navigateur, à chaque
+chargement (ou clic sur "Nouvelle carte"/"Charger") — pas hors ligne
+comme les scripts Node des sessions précédentes. Différence
+fondamentale et volontaire : le générateur (`buildWorld()`) réutilise
+les VRAIES fonctions du jeu (`roadAngleAt`, `streamGeometry`/
+`streamPointAt`, `moulinGeometry`) au lieu de les dupliquer côté
+script à part — élimine une classe entière de bugs déjà rencontrée
+cette session (le script de vérification et le jeu pouvaient diverger
+silencieusement, rien ne les gardait synchronisés).
+
+Portée assumée, décidée pour limiter le chantier à une taille
+raisonnable : seule la POSITION de chaque ancre est procédurale
+(routes, cœur de village, 8 maisons, ferme, sorcière). La FORME de
+chaque petit groupe (écart église/grange autour du centre du village,
+écart ferme_maison/ferme_grange, écart clocher/nef) reste la
+disposition dessinée à la main — seul le point d'ancrage bouge.
+L'orientation (yaw) des bâtiments repères reste fixe aussi (celle des
+maisons était déjà aléatoire avant cette refonte, désormais tirée par
+le PRNG seedé — reproductible).
+
+### Détails techniques notables
+
+- **Réordonnancement TDZ nécessaire** : `STREAM_CROSS_R`/
+  `STREAM_HALF_WIDTH`/`STREAM_WIND_AMP`/`STREAM_WIND_FREQ`/`MOULIN_D`/
+  `MOULIN_BANK` (initialement déclarées bien plus loin dans le
+  fichier, près du rendu du ruisseau/moulin) ont dû être déplacées
+  AVANT `buildWorld()` — le générateur en a besoin pour vérifier les
+  collisions bien avant leur point d'usage habituel. Simple
+  déplacement de constantes pures (aucune dépendance), sans risque.
+- **Ordre de placement** (chaque étape ne vérifie que ce qui est déjà
+  posé, jamais ce qui vient après) : routes (chacune avec sa PROPRE
+  suite de coudes désormais — v0.91 en partageait une seule entre les
+  deux, plus "en miroir") → cœur de village (dans la plus large des
+  deux poches laissées libres par les deux routes) → place (balayage
+  le long du rayon donjon→église) → 8 maisons (2 hameaux de 4, un par
+  route) → ferme → sorcière (recherche du MEILLEUR isolement possible,
+  pas juste "assez", via `findPlacement(..., minScore=Infinity, ...)`
+  qui épuise volontairement tous ses essais).
+- **`findPlacement()`** : rejet-échantillonnage générique borné (jamais
+  de boucle infinie — essentiel pour tourner en direct dans le
+  navigateur), garde le meilleur candidat trouvé même si aucun
+  n'atteint le seuil demandé — dégrade proprement plutôt que de
+  planter ou de boucler.
+- **Bug trouvé et corrigé pendant l'audit** (voir ci-dessous) : sur
+  30 graines aléatoires testées, 2 échouaient — la place se
+  retrouvait avec une marge négative contre une route ou le ruisseau.
+  Diagnostic : `scoreVillage()` ne vérifiait que le centre du village
+  et les positions finales église/grange, jamais le COULOIR entre le
+  donjon et l'église lui-même — un point le long de ce trajet pouvait
+  être bloqué sans que rien ne s'en aperçoive avant que la place
+  n'essaie (en vain) de s'y caser. Corrigé en échantillonnant 6 points
+  le long de ce couloir pendant le choix du centre du village, pas
+  seulement à ses deux extrémités.
+
+### Vérifié
+
+- Syntaxe : le script extrait parse sans erreur (`new Function(...)`
+  en Node).
+- **95 graines aléatoires + fixes testées en Playwright** (15 puis 30
+  puis 50, dans 3 passes séparées), chaque fois avec un audit complet
+  des marges réelles (maisons entre elles, maisons vs route/ruisseau/
+  moulin/église/grange/place, église vs grange/moulin/ruisseau/route,
+  place vs tout, ferme vs tout, sorcière vs tout) via les VRAIES
+  fonctions de clearance du jeu exposées temporairement — 0 échec
+  après le correctif du couloir donjon→église, 0 erreur JS.
+- **Déterminisme** : charger la même graine via l'UI ("Charger") ou en
+  forçant directement `localStorage.bo_worldSeed` avant rechargement
+  produit un monde BIT-À-BIT identique (maisons, centre du village,
+  sorcière comparés) — confirme qu'une graine partagée reproduit
+  vraiment le même village.
+- Régression complète : 8 vagues forcées, aucune erreur console (seul
+  le 404 `favicon.ico`, absent du repo depuis toujours, sans rapport).
+- Popups moulin/église/sorcière toujours tapables et fonctionnels
+  après la refonte (testé en forçant un tap sur leurs nouvelles
+  positions générées).
+- Menu testé sur viewport mobile (390px) : la nouvelle carte "Graine"
+  (affichage + champ + bouton Charger + bouton Nouvelle carte) reste
+  dans les limites de l'écran, aucun débordement.
+- Capture d'écran à l'appui : village cohérent, routes continues avec
+  coudes nets, aucun chevauchement visible.
+
+Tous les hooks de debug retirés avant commit (`grep -c "__DEBUG_"` = 1).
+
+### Décisions de jugement, notées honnêtement
+
+- L'orientation (yaw) des bâtiments repères reste FIXE (pas seedée) —
+  choix délibéré pour limiter la portée du chantier, pas un oubli.
+  Pourrait être seedé plus tard si demandé.
+- Le donjon reste le centre fixe du monde (ancre de toute la
+  génération) — jamais remis en question, c'est le point autour
+  duquel la caméra orbite.
+- "Nouvelle carte"/"Charger" font un rechargement complet de la page
+  plutôt qu'une régénération à chaud — `buildWorld()` alimente des
+  caches ailleurs dans le fichier (segments de route, graines de
+  scintillement du ruisseau, population des villageois...) ; un
+  rechargement est plus sûr qu'un réinit partiel qui oublierait
+  forcément quelque chose. Coût : un flash de chargement au clic,
+  jugé acceptable pour une action volontaire et rare.
+- Un `confirm()` natif protège les deux actions (nouvelle graine,
+  charger une graine) — remplacer tout un village n'est pas anodin,
+  mieux vaut un clic de confirmation qu'un village aimé perdu par
+  accident.
