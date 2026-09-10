@@ -246,6 +246,32 @@
 
   #menu[hidden], #overlay[hidden] { display: none; }
 
+  /* accroche premier lancement : bandeau discret sous la barre du haut,
+     jamais bloquant (le jeu continue en dessous) */
+  #introHint {
+    position: fixed;
+    top: 54px; left: 50%; transform: translateX(-50%);
+    max-width: 320px; width: calc(100% - 32px);
+    background: rgba(20,16,10,0.92);
+    border: 1px solid rgba(242,234,217,0.3);
+    border-radius: 10px;
+    color: #f2ead9;
+    font-size: 12.5px; line-height: 1.5;
+    padding: 10px 30px 10px 12px;
+    z-index: 8; /* sous le menu/FAQ, au-dessus du canevas et de sa propre HUD */
+  }
+  #introHint[hidden] { display: none; }
+  #introHintClose {
+    position: absolute; top: 4px; right: 4px;
+    width: 22px; height: 22px; border: none; border-radius: 6px;
+    background: rgba(242,234,217,0.12); color: #f2ead9;
+    font-size: 12px; line-height: 1; cursor: pointer;
+  }
+  body.phosphor #introHint {
+    background: rgba(4,10,8,0.94); color: var(--ph-text); border-color: var(--ph-dim);
+  }
+  body.phosphor #introHintClose { background: rgba(0,0,0,0.3); color: var(--ph-text); }
+
   /* récap de fin de partie (2026-09-10) : vague atteinte / or gagné /
      record — en dessous du texte principal, plus discret */
   #overlayStats { font-size: 13px; opacity: 0.85; line-height: 1.6; margin-top: -6px; }
@@ -580,10 +606,19 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.97</button>
+  <button id="versionBtn">v0.98</button>
+</div>
+
+<!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
+     "amélioration de l'expérience") : une seule fois par appareil
+     (localStorage bo_seenIntro), jamais bloquante — voir updateIntroHint() -->
+<div id="introHint" hidden>
+  <div id="introHintText"></div>
+  <button id="introHintClose">✕</button>
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v0.98</b> — suite de l'amélioration de l'expérience : accroche discrète au tout premier lancement (une seule fois, jamais bloquante) ; petite flèche au bord de l'écran quand un coup au château vient de hors du cadre (surtout utile zoomé) ; sons d'achat distincts du coup de mêlée/réparation, le caillou de trébuchet sonne différemment d'un tir normal, jardin et tourelle ne sont plus silencieux à l'achat</div>
   <div><b>v0.97</b> — amélioration de l'expérience (à l'initiative de la session) : l'écran de fin de partie affiche maintenant la vague atteinte, l'or gagné et le record (persisté) ; un vrai tremblement d'écran sur les coups qui comptent (bélier au contact, caillou de trébuchet)</div>
   <div><b>v0.96</b> — nouvelle maison isolée près du bord de l'écran (visible sous tous les angles) ; un clic montre un message énigmatique et se referme comme le moulin/l'église ; les ennemis l'évitent toujours à bonne distance, et de temps en temps un·e villageois·e y va discrètement (rarement à deux) avant de revenir au village</div>
   <div><b>v0.95</b> — corrige les croisements de chemins : là où une bretelle recoupait une route, le petit bout pris dans le croisement disparaît maintenant au lieu de se superposer</div>
@@ -942,7 +977,8 @@
       gameover_castle: 'Votre château a été détruit, Seigneur. Vous avez perdu.',
       gameover_fell: 'Tu es tombé à la vague ',
       overlay_wave_reached: 'Vague atteinte : ', overlay_gold_earned: 'Or gagné : ',
-      overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague '
+      overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague ',
+      intro_hint: 'Glissez pour tourner la caméra et viser — dégâts bonus droit dans l\'axe. Sortie pour charger dehors, Réparer si le mur faiblit. Plus de détails dans ☰ Astuces.'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -980,7 +1016,8 @@
       gameover_castle: 'Your castle has been destroyed, my lord. You have lost.',
       gameover_fell: 'You fell at wave ',
       overlay_wave_reached: 'Wave reached: ', overlay_gold_earned: 'Gold earned: ',
-      overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave '
+      overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave ',
+      intro_hint: 'Drag to turn the camera and aim — bonus damage dead-on. Sally to charge out, Repair if the wall weakens. More in ☰ Tips.'
     }
   };
   function detectLang() {
@@ -1532,6 +1569,20 @@
   // higher-pitched, metallic — deliberately distinct from the low wooden
   // hammer thud, so it reads as "nothing to fix here" rather than a hit
   const playRepairMaxed = () => beep({ freq: 900, freqEnd: 620, dur: 0.1, type: 'square', vol: 0.28 });
+  // variété sonore (2026-09-10, item 5 de la réflexion "amélioration de
+  // l'expérience") : playHammer() était réutilisé pour TOUT — achats,
+  // coup de mêlée en sortie, huile, réparation — plus la même chose que
+  // le grondement sourd d'un vrai coup, un achat devrait sonner content.
+  // playPurchase() : montante plutôt que descendante ("caisse
+  // enregistreuse"), pour moulin/église/douves/cheval/jardin/tourelle —
+  // playHammer() reste réservé aux vraies actions physiques (mêlée,
+  // huile, réparation), inchangé.
+  const playPurchase = () => beep({ freq: 340, freqEnd: 660, dur: 0.11, type: 'triangle', vol: 0.3 });
+  // caillou de trébuchet : plus grave et plus long qu'un tir normal
+  // (playShoot, flèche/carreau du seigneur ou d'une tourelle) — se lit
+  // "lourd" plutôt que "sec", cohérent avec le tremblement d'écran à
+  // l'impact (voir triggerShake())
+  const playSiegeShot = () => beep({ freq: 160, freqEnd: 60, dur: 0.22, type: 'sawtooth', vol: 0.22 });
   // ronronnement du chat de la vue "cosy" (demandé en session) : beep()
   // ne fait qu'une seule enveloppe simple, pas assez pour un vrai
   // ronron — ici une porteuse grave (sawtooth) modulée en amplitude par
@@ -2684,6 +2735,11 @@
     boats: [], // débarquements par le ruisseau (consigne du 2026-09-08) — voir BOAT_EVENT_MIN_INTERVAL
     boatTimer: BOAT_EVENT_MIN_INTERVAL + Math.random() * (BOAT_EVENT_MAX_INTERVAL - BOAT_EVENT_MIN_INTERVAL),
     particles: [], // short-lived death effects (smoke/sparkle), purely visual
+    // indicateur directionnel (2026-09-10, item 4 de la réflexion
+    // "amélioration de l'expérience") : coup encaissé hors du cadre
+    // actuel (surtout utile zoomé, voir isPointOnScreen()) — { x, z, t,
+    // life }, voir triggerDamageIndicator()/drawDamageIndicators()
+    damageIndicators: [],
     floatingTexts: [], // nombres d'or flottants (Partie 2.4 : "rien ne se passe en silence") — voir spawnFloatingGold
     bridges: [], // { angle, hp, maxHp } — planks laid across the moat
     moatSlowedThisWave: false, // did the moat actually slow anyone this wave
@@ -3060,7 +3116,7 @@
   function fireSiegeShot(s, dmg) {
     const from = { x: s.r * Math.cos(s.angle), y: 0, z: s.r * Math.sin(s.angle) };
     state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true });
-    playShoot();
+    playSiegeShot();
   }
 
   // ranged fire can target siege engines too now (not just regular
@@ -3274,6 +3330,23 @@
   function triggerShake(mag) {
     state.shakeT = SHAKE_DURATION;
     state.shakeMag = mag;
+  }
+
+  // indicateur directionnel : réutilise EXACTEMENT le même test que
+  // OFFSCREEN_APPROACH_MUL (project() direct, sans passer par toScreen())
+  // pour la vitesse d'approche des ennemis, mais ICI on veut la position
+  // écran RÉELLE une fois le pan/zoom appliqués (un coup peut être "dans
+  // le monde visible" mais hors du cadre si on est zoomé) — donc
+  // toScreen(project(...)) plutôt que project() seul.
+  function isPointOnScreen(x, y, z) {
+    const rot = state.theta - Math.PI / 4;
+    const sp = toScreen(project(x, y, z, rot));
+    return sp.x > -20 && sp.x < W + 20 && sp.y > -20 && sp.y < H + 20;
+  }
+  const DAMAGE_INDICATOR_LIFE = 1.8;
+  function triggerDamageIndicator(x, z) {
+    if (isPointOnScreen(x, 0, z)) return; // déjà visible, inutile
+    state.damageIndicators.push({ x, z, t: 0, life: DAMAGE_INDICATOR_LIFE });
   }
 
   function hurtPlayer(n) {
@@ -3755,7 +3828,7 @@
     goldNum.textContent = state.gold;
     state.moulinLevel++;
     state.moulinTimer = MOULIN_TICK;
-    playHammer();
+    playPurchase();
     updateMoulinBtn();
   });
 
@@ -3788,7 +3861,7 @@
     state.gold -= cost;
     goldNum.textContent = state.gold;
     state.egliseZoneLevel++;
-    playHammer();
+    playPurchase();
     updateEgliseBtn();
   });
 
@@ -3868,6 +3941,7 @@
     goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
     oilBtn.disabled = false; // huile bouillante needs an actual turret to pour from
+    playPurchase(); // manquait avant v0.98
     updateTowerBtn();
   });
   updateTowerBtn();
@@ -3888,7 +3962,7 @@
     state.gold -= tier.cost;
     goldNum.textContent = state.gold;
     state.moatLevel++;
-    playHammer();
+    playPurchase();
     updateMoatBtn();
   });
   updateMoatBtn();
@@ -3904,6 +3978,7 @@
     state.gold -= cost;
     goldNum.textContent = state.gold;
     state.gardenLevel++;
+    playPurchase(); // manquait avant v0.98 — seul achat resté silencieux avec la tourelle
     updateGardenBtn();
   });
   updateGardenBtn();
@@ -3924,7 +3999,7 @@
     state.gold -= cost;
     goldNum.textContent = state.gold;
     state.horseLevel++;
-    playHammer();
+    playPurchase();
     updateHorseBtn();
   });
   updateHorseBtn();
@@ -5119,6 +5194,7 @@
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
           triggerShake(Math.min(14, tier.dmg * 0.5)); // arbalète : léger ; bélier (22 dmg) : net
+          triggerDamageIndicator(s.r * Math.cos(s.angle), s.r * Math.sin(s.angle));
           if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
         }
       }
@@ -5173,6 +5249,7 @@
           // appliqués à l'impact plutôt qu'au moment du tir
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
           triggerShake(Math.min(14, pr.dmg * 0.5));
+          triggerDamageIndicator(pr.from.x, pr.from.z);
           if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
         } else if (!pr.target.dead) {
           const isSiege = pr.target.tierIdx !== undefined;
@@ -5202,6 +5279,11 @@
       if (pt.kind === 'smoke') pt.vy *= (1 - 0.7 * dt); // rise, then ease off
     }
     state.particles = state.particles.filter(pt => pt.life < pt.maxLife);
+
+    // indicateurs directionnels de dégâts hors champ — même idiome, juste
+    // vieillir/purger (voir triggerDamageIndicator()/drawDamageIndicators())
+    for (const di of state.damageIndicators) di.t += dt;
+    state.damageIndicators = state.damageIndicators.filter(di => di.t < di.life);
 
     // nombres d'or flottants — juste vieillir/purger ici, la position
     // (montée + fondu) se calcule au dessin (voir drawFloatingText)
@@ -7457,6 +7539,51 @@
 
     drawFightBanner();
     drawSnow();
+    drawDamageIndicators();
+  }
+
+  // petite flèche au bord de l'écran, pointant vers un coup encaissé hors
+  // du cadre actuel (voir triggerDamageIndicator()) — recalculée à chaque
+  // frame depuis la position monde (x,z) pour rester correcte même si la
+  // caméra tourne pendant que l'indicateur s'efface
+  // bord de l'écran où poser l'indicateur : un rectangle réduit, PAS
+  // centré symétriquement — la barre du bas (#bottomStack, boutons
+  // d'action) est bien plus haute que le reste du HUD, un inset symétrique
+  // aurait régulièrement caché la flèche derrière ces boutons
+  const DMG_IND_BOUND_SIDE = 20, DMG_IND_BOUND_TOP = 50, DMG_IND_BOUND_BOTTOM = 112;
+  function clampToScreenRect(cx, cy, dx, dy) {
+    let tt = Infinity;
+    const left = DMG_IND_BOUND_SIDE, right = W - DMG_IND_BOUND_SIDE;
+    const top = DMG_IND_BOUND_TOP, bottom = H - DMG_IND_BOUND_BOTTOM;
+    if (dx > 0) tt = Math.min(tt, (right - cx) / dx);
+    else if (dx < 0) tt = Math.min(tt, (left - cx) / dx);
+    if (dy > 0) tt = Math.min(tt, (bottom - cy) / dy);
+    else if (dy < 0) tt = Math.min(tt, (top - cy) / dy);
+    return { x: cx + dx * tt, y: cy + dy * tt };
+  }
+  function drawDamageIndicators() {
+    if (state.damageIndicators.length === 0) return;
+    const rot = state.theta - Math.PI / 4;
+    const cxs = W / 2, cys = H / 2;
+    for (const di of state.damageIndicators) {
+      const sp = toScreen(project(di.x, 0, di.z, rot));
+      const dx = sp.x - cxs, dy = sp.y - cys;
+      const ang = Math.atan2(dy, dx);
+      const { x: ix, y: iy } = clampToScreenRect(cxs, cys, dx, dy);
+      const alpha = Math.max(0, 1 - di.t / di.life) * 0.85;
+      ctx.save();
+      ctx.translate(ix, iy);
+      ctx.rotate(ang);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#c9503f';
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(-6, -7);
+      ctx.lineTo(-6, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   // screen-space HUD banner (not world-space — no rot involved), in the
@@ -7505,6 +7632,25 @@
   }
   initVillagers();
   startWave(); // wave 1 begins immediately, no waiting on an empty screen
+
+  // accroche premier lancement : une seule fois par appareil, jamais
+  // bloquante (pas de menu forcé, juste un bandeau sous la barre du
+  // haut) ; disparaît toute seule après INTRO_HINT_DURATION ou au tap
+  // sur ✕ — le flag est posé dès l'affichage pour ne jamais réapparaître
+  // même si la page est rechargée pendant qu'il est encore visible
+  const INTRO_HINT_DURATION = 11000;
+  try {
+    if (!localStorage.getItem('bo_seenIntro')) {
+      localStorage.setItem('bo_seenIntro', '1');
+      const introHint = document.getElementById('introHint');
+      document.getElementById('introHintText').textContent = t('intro_hint');
+      introHint.hidden = false;
+      const closeIntro = () => { introHint.hidden = true; };
+      document.getElementById('introHintClose').addEventListener('click', closeIntro);
+      setTimeout(closeIntro, INTRO_HINT_DURATION);
+    }
+  } catch (e) { /* ignore — pas grave si localStorage est indisponible, juste pas de mémorisation */ }
+
   requestAnimationFrame(loop);
 })();
 </script>

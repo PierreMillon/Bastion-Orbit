@@ -3550,3 +3550,97 @@ commit — `grep -c "__DEBUG_"` revenu à 1) :
 Suite proposée à Pierre : passer au point 3 (accroche premier
 lancement) si validé, sinon reste en attente ici avec le reste de la
 liste ci-dessus.
+
+## Suite de l'amélioration de l'expérience (points 3-5) → fait en v0.98
+
+Pierre a répondu "Fais tout" — enchaîné sans repasser par lui sur les
+3 points laissés en attente en v0.97.
+
+### 3. Accroche discrète au tout premier lancement
+
+`#introHint`, bandeau sous la barre du haut, jamais bloquant (le jeu
+tourne en dessous, wave 1 démarre comme toujours immédiatement).
+Une seule fois par appareil (`localStorage['bo_seenIntro']`, posé dès
+l'affichage — pas au moment de la fermeture — pour ne jamais
+réapparaître même si la page est rechargée pendant qu'il est encore
+visible). Se ferme au tap sur ✕ ou tout seul après 11s.
+
+Contenu choisi après relecture du vrai fonctionnement du jeu (pas
+générique) : le seigneur ne "vise" pas en tapant, il vise en TOURNANT
+LA CAMÉRA (le tir est automatique sur la cible la plus proche, avec un
+bonus de dégâts dans l'axe) — un mécanisme central mais totalement
+invisible pour qui n'a pas lu Astuces. Texte : "Glissez pour tourner
+la caméra et viser — dégâts bonus droit dans l'axe. Sortie pour
+charger dehors, Réparer si le mur faiblit. Plus de détails dans
+☰ Astuces."
+
+### 4. Indicateur directionnel de dégâts hors champ
+
+Petite flèche au bord de l'écran, uniquement quand le point d'impact
+n'est PAS déjà visible à l'écran (`isPointOnScreen()` — utile surtout
+zoomé, depuis le zoom du v0.94 ; à zoom normal (1×) la carte entière
+tient dans le cadre, donc rarement déclenché). Recalculée à chaque
+frame depuis la position MONDE de la source (position de l'engin de
+siège, ou point de tir du trébuchet) plutôt que mémorisée en position
+écran — reste correcte même si la caméra tourne pendant que
+l'indicateur s'efface (`DAMAGE_INDICATOR_LIFE = 1.8s`).
+
+Détail retenu après un premier essai raté : le rectangle où poser la
+flèche ne peut PAS être un simple inset symétrique — la barre du bas
+(#bottomStack, boutons d'action) fait 100px de haut contre 42px pour
+la barre du haut ; un inset symétrique à 46px plaçait régulièrement la
+flèche pile DERRIÈRE les boutons (repéré en vérifiant la position
+calculée, pas juste à l'œil — `iy=754` avec un écran de 800px de
+haut, sous le début des boutons à `y=700`). Corrigé avec un vrai
+rectangle asymétrique (`clampToScreenRect`, marge 112px en bas contre
+50px en haut, 20px sur les côtés) et une intersection rayon/rectangle
+standard plutôt qu'un simple ratio symétrique.
+
+**Vérifié en Playwright** (hooks de debug temporaires, retirés avant
+commit) : `isPointOnScreen` confirmé vrai à zoom normal sur un point
+proche, faux à zoom ×4 sur un point qu'on aurait dû sortir du cadre ;
+un déclenchement sur un point déjà visible n'ajoute PAS d'indicateur
+(pas de doublon inutile) ; capture d'écran à l'appui montrant la
+flèche correctement positionnée juste au-dessus de la barre de
+boutons, jamais dessous.
+
+### 5. Variété sonore
+
+`playHammer()` était réutilisé pour TOUT (achats de moulin/église/
+douves/cheval, coup de mêlée en sortie, huile, réparation) — un seul
+son plat sans distinction entre "j'ai amélioré quelque chose" et
+"j'ai frappé quelque chose". Nouveau `playPurchase()` (montant plutôt
+que descendant, lecture "caisse enregistreuse") pour TOUS les achats
+(moulin/église/douves/cheval/jardin/tourelle) ; `playHammer()` reste
+réservé aux vraies actions physiques (mêlée, huile, réparation),
+inchangé. Au passage, deux achats étaient restés complètement
+silencieux depuis leur ajout (Jardin, Tourelle) — corrigé, plus rien
+ne reste muet à l'achat.
+
+Le caillou de trébuchet réutilisait aussi `playShoot()` (le même tir
+sec qu'une flèche/un carreau normal) — nouveau `playSiegeShot()`,
+plus grave et plus long (sawtooth, 220ms contre 70ms), cohérent avec
+le tremblement d'écran ajouté en v0.97 sur ce même impact.
+
+Volontairement PAS ajouté : un son à chaque ennemi tué. Ça arrive des
+dizaines de fois par vague — un bip répété à cette fréquence
+deviendrait vite fatiguant plutôt qu'utile, contrairement aux nombres
+d'or flottants (purement visuels, pas de saturation possible de la
+même façon). Resterait un bon candidat pour plus tard, mais demande
+plus de soin (variation de hauteur aléatoire, throttling) qu'un simple
+`playX()` de plus.
+
+**Vérifié en Playwright** : tous les boutons d'achat cliqués (or forcé
+à 5000 via un hook de debug temporaire) sans erreur console — y
+compris jardin/tourelle, qui n'avaient jamais été exercés par un test
+avant (rien ne les couvrait, le silence n'avait jamais été repéré en
+testant, seulement en relisant le code).
+
+### Régression finale (les 3 points ensemble)
+
+8 vagues forcées en rafale, aucune erreur console (seul le 404
+`favicon.ico`, absent du repo depuis toujours, sans rapport). Tous les
+hooks de debug retirés (`grep -c "__DEBUG_"` = 1).
+
+Reste en attente : rien — les 5 points de la réflexion "amélioration
+de l'expérience" sont maintenant tous traités.
