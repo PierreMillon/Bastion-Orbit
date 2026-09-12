@@ -195,6 +195,21 @@
     text-overflow: ellipsis;
   }
   #bottomStack button:disabled { opacity: 0.4; }
+  /* DEMANDÉ EN SESSION (2026-09-12, Pierre : "le prix c'est juste un
+     chiffre, y a pas de parenthèse, il est juste en dessous du mot") :
+     affordText() construit maintenant deux lignes (voir plus bas) — le
+     prix est un <span> à part, en bloc pour forcer le retour à la ligne,
+     un ton plus clair/discret que le libellé (même esprit que .volumeVal
+     ailleurs dans cette page pour un chiffre secondaire). Règle partagée
+     (pas juste #bottomStack) : affordText() alimente aussi moulinBtn/
+     egliseBtn (.worldBtn), même traitement partout où un prix s'affiche. */
+  .btnCost {
+    display: block;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(242,234,217,0.75);
+    margin-top: 1px;
+  }
 
   /* Réparer/Sortie only ever involve the lord — his own sprite blue.
      Descendre/Remonter only ever involves the princess — her sprite pink.
@@ -1942,9 +1957,14 @@
   // huile bouillante: hold-to-act like Réparer/Sortie, but needs a turret
   // to pour from — the lord walks over and, once there, it periodically
   // scalds every attacker stalled at the wall near that turret's angle
-  const OIL_TICK = 1.6;
-  const OIL_DMG = 3;
-  const OIL_ANGULAR_WIDTH = 0.5; // how wide a stretch of wall one turret's oil covers
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "elle doit vraiment être
+  // efficace quand elle tombe") : dégâts et fréquence doublés/accélérés
+  // (3 tous les 1,6s ≈ 1,9 dps -> 6 tous les 1,2s = 5 dps), portée
+  // angulaire élargie (0.5 -> 0.65 rad) pour toucher plus d'ennemis
+  // massés au mur par déversement.
+  const OIL_TICK = 1.2;
+  const OIL_DMG = 6;
+  const OIL_ANGULAR_WIDTH = 0.65; // how wide a stretch of wall one turret's oil covers
   const GROUND_EASE_RATE = 4;     // how fast the lord transitions platform <-> ground
 
   const FIGHT_BANNER_DUR = 1.1;   // "FIGHT!" banner total lifetime, in seconds
@@ -3036,7 +3056,7 @@
   // particule ondule maintenant latéralement au fil du temps (latPhase/
   // latSpeed, calculé au dessin — voir drawStreamFlow) plutôt que de
   // garder un décalage latéral figé.
-  const STREAM_FLOW_COUNT = 733;
+  const STREAM_FLOW_COUNT = 367; // divisé par 2, demandé en session (2026-09-12) — était 733
   const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
   const STREAM_FLOW_WOBBLE = 3.5; // amplitude de l'ondulation latérale
   // portée réelle utilisée (voir ensureStreamFlowSeeds) — plus une const
@@ -3306,14 +3326,26 @@
   // against; failing that, whoever's nearest the wall (or, failing that,
   // approaching), so holding Sortie always has something to do instead of
   // just idling outside the door
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "une fois qu'il a tué
+  // [sa cible], il faut qu'il attaque le plus proche ou le plus
+  // puissant") : la priorité aux engins de siège était ABSOLUE — un
+  // engin à l'opposé du donjon passait toujours devant un ennemi juste à
+  // côté du seigneur, qui se retrouvait donc à traverser tout le champ de
+  // bataille (en ignorant des ennemis adjacents) après chaque mise à
+  // mort. Corrigé : l'engin de siège garde un avantage (moitié de sa
+  // distance angulaire réelle, SIEGE_PRIORITY_BONUS) au lieu d'un
+  // passe-droit total — il gagne toujours quand il est raisonnablement
+  // proche, mais un ennemi vraiment adjacent l'emporte désormais sur un
+  // engin à l'autre bout du mur.
+  const SIEGE_PRIORITY_BONUS = 0.5;
   function nearestSortieTarget(fromAngle) {
     // fontaine-soin : affaibli en sortie, se soigner passe avant tout le
     // reste — continuer à se battre à faible PV loin du mur est le
     // meilleur moyen de mourir pour de bon (voir FOUNTAIN_HEAL_HP_FRAC)
     if (state.player.hp < state.player.maxHp * FOUNTAIN_HEAL_HP_FRAC) return FOUNTAIN_EXTRA;
     const siege = nearestSiegeEngine(fromAngle);
-    if (siege) return siege;
     let best = null, bestD = Infinity;
+    if (siege) { best = siege; bestD = Math.abs(angDiff(fromAngle, siege.angle)) * SIEGE_PRIORITY_BONUS; }
     for (const e of state.enemies) {
       if (e.state !== 'attackBase' && e.state !== 'approach') continue;
       const d = Math.abs(angDiff(fromAngle, e.angle));
@@ -4044,6 +4076,28 @@
     e.angle = Math.atan2(nz, nx);
   }
 
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "j'ai pu l'attaquer mais
+  // à travers le cours d'eau, c'est pas possible, si je dois traverser le
+  // cours d'eau, je dois passer par le pont") : avoidStream ci-dessus
+  // empêche bien le seigneur de MARCHER à travers le ruisseau, mais le
+  // test de coup au corps-à-corps en sortie (plus bas, p.behavior ===
+  // 'sortie') ne vérifiait que l'angle/le rayon — pendant que le
+  // seigneur glisse le long de la berge vers le pont (avoidStream), son
+  // angle peut momentanément s'aligner avec un ennemi collé sur L'AUTRE
+  // berge, avant même d'avoir traversé — le coup portait quand même.
+  // Vérifie maintenant explicitement que les deux points sont du même
+  // côté du ruisseau (ou tous deux dans le couloir du pont).
+  function sameStreamSide(x1, z1, x2, z2) {
+    const g = streamGeometry();
+    const d1 = (x1 - g.cx) * g.tx + (z1 - g.cz) * g.tz;
+    const d2 = (x2 - g.cx) * g.tx + (z2 - g.cz) * g.tz;
+    if (Math.abs(d1) < BRIDGE_SPAN_HALF && Math.abs(d2) < BRIDGE_SPAN_HALF) return true;
+    const p1 = streamPointAt(g, d1), p2 = streamPointAt(g, d2);
+    const perp1 = (x1 - p1.x) * g.rx + (z1 - p1.z) * g.rz;
+    const perp2 = (x2 - p2.x) * g.rx + (z2 - p2.z) * g.rz;
+    return Math.sign(perp1 || 1) === Math.sign(perp2 || 1);
+  }
+
   // approaching enemies gently push each other apart instead of stacking on
   // the same spot or walking through one another — same circle-vs-circle
   // idea as avoidBushes, eased in over a few frames (spring-like) rather
@@ -4356,7 +4410,7 @@
       moulinBtn.disabled = true;
     } else {
       const cost = moulinCost(state.moulinLevel + 1);
-      moulinBtn.textContent = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
+      moulinBtn.innerHTML = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
       moulinBtn.classList.toggle('unaffordable', state.gold < cost);
       moulinBtn.disabled = false;
     }
@@ -4390,7 +4444,7 @@
     } else {
       const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
       const label = state.egliseZoneLevel === 0 ? t('eglise_btn_start') : t('eglise_btn_upgrade');
-      egliseBtn.textContent = affordText(label, cost);
+      egliseBtn.innerHTML = affordText(label, cost);
       egliseBtn.classList.toggle('unaffordable', state.gold < cost);
       egliseBtn.disabled = false;
     }
@@ -4470,10 +4524,14 @@
   // visiblement grisé (opacité réduite, voir .unaffordable dans le CSS)
   // quand on n'a pas assez d'or — "rien ne se passe en silence"
   // s'applique aussi à "pourquoi ce bouton ne fait rien".
-  function affordText(label, cost) { return `${label} (${cost})`; }
+  // renvoie du HTML (voir .btnCost plus haut) : le prix seul, sans
+  // parenthèses, sur sa propre ligne sous le libellé — set via innerHTML
+  // à chaque site d'appel (pas textContent, qui afficherait les balises
+  // telles quelles).
+  function affordText(label, cost) { return `${label}<span class="btnCost">${cost}</span>`; }
   const TOWER_COST = 5;
   function updateTowerBtn() {
-    towerBtn.textContent = affordText(t('tower_btn'), TOWER_COST);
+    towerBtn.innerHTML = affordText(t('tower_btn'), TOWER_COST);
     towerBtn.classList.toggle('unaffordable', state.gold < TOWER_COST);
   }
   towerBtn.addEventListener('click', () => {
@@ -4493,7 +4551,7 @@
       return;
     }
     const cost = MOAT_TIERS[state.moatLevel].cost;
-    moatBtn.textContent = affordText(t('moat_btn'), cost);
+    moatBtn.innerHTML = affordText(t('moat_btn'), cost);
     moatBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   moatBtn.addEventListener('click', () => {
@@ -4510,7 +4568,7 @@
 
   function updateGardenBtn() {
     const cost = gardenCost(state.gardenLevel + 1);
-    gardenBtn.textContent = affordText(t('garden_btn'), cost);
+    gardenBtn.innerHTML = affordText(t('garden_btn'), cost);
     gardenBtn.classList.toggle('unaffordable', state.gold < cost);
   } // no cap any more, always buyable (funds permitting)
   gardenBtn.addEventListener('click', () => {
@@ -4530,7 +4588,7 @@
   function updateHorseBtn() {
     const cost = horseCost(state.horseLevel + 1);
     const label = state.horseLevel > 0 ? t('horse_btn') + ' ' + state.horseLevel : t('horse_btn');
-    horseBtn.textContent = affordText(label, cost);
+    horseBtn.innerHTML = affordText(label, cost);
     horseBtn.classList.toggle('active', state.horseLevel > 0);
     horseBtn.classList.toggle('unaffordable', state.gold < cost);
   }
@@ -5247,7 +5305,8 @@
       p.repairTimer = REPAIR_TICK;
       p.repairMaxedPlayed = false;
       if (sortieTarget && Math.abs(angDiff(p.angle, targetAngle)) < 0.15 &&
-          Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85) {
+          Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85 &&
+          sameStreamSide(p.r * Math.cos(p.angle), p.r * Math.sin(p.angle), targetR * Math.cos(targetAngle), targetR * Math.sin(targetAngle))) {
         p.sortieTimer -= dt;
         if (p.sortieTimer <= 0) {
           playHammer();
