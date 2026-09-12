@@ -347,7 +347,17 @@
      déborder de sa propre largeur max, le curseur débordant visiblement
      à droite des autres boutons du menu. Piège flexbox classique, fix
      standard. */
-  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; }
+  /* BUG TROUVÉ EN SESSION (2026-09-12, Pierre : "ils sont juste des
+     boutons, on/off que ça marche vraiment") : le code JS des deux
+     curseurs était correct (volume vraiment proportionnel, pas juste
+     muet/pas muet — vérifié) ; sur mobile, sans touch-action, le
+     navigateur peut interpréter un glissé horizontal sur le curseur comme
+     un DÉFILEMENT du menu (qui, lui, défile verticalement) plutôt qu'un
+     vrai glissé du curseur — ne laissant qu'un simple TAP (qui définit la
+     valeur au point touché, ressemble à un bouton on/off) passer. Fix
+     standard : touch-action: none retire l'input du système de gestes de
+     défilement du navigateur, tout le glissé lui revient. */
+  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; touch-action: none; }
   .volumeRow .volumeVal { flex: none; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
   body.phosphor .volumeRow {
     background: var(--ph-fill);
@@ -786,8 +796,8 @@
   </div>
   <div class="volumeRow">
     <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
-    <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
-    <span class="volumeVal" id="musicVolumeVal">35%</span>
+    <input type="range" id="musicVolumeInput" min="0" max="100" value="20">
+    <span class="volumeVal" id="musicVolumeVal">20%</span>
   </div>
   <div class="volumeRow">
     <label for="sfxVolumeInput" id="sfxVolumeLabel">Bruitages</label>
@@ -1460,7 +1470,7 @@
   const bgMusic = document.getElementById('bgMusic');
   const musicVolumeInput = document.getElementById('musicVolumeInput');
   const musicVolumeVal = document.getElementById('musicVolumeVal');
-  let musicVolume = 35;
+  let musicVolume = 20; // démarre à 20% (demandé en session, 2026-09-12)
   try {
     const v = parseInt(localStorage.getItem('bo_musicVolume'), 10);
     if (!isNaN(v) && v >= 0 && v <= 100) musicVolume = v;
@@ -2027,10 +2037,22 @@
   // à fond" sacralise tout le cœur du village, pas seulement l'église
   // elle-même. A forcé un repositionnement de HOUSES[7] (v0.79), qui
   // serait sinon tombée dans cette zone élargie — voir HOUSES plus haut.
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : le 1er palier doit être un
+  // CERCLE — pas une ellipse — et dépasser clairement l'église dans
+  // toutes les directions) : l'ancien rx=70/rz=45 ne dépassait qu'à peine
+  // la nef (32×60) côté longueur (70 vs 60) et à peine plus côté largeur
+  // (45 vs 32) — à peine visible. rx=rz=75 donne un vrai cercle avec une
+  // marge nette (15 unités côté longueur, 43 côté largeur) au-delà de la
+  // nef. Conséquence mécanique de ce changement : un cercle de rayon 75
+  // dépasse le rz=65 de l'ancien palier 2 — passer palier 1 -> 2 aurait
+  // RÉTRÉCI la zone en largeur, un vrai recul de protection à l'achat.
+  // Paliers 2 et 3 légèrement relevés en rz (65->80, 85->95) pour rester
+  // strictement croissants sur les deux axes à chaque palier — rx et cost
+  // inchangés, aucun autre équilibrage touché.
   const EGLISE_ZONE_TIERS = [
-    { cost: 25, rx: 70, rz: 45 },
-    { cost: 55, rx: 100, rz: 65 },
-    { cost: 100, rx: 135, rz: 85 },
+    { cost: 25, rx: 75, rz: 75 },
+    { cost: 55, rx: 100, rz: 80 },
+    { cost: 100, rx: 135, rz: 95 },
     { cost: 180, rx: 175, rz: 110 },
     { cost: 320, rx: 312, rz: 196 }
   ];
@@ -2246,9 +2268,42 @@
     }
     return min - r - STREAM_HALF_WIDTH;
   }
+  // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : une
+  // maison avec une roue posée quasiment dessus) : ne vérifiait que la
+  // MAISON du moulin (m.houseX/houseZ) — pas sa ROUE, qui mord dans l'eau
+  // à ~29 unités de là (voir moulinGeometry : houseX/Z à STREAM_HALF_WIDTH
+  // +26 du ruisseau, wheelX/Z à STREAM_HALF_WIDTH -3, donc sur le même
+  // rayon mais bien plus proche du ruisseau) — assez loin de la maison
+  // pour qu'une maison candidate passe le test de clearance de la maison
+  // tout en tombant en plein sur la roue. 14 ≈ MOULIN_WHEEL_R (déclarée
+  // plus bas dans le fichier, pas encore lisible ici à l'appel de
+  // buildWorld() — même contrainte d'ordre que le reste de ce bloc, voir
+  // le commentaire au-dessus de STREAM_CROSS_R).
   function moulinClearanceAt(x, z, r) {
     const m = moulinGeometry();
-    return circleClearance(x, z, r, m.houseX, m.houseZ, 26); // 26 ≈ diagonale de la maison du moulin (20×16)
+    return Math.min(
+      circleClearance(x, z, r, m.houseX, m.houseZ, 26), // 26 ≈ diagonale de la maison du moulin (20×16)
+      circleClearance(x, z, r, m.wheelX, m.wheelZ, 14)   // 14 = MOULIN_WHEEL_R
+    );
+  }
+  // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : une
+  // maison posée en plein sur le pont) : rien ne vérifiait la place prise
+  // par le PONT DE PIERRE (drawStoneBridge, à l'endroit où le ruisseau
+  // croise le réseau routier, d=0 sur le ruisseau) — streamClearanceAt
+  // protège bien l'EAU (largeur STREAM_HALF_WIDTH=11), mais le pont
+  // dépasse largement de l'eau (24 unités le long de la route, 16 de
+  // large) sans aucun garde-fou. rectClearance fait déjà exactement ce
+  // calcul (rectangle ORIENTÉ) pour l'église — même principe ici : le
+  // pont est orienté selon l'angle de la route qu'il enjambe (g.angle),
+  // etendu de BRIDGE_SPAN_HALF le long de cet angle et BRIDGE_WIDTH_HALF
+  // perpendiculairement (voir drawStoneBridge/toWorld — rx,rz porte
+  // spanHalf, tx,tz porte widthHalf, exactement les axes locaux que
+  // rectClearance attend pour halfW/halfH à ce yaw). 24/16 = BRIDGE_
+  // SPAN_HALF/BRIDGE_WIDTH_HALF (déclarées plus bas, pas encore lisibles
+  // ici — même contrainte d'ordre que MOULIN_WHEEL_R juste au-dessus).
+  function bridgeClearanceAt(x, z, r) {
+    const g = streamGeometry();
+    return rectClearance(x, z, r, g.cx, g.cz, 24, 16, g.angle);
   }
 
   // rejet-échantillonnage générique : essaie jusqu'à `tries` candidats,
@@ -2316,9 +2371,9 @@
       const cx = c.r * Math.cos(c.angle), cz = c.r * Math.sin(c.angle);
       const ex = cx + 120, ez = cz + 30, gx = cx - 110, gz = cz - 30; // église/grange, même écart fixe qu'avant
       let m = Math.min(
-        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40),
-        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8),
-        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8)
+        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40), bridgeClearanceAt(cx, cz, 40),
+        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8), bridgeClearanceAt(ex, ez, 8),
+        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8), bridgeClearanceAt(gx, gz, 8)
       );
       // le COULOIR donjon->église doit rester dégagé sur toute sa
       // longueur, pas juste à ses deux bouts — sinon la place (qui se
@@ -2346,24 +2401,69 @@
     // encore à ce stade), balayage de R pour maximiser la marge
     const eglx = vcx + 120, eglz = vcz + 30, grx = vcx - 110, grz = vcz - 30;
     const plazaAngle = Math.atan2(eglz, eglx);
-    // plage large + beaucoup d'essais (recherche 1D le long d'un seul
-    // rayon, donc peu coûteuse) : un audit sur 30 graines a montré qu'une
-    // plage trop étroite (120-380, 50 essais) pouvait ne jamais croiser
-    // un point dégagé si le ruisseau/une route coupe justement CE rayon
-    // précis — corrigé en élargissant la recherche plutôt qu'en
-    // acceptant un score négatif (dans le mur/le ruisseau).
-    const plazaMaxR = Math.min(460, VILLAGE_CENTER_R - 10);
-    const plazaCandidate = (rng) => 90 + rng() * Math.max(30, plazaMaxR - 90);
+    // BUG TROUVÉ EN SESSION (2026-09-10, capture à l'appui de Pierre : un
+    // vrai fouillis de traits croisés à la base du donjon) : rien ici ne
+    // vérifiait que la place (rayon PLAZA_RADIUS=80) reste hors du mur du
+    // donjon (BASE_R=74) — avec la recherche élargie du correctif
+    // précédent, PLAZA_R pouvait tomber aussi bas que ~90, laissant le
+    // bord de la place tourné vers une route à seulement `PLAZA_R - 80`
+    // du centre — parfois NÉGATIF, littéralement DANS la tour. C'est la
+    // bretelle (roadNearEdgePoint -> plazaEdgePoint) essayant de rejoindre
+    // ce bord-là qui créait le fouillis, pas un bug de la bretelle
+    // elle-même. Corrigé en pénalisant explicitement tout candidat dont le
+    // bord proche empiéterait sur le mur (et en relevant le plancher de
+    // recherche d'autant, pour ne plus perdre d'essais sur des candidats
+    // condamnés d'avance).
+    const plazaMinR = BASE_R + PLAZA_RADIUS + 30;
+    const plazaMaxR = Math.max(plazaMinR + 40, Math.min(460, VILLAGE_CENTER_R - 10));
+    const plazaCandidate = (rng) => plazaMinR + rng() * (plazaMaxR - plazaMinR);
     const scorePlaza = (r) => {
       const px = r * Math.cos(plazaAngle), pz = r * Math.sin(plazaAngle);
       return Math.min(
-        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80),
+        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80), bridgeClearanceAt(px, pz, 80),
         rectClearance(px, pz, 80, eglx, eglz, 32, 60, EGLISE_YAW),
-        circleClearance(px, pz, 80, grx, grz, 32)
+        circleClearance(px, pz, 80, grx, grz, 32),
+        (r - PLAZA_RADIUS) - BASE_R - 20 // bord proche de la place vs mur du donjon
       );
     };
     PLAZA_R = findPlacement(rng, plazaCandidate, scorePlaza, 25, 220);
     const plx = PLAZA_R * Math.cos(plazaAngle), plz = PLAZA_R * Math.sin(plazaAngle);
+
+    // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : deux
+    // maisons du même hameau posées quasiment l'une sur l'autre) :
+    // findPlacement() essaie `tries` candidats et garde le MEILLEUR — mais
+    // "meilleur" n'est pas "libre" : si les `tries` premiers essais tombent
+    // tous en collision (arrive facilement pour les dernières maisons d'un
+    // hameau, l'espace autour de la route s'étant déjà rempli des
+    // précédentes), la fonction renvoie quand même ce meilleur candidat,
+    // même avec un score négatif (= une vraie collision). C'est exactement
+    // ce que montrait la capture. Corrigé en deux temps : (1) tries 50 ->
+    // 300, pour qu'un vrai candidat libre soit trouvé dans l'immense
+    // majorité des cas — voir resolveHouseOverlap ci-dessous pour la
+    // garantie qui couvre les rares cas restants.
+    // filet de sécurité déterministe : si la position retenue chevauche
+    // quand même une maison déjà posée (les 300 essais ont tous échoué),
+    // on la repousse le long de l'axe centre-à-centre jusqu'à ce que les
+    // deux cercles (rayon 23 chacun) ne se touchent plus — élimine
+    // l'overlap avec certitude, plutôt que de compter sur la chance du
+    // tirage suivant.
+    function resolveHouseOverlap(x, z, houses) {
+      const HOUSE_R = 23;
+      for (let iter = 0; iter < 6; iter++) {
+        let worst = null, worstOverlap = 0;
+        for (const h of houses) {
+          const overlap = HOUSE_R * 2 - Math.hypot(x - h.x, z - h.z);
+          if (overlap > worstOverlap) { worstOverlap = overlap; worst = h; }
+        }
+        if (!worst) break;
+        let dx = x - worst.x, dz = z - worst.z;
+        let len = Math.hypot(dx, dz);
+        if (len < 1e-6) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dz = Math.sin(a); len = 1; }
+        x = worst.x + (dx / len) * (HOUSE_R * 2 + 0.5);
+        z = worst.z + (dz / len) * (HOUSE_R * 2 + 0.5);
+      }
+      return { x, z };
+    }
 
     // maisons : deux hameaux de 4, un par route, "sur le passage" (marge
     // minimale voulue face à la route, pas juste maximisée comme le
@@ -2379,16 +2479,16 @@
           const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
           if (roadClearanceAt(x, z, 23) < 6) return -1000; // dans la route : rejeté net
           let m = Math.min(
-            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23), bridgeClearanceAt(x, z, 23),
             circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
             Math.hypot(x, z) - BASE_R - 40
           );
           for (const h of houses) m = Math.min(m, circleClearance(x, z, 23, h.x, h.z, 23));
           return m;
         };
-        const c = findPlacement(rng, candidate, score, 25, 50);
-        const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
-        houses.push({ x, z, angle: c.angle, r: c.r, yaw: rng() * Math.PI * 2, hiddenCount: 0 });
+        const c = findPlacement(rng, candidate, score, 25, 300);
+        let { x, z } = resolveHouseOverlap(c.r * Math.cos(c.angle), c.r * Math.sin(c.angle), houses);
+        houses.push({ x, z, angle: Math.atan2(z, x), r: Math.hypot(x, z), yaw: rng() * Math.PI * 2, hiddenCount: 0 });
       }
     }
     HOUSES = houses;
@@ -2403,6 +2503,7 @@
         roadClearanceAt(x, z, 30), roadClearanceAt(x2, z2, 24),
         moulinClearanceAt(x, z, 30), moulinClearanceAt(x2, z2, 24),
         streamClearanceAt(x, z, 30), streamClearanceAt(x2, z2, 24),
+        bridgeClearanceAt(x, z, 30), bridgeClearanceAt(x2, z2, 24),
         circleClearance(x, z, 30, vcx, vcz, 60), circleClearance(x, z, 30, plx, plz, PLAZA_RADIUS)
       );
       for (const h of houses) m = Math.min(m, circleClearance(x, z, 30, h.x, h.z, 23));
@@ -2420,7 +2521,7 @@
     const scoreWitch = (c) => {
       const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
       let m = Math.min(
-        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23), bridgeClearanceAt(x, z, 23),
         circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
         circleClearance(x, z, 23, fax, faz, 30), circleClearance(x, z, 23, fax + 75, faz - 45, 24)
       );
@@ -3460,8 +3561,22 @@
   function updateNextWaveBonus() {
     document.getElementById('waveBonus').textContent = '+' + nextWaveBonus();
   }
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "si on reste appuyé
+  // dessus, ça augmente beaucoup de vagues d'un seul coup") : l'empilement
+  // (toSpawn +=) est voulu et déjà correct (voir commentaire au-dessus,
+  // "stacks... no cap — press it 15 times, 15 waves' worth queue up") —
+  // mais rien n'empêchait de VRAIMENT en déclencher 15 en une seule
+  // pression tenue si un appui prolongé finissait par redéclencher
+  // plusieurs fois (double-frappe tactile, rebond du bouton). Garde-fou
+  // minimal, sans changer le comportement d'empilement voulu : un appui
+  // ne compte que s'il est à au moins NEXT_WAVE_COOLDOWN de la dernière
+  // fois.
+  const NEXT_WAVE_COOLDOWN = 0.4;
+  let lastNextWaveCall = -Infinity;
   function callNextWaveEarly() {
     if (state.waveState === 'gameover') return;
+    if (state.time - lastNextWaveCall < NEXT_WAVE_COOLDOWN) return;
+    lastNextWaveCall = state.time;
     const bonus = nextWaveBonus();
     state.gold += bonus;
     goldNum.textContent = state.gold;
@@ -4152,6 +4267,56 @@
     witchMsg.hidden = !witchMsgVisible;
     if (witchMsgVisible) witchMsg.textContent = t('witch_msg');
   }
+  window.__DEBUG_ROADS = function() {
+    // road vs road : les deux routes principales se croisent-elles jamais ?
+    const crossings = [];
+    const segs0 = roadSegs(0), segs1 = roadSegs(1);
+    for (const s0 of segs0) {
+      const x1 = s0.r0 * Math.cos(s0.a0), z1 = s0.r0 * Math.sin(s0.a0);
+      const x2 = s0.r1 * Math.cos(s0.a1), z2 = s0.r1 * Math.sin(s0.a1);
+      for (const s1 of segs1) {
+        const x3 = s1.r0 * Math.cos(s1.a0), z3 = s1.r0 * Math.sin(s1.a0);
+        const x4 = s1.r1 * Math.cos(s1.a1), z4 = s1.r1 * Math.sin(s1.a1);
+        if (segsIntersect(x1, z1, x2, z2, x3, z3, x4, z4)) crossings.push({ r0: s0.r0, r1: s1.r0 });
+      }
+    }
+    return {
+      seed: currentWorldSeed,
+      ROAD_ANGLES: ROAD_ANGLES.slice(),
+      PLAZA_X, PLAZA_Z, PLAZA_R,
+      roadRoadCrossings: crossings
+    };
+  };
+  window.__DEBUG_CENTER_ON = function(x, z, zoom) {
+    const rot = state.theta - Math.PI / 4;
+    const base = project(x, 0, z, rot);
+    camZoom = zoom;
+    camPanX = W / 2 - base.x * camZoom;
+    camPanY = H / 2 - base.y * camZoom;
+  };
+  window.__DEBUG_PLAZA_POS = function() { return { x: PLAZA_X, z: PLAZA_Z, r: PLAZA_R }; };
+  window.__DEBUG_SET_THETA = function(t) { state.theta = t; };
+  window.__DEBUG_BRETELLES = function() {
+    const out = [];
+    for (let idx = 0; idx < 2; idx++) {
+      const roadPt = roadNearEdgePoint(idx, roadNearestR(idx, PLAZA_X, PLAZA_Z), PLAZA_X, PLAZA_Z);
+      const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
+      const edge = plazaEdgePoint(edgeAngle);
+      out.push({
+        idx,
+        roadPt: { x: roadPt.x, z: roadPt.z, r: Math.hypot(roadPt.x, roadPt.z), a: Math.atan2(roadPt.z, roadPt.x) },
+        edge: { x: edge.x, z: edge.z, r: Math.hypot(edge.x, edge.z), a: Math.atan2(edge.z, edge.x) }
+      });
+    }
+    const doorX = R * Math.cos(DOOR_ANGLE), doorZ = R * Math.sin(DOOR_ANGLE);
+    const doorEdgeAngle = Math.atan2(doorZ - PLAZA_Z, doorX - PLAZA_X);
+    const startEdge = plazaEdgePoint(doorEdgeAngle);
+    return {
+      seed: currentWorldSeed, PLAZA_X, PLAZA_Z, PLAZA_R,
+      bretelles: out,
+      doorPath: { start: { x: startEdge.x, z: startEdge.z, r: Math.hypot(startEdge.x, startEdge.z) }, doorR: R }
+    };
+  };
   function handleCanvasTap(clientX, clientY) {
     const rot = state.theta - Math.PI / 4;
     const tapR = WORLD_TAP_RADIUS * camZoom; // le bâtiment paraît plus grand à l'écran une fois zoomé
@@ -7283,16 +7448,26 @@
   // interpolation linéaire entre r0 et r1 reste dans [min(r0,r1),
   // max(r0,r1)]), donc le chemin contourne le donjon au lieu de couper
   // au plus court à travers lui — un vrai chemin, pas une corde.
-  function bowedPathPoints(x0, z0, x1, z1, steps = 8) {
+  // bulge (EN TEST, 2026-09-10 — pas encore validé par Pierre) : quand
+  // l'écart angulaire est grand (le cas normal des bretelles depuis la
+  // refonte procédurale — village volontairement dans la poche libre
+  // ENTRE les deux routes, donc presque toujours à 70-160° de chacune),
+  // une simple interpolation de rayon reste proche du donjon tout du
+  // long ET balaie un grand arc — se lit comme "un chemin qui fait le
+  // tour de la tour" plutôt qu'un vrai chemin de campagne. Un léger
+  // bombement vers l'EXTÉRIEUR (jamais vers le donjon, toujours max(r0,
+  // r1) au minimum) fait contourner large plutôt que raser le mur.
+  function bowedPathPoints(x0, z0, x1, z1, steps = 8, bulge = 0) {
     const a0 = Math.atan2(z0, x0), r0 = Math.hypot(x0, z0);
     const a1raw = Math.atan2(z1, x1), r1 = Math.hypot(x1, z1);
     let da = a1raw - a0;
     while (da > Math.PI) da -= Math.PI * 2;
     while (da < -Math.PI) da += Math.PI * 2;
+    const b = bulge > 0 ? Math.min(bulge, Math.abs(da) * 90) : 0;
     const pts = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      const a = a0 + da * t, r = r0 + (r1 - r0) * t;
+      const a = a0 + da * t, r = r0 + (r1 - r0) * t + b * Math.sin(Math.PI * t);
       pts.push({ x: r * Math.cos(a), z: r * Math.sin(a) });
     }
     return pts;
@@ -7305,8 +7480,8 @@
   // porte, largeur DOOR_HALF_WIDTH) — seule la ROUTE qui y mène se
   // courbe, pas l'alignement final exigé en session ("les deux côtés du
   // chemin doivent toucher les deux bords de la porte").
-  function drawBowedSplitRoadPath(x0, z0, x1, z1, halfWidth, rot, wantFar) {
-    const pts = bowedPathPoints(x0, z0, x1, z1);
+  function drawBowedSplitRoadPath(x0, z0, x1, z1, halfWidth, rot, wantFar, bulge = 0) {
+    const pts = bowedPathPoints(x0, z0, x1, z1, 8, bulge);
     for (let i = 0; i < pts.length - 1; i++) {
       drawSplitRoadPath(pts[i].x, pts[i].z, pts[i + 1].x, pts[i + 1].z, halfWidth, rot, wantFar, 2);
     }
@@ -7323,6 +7498,35 @@
   // seules intersections du réseau sont ces deux jonctions bretelle/
   // route — les routes elles-mêmes ne se croisent jamais entre elles,
   // et le troisième chemin place->porte n'en touche aucune).
+  // BUG TROUVÉ EN SESSION (2026-09-10, capture à l'appui de Pierre) : cette
+  // fonction prenait `r` = PLAZA_R telle quelle — "le point de la route à
+  // la MÊME DISTANCE du donjon que la place". Rien ne garantit que la
+  // route passe par un angle compatible à CE rayon précis — avec les
+  // routes maintenant procédurales (angles/coudes variables par graine),
+  // ce point pouvait tomber presque à l'opposé de la place, forçant la
+  // bretelle à balayer un grand arc autour du donjon pour les relier (le
+  // "fouillis" signalé). roadNearestR() cherche maintenant le vrai point
+  // le plus proche de la place sur TOUTE la route, pas seulement à un
+  // rayon imposé — la bretelle en résultant est toujours la plus courte
+  // possible, jamais un détour arbitraire.
+  function roadNearestR(idx, targetX, targetZ) {
+    let bestR = BASE_R, bestD = Infinity;
+    for (let r = BASE_R; r <= roadMaxR(); r += 8) {
+      const a = roadAngleAt(idx, r);
+      const dx = r * Math.cos(a) - targetX, dz = r * Math.sin(a) - targetZ;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; bestR = r; }
+    }
+    // affinage local autour du meilleur rayon trouvé (le balayage grossier
+    // ci-dessus peut manquer le vrai minimum de quelques unités)
+    for (let r = Math.max(BASE_R, bestR - 8); r <= bestR + 8; r += 1) {
+      const a = roadAngleAt(idx, r);
+      const dx = r * Math.cos(a) - targetX, dz = r * Math.sin(a) - targetZ;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; bestR = r; }
+    }
+    return bestR;
+  }
   function roadNearEdgePoint(idx, r, towardX, towardZ) {
     const a = roadAngleAt(idx, r);
     const cx = r * Math.cos(a), cz = r * Math.sin(a);
@@ -7335,10 +7539,22 @@
     return { x: cx + px * side * ROAD_WIDTH, z: cz + pz * side * ROAD_WIDTH };
   }
   function drawPlazaAndPaths(rot, wantFar) {
+    // EN TEST (2026-09-10, pas encore validé) : une seule bretelle, celle
+    // du côté le plus court — dessiner les deux force systématiquement au
+    // moins un grand écart angulaire (la place est délibérément dans la
+    // poche LOIN des deux routes, donc quasi toujours à 70-160° de
+    // chacune), ce qui se lisait comme un tracé qui fait le tour de la
+    // tour plutôt qu'un vrai chemin de campagne.
+    let best = null, bestLen = Infinity;
     for (let idx = 0; idx < 2; idx++) {
-      const roadPt = roadNearEdgePoint(idx, PLAZA_R, PLAZA_X, PLAZA_Z);
+      const roadPt = roadNearEdgePoint(idx, roadNearestR(idx, PLAZA_X, PLAZA_Z), PLAZA_X, PLAZA_Z);
       const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
       const edge = plazaEdgePoint(edgeAngle);
+      const len = Math.hypot(roadPt.x - edge.x, roadPt.z - edge.z);
+      if (len < bestLen) { bestLen = len; best = { roadPt, edge }; }
+    }
+    {
+      const { roadPt, edge } = best;
       if (phosphorStyle === 'couleur') {
         if (pointFar((roadPt.x + edge.x) / 2, (roadPt.z + edge.z) / 2, rot) === wantFar) {
           drawSimpleRoadPath(roadPt.x, roadPt.z, edge.x, edge.z, ROAD_WIDTH, rot);
