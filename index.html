@@ -4997,34 +4997,35 @@
     }
     cosyCtx.shadowBlur = 0;
 
-    function barrel(bx, bz) {
-      const base = cosyIso(bx, 0, bz), topC = cosyIso(bx, 0.9, bz);
-      const rw = 0.55 * COSY_SCALE * 0.55, rh = 0.22 * COSY_SCALE * 0.55;
-      const grad = cosyCtx.createLinearGradient(base.x - rw, 0, base.x + rw, 0);
-      grad.addColorStop(0, '#241608'); grad.addColorStop(0.5, '#8a6538'); grad.addColorStop(1, '#2e1c0d');
-      cosyCtx.fillStyle = grad;
-      cosyCtx.beginPath();
-      cosyCtx.moveTo(base.x - rw, topC.y);
-      cosyCtx.quadraticCurveTo(base.x - rw * 1.12, (topC.y + base.y) / 2, base.x - rw, base.y);
-      cosyCtx.lineTo(base.x + rw, base.y);
-      cosyCtx.quadraticCurveTo(base.x + rw * 1.12, (topC.y + base.y) / 2, base.x + rw, topC.y);
-      cosyCtx.closePath(); cosyCtx.fill();
-      cosyCtx.beginPath(); cosyCtx.ellipse(topC.x, topC.y, rw, rh, 0, 0, Math.PI * 2); cosyCtx.fillStyle = '#a3814f'; cosyCtx.fill();
-    }
-    barrel(5.6, 1.4); barrel(6.3, 2.1); barrel(1.2, 5.6);
+    // DEMANDÉ EN SESSION (2026-09-12) : "il y a 2-3 piliers chelou qui
+    // bougent pas, on supprime" — les tonneaux statiques (barrel()) sont
+    // retirés ; l'escalier juste au-dessus est conservé tel quel.
 
     const fireCenter = cosyIso(6.7, 0.5, 4.6);
-    cosyQuad([cosyIso(6.4, 0, 4.6), cosyIso(7, 0, 4.6), cosyIso(7, 2.6, 4.6), cosyIso(6.4, 2.6, 4.6)], '#160c04');
+    cosyQuad([cosyIso(6.2, 0, 4.6), cosyIso(7.2, 0, 4.6), cosyIso(7.2, 3, 4.6), cosyIso(6.2, 3, 4.6)], '#160c04');
     const flicker = 0.85 + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
-    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 120 * flicker);
+    // "beaucoup plus gros, beaucoup plus sympathique" — halo et flammes
+    // agrandis (halo ~1.6x, cœur ~1.8x), et le cœur unique remplacé par un
+    // petit foyer de 3 flammes décalées (tailles/phases différentes) pour
+    // lire comme un vrai feu qui vit plutôt qu'un simple rond qui palpite.
+    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 190 * flicker);
     fg.addColorStop(0, `rgba(255,160,60,${0.95 * flicker})`);
     fg.addColorStop(0.5, `rgba(255,120,40,${0.35 * flicker})`);
     fg.addColorStop(1, 'rgba(255,120,40,0)');
     cosyCtx.fillStyle = fg; cosyCtx.fillRect(0, 0, COSY_W, COSY_H);
-    const flame = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 1, fireCenter.x, fireCenter.y, 11 * flicker);
-    flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
-    cosyCtx.fillStyle = flame;
-    cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x, fireCenter.y, 11 * flicker, 0, Math.PI * 2); cosyCtx.fill();
+    const flames = [
+      { dx: 0, dy: 0, r: 20, phase: 0 },
+      { dx: -9, dy: -3, r: 13, phase: 2.1 },
+      { dx: 8, dy: -2, r: 14, phase: 4.4 }
+    ];
+    for (const fl of flames) {
+      const fk = 0.8 + 0.2 * Math.sin(t * 7 + fl.phase);
+      const rad = fl.r * flicker * fk;
+      const flame = cosyCtx.createRadialGradient(fireCenter.x + fl.dx, fireCenter.y + fl.dy, 1, fireCenter.x + fl.dx, fireCenter.y + fl.dy, rad);
+      flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
+      cosyCtx.fillStyle = flame;
+      cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x + fl.dx, fireCenter.y + fl.dy, rad, 0, Math.PI * 2); cosyCtx.fill();
+    }
 
     drawChessBoard();
     cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
@@ -5065,15 +5066,98 @@
     updatePriestBtn(); // repositionné chaque frame (taille CSS du canvas responsive, peut changer au resize)
     cosyRAF = requestAnimationFrame(cosyFrame);
   }
+
+  // DEMANDÉ EN SESSION (2026-09-12) : "la musique doit changer complètement
+  // avec un fondu enchaîné sur une musique très très douce... éventuellement
+  // un petit bruit de feu". Pas de second fichier audio dans le projet —
+  // l'ambiance cosy est donc synthétisée avec le même Web Audio que
+  // playPurr/beep (nappe de 3 voix sinus en accord bas + respiration lente
+  // + crépitement de feu = bursts de bruit filtré à intervalle aléatoire),
+  // pendant que bgMusic descend en fondu plutôt que de couper net.
+  let bgMusicFadeRAF = null;
+  function fadeBgMusicTo(target, durationMs) {
+    if (bgMusicFadeRAF) cancelAnimationFrame(bgMusicFadeRAF);
+    const start = bgMusic.volume, t0 = performance.now();
+    function step(now) {
+      const p = Math.min(1, (now - t0) / durationMs);
+      bgMusic.volume = start + (target - start) * p;
+      bgMusicFadeRAF = p < 1 ? requestAnimationFrame(step) : null;
+    }
+    bgMusicFadeRAF = requestAnimationFrame(step);
+  }
+  let cosyAmbient = null;
+  function startCosyAmbient() {
+    if (!actx || cosyAmbient) return;
+    const sv = musicVolume / 100;
+    const t0 = actx.currentTime;
+    const master = actx.createGain();
+    master.gain.setValueAtTime(0.0001, t0);
+    master.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.16 * sv), t0 + 1.4);
+    master.connect(actx.destination);
+    // nappe douce : trois voix sinus, accord mineur bas (A2, C3, E3)
+    const oscs = [110, 130.81, 164.81].map(f => {
+      const osc = actx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, t0);
+      const voiceGain = actx.createGain();
+      voiceGain.gain.value = 0.33;
+      osc.connect(voiceGain).connect(master);
+      osc.start(t0);
+      return osc;
+    });
+    const lfo = actx.createOscillator(); // respiration lente du volume global
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(0.15, t0);
+    const lfoGain = actx.createGain();
+    lfoGain.gain.value = 0.05 * sv;
+    lfo.connect(lfoGain).connect(master.gain);
+    lfo.start(t0);
+    cosyAmbient = { master, oscs, lfo, crackleTimer: null };
+    (function crackle() {
+      if (!cosyAmbient) return;
+      const t1 = actx.currentTime, dur = 0.06 + Math.random() * 0.05;
+      const bufSize = Math.max(1, Math.floor(actx.sampleRate * dur));
+      const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+      const src = actx.createBufferSource();
+      src.buffer = buf;
+      const filt = actx.createBiquadFilter();
+      filt.type = 'bandpass';
+      filt.frequency.value = 1800 + Math.random() * 1400;
+      filt.Q.value = 1.2;
+      const g = actx.createGain();
+      g.gain.value = (0.4 + Math.random() * 0.4) * sv;
+      src.connect(filt).connect(g).connect(master);
+      src.start(t1);
+      cosyAmbient.crackleTimer = setTimeout(crackle, 900 + Math.random() * 2200);
+    })();
+  }
+  function stopCosyAmbient() {
+    if (!cosyAmbient || !actx) { cosyAmbient = null; return; }
+    const { master, oscs, lfo, crackleTimer } = cosyAmbient;
+    clearTimeout(crackleTimer);
+    const t0 = actx.currentTime;
+    master.gain.cancelScheduledValues(t0);
+    master.gain.setValueAtTime(master.gain.value, t0);
+    master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.8);
+    setTimeout(() => { oscs.forEach(o => o.stop()); lfo.stop(); }, 900);
+    cosyAmbient = null;
+  }
+
   document.getElementById('cosyBtn').addEventListener('click', () => {
     cosyOverlay.hidden = false;
     ensureAudio();
+    fadeBgMusicTo(0, 1200);
+    startCosyAmbient();
     if (cosyRAF === null) { cosyLastT = 0; cosyRAF = requestAnimationFrame(cosyFrame); }
   });
   document.getElementById('cosyClose').addEventListener('click', () => {
     cosyOverlay.hidden = true;
     if (cosyRAF !== null) { cancelAnimationFrame(cosyRAF); cosyRAF = null; }
     priestBtn.hidden = true;
+    stopCosyAmbient();
+    fadeBgMusicTo(musicVolume / 100, 1200);
   });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
   const faqOverlay = document.getElementById('faqOverlay');
