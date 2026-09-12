@@ -65,7 +65,7 @@
   #secondRow {
     background: #3b3222;
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 8px 8px 4px;
   }
@@ -75,9 +75,13 @@
     color: #f2ead9;
     padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     gap: 6px;
   }
+
+  /* boutons les plus utilisés groupés à droite, les autres à gauche
+     (demandé en session, voir commentaire HTML sur #bottomStack) */
+  .btnGroup { display: flex; gap: 8px; }
 
   #menuBtn {
     background: none;
@@ -183,18 +187,33 @@
   #bottomStack button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 11px 6px;
+    padding: 11px 4px;
     border: none;
     border-radius: 10px;
     background: #b5482e;
     color: #f2ead9;
-    font-size: 11.5px;
+    font-size: 10.5px;
     font-family: inherit;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   #bottomStack button:disabled { opacity: 0.4; }
+  /* DEMANDÉ EN SESSION (2026-09-12, Pierre : "le prix c'est juste un
+     chiffre, y a pas de parenthèse, il est juste en dessous du mot") :
+     affordText() construit maintenant deux lignes (voir plus bas) — le
+     prix est un <span> à part, en bloc pour forcer le retour à la ligne,
+     un ton plus clair/discret que le libellé (même esprit que .volumeVal
+     ailleurs dans cette page pour un chiffre secondaire). Règle partagée
+     (pas juste #bottomStack) : affordText() alimente aussi moulinBtn/
+     egliseBtn (.worldBtn), même traitement partout où un prix s'affiche. */
+  .btnCost {
+    display: block;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(242,234,217,0.75);
+    margin-top: 1px;
+  }
 
   /* Réparer/Sortie only ever involve the lord — his own sprite blue.
      Descendre/Remonter only ever involves the princess — her sprite pink.
@@ -347,7 +366,17 @@
      déborder de sa propre largeur max, le curseur débordant visiblement
      à droite des autres boutons du menu. Piège flexbox classique, fix
      standard. */
-  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; }
+  /* BUG TROUVÉ EN SESSION (2026-09-12, Pierre : "ils sont juste des
+     boutons, on/off que ça marche vraiment") : le code JS des deux
+     curseurs était correct (volume vraiment proportionnel, pas juste
+     muet/pas muet — vérifié) ; sur mobile, sans touch-action, le
+     navigateur peut interpréter un glissé horizontal sur le curseur comme
+     un DÉFILEMENT du menu (qui, lui, défile verticalement) plutôt qu'un
+     vrai glissé du curseur — ne laissant qu'un simple TAP (qui définit la
+     valeur au point touché, ressemble à un bouton on/off) passer. Fix
+     standard : touch-action: none retire l'input du système de gestes de
+     défilement du navigateur, tout le glissé lui revient. */
+  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; touch-action: none; }
   .volumeRow .volumeVal { flex: none; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
   body.phosphor .volumeRow {
     background: var(--ph-fill);
@@ -392,6 +421,13 @@
   body.phosphor #seedInput, body.phosphor #seedRow button {
     background: rgba(0,0,0,0.3); color: var(--ph-text);
   }
+  /* confirmation intégrée à la page pour Nouvelle carte/Charger (voir
+     seedPendingAction) — remplace confirm() natif, cf. commentaire HTML */
+  #seedConfirmRow { display: flex; flex-direction: column; gap: 6px; }
+  #seedConfirmRow[hidden] { display: none; }
+  #seedConfirmRow p { margin: 0; line-height: 1.35; }
+  #seedConfirmRow .seedConfirmBtns { display: flex; gap: 6px; }
+  #seedConfirmRow .seedConfirmBtns button { flex: 1; }
 
   /* fausse pub à la défaite : gag volontairement criard, aux antipodes du
      reste de l'interface (fond parchemin sobre) — c'est le but */
@@ -749,18 +785,33 @@
   <div><b>v0.8</b> — douves cachées, réparation de secours, son</div>
 </div>
 
+<!-- DEMANDÉ EN SESSION (2026-09-12) : "les boutons les plus souvent
+     utilisés doivent être à droite de l'écran, les autres à gauche" —
+     chaque rangée est scindée en deux groupes (justify-content:
+     space-between sur la rangée, voir CSS) plutôt que centrée. Sortie et
+     Réparer (boucle de combat, utilisés à chaque vague) et Tourelle
+     (rachetée très régulièrement) à droite ; Descendre/Huile (occasionnels)
+     et Jardin/Douves/Cheval (achats ponctuels) à gauche. -->
 <div id="bottomStack">
   <div id="secondRow">
-    <button id="repairBtn">Réparer</button>
-    <button id="princessBtn">Descendre</button>
-    <button id="sortieBtn">Sortie</button>
-    <button id="oilBtn" disabled>Huile</button>
+    <div class="btnGroup">
+      <button id="princessBtn">Descendre</button>
+      <button id="oilBtn" disabled>Huile</button>
+    </div>
+    <div class="btnGroup">
+      <button id="repairBtn">Réparer</button>
+      <button id="sortieBtn">Sortie</button>
+    </div>
   </div>
   <div id="bottombar">
-    <button id="towerBtn">Tourelle</button>
-    <button id="gardenBtn">Jardin</button>
-    <button id="moatBtn">Douves</button>
-    <button id="horseBtn">Cheval</button>
+    <div class="btnGroup">
+      <button id="gardenBtn">Jardin</button>
+      <button id="moatBtn">Douves</button>
+      <button id="horseBtn">Cheval</button>
+    </div>
+    <div class="btnGroup">
+      <button id="towerBtn">Tourelle</button>
+    </div>
   </div>
 </div>
 
@@ -782,11 +833,25 @@
       <button id="seedLoadBtn">Charger</button>
     </div>
     <button id="seedNewBtn">🎲 Nouvelle carte</button>
+    <!-- DEMANDÉ EN SESSION (2026-09-12) : "le système de new map marche
+         pas" — confirm() natif était le seul de tout le jeu à ce
+         endroit ; probablement bloqué/silencieux dans certains contextes
+         mobiles (navigateur intégré d'une appli, PWA...), ce qui rendait
+         les deux boutons ci-dessus inertes sans aucun message d'erreur.
+         Remplacé par cette confirmation intégrée à la page (voir
+         seedPendingAction plus bas dans le script). -->
+    <div id="seedConfirmRow" hidden>
+      <p id="seedConfirmMsg"></p>
+      <div class="seedConfirmBtns">
+        <button id="seedConfirmYesBtn"></button>
+        <button id="seedConfirmCancelBtn"></button>
+      </div>
+    </div>
   </div>
   <div class="volumeRow">
     <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
-    <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
-    <span class="volumeVal" id="musicVolumeVal">35%</span>
+    <input type="range" id="musicVolumeInput" min="0" max="100" value="20">
+    <span class="volumeVal" id="musicVolumeVal">20%</span>
   </div>
   <div class="volumeRow">
     <label for="sfxVolumeInput" id="sfxVolumeLabel">Bruitages</label>
@@ -1026,10 +1091,11 @@
       overlay_wave_reached: 'Vague atteinte : ', overlay_gold_earned: 'Or gagné : ',
       overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague ',
       intro_hint: 'Glissez pour tourner la caméra et viser — dégâts bonus droit dans l\'axe. Sortie pour charger dehors, Réparer si le mur faiblit. Plus de détails dans ☰ Astuces.',
-      seed_label: 'Graine :', seed_placeholder: 'Coller une graine…', seed_load_btn: 'Charger',
+      seed_label: 'Graine :', seed_placeholder: 'Écris ou colle une graine…', seed_load_btn: 'Charger',
       seed_new_btn: '🎲 Nouvelle carte',
       seed_confirm_new: 'Générer une nouvelle carte ? Le village actuel sera remplacé (note la graine ci-dessus si tu veux pouvoir y revenir).',
-      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.'
+      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.',
+      seed_confirm_yes: 'Confirmer', seed_confirm_cancel: 'Annuler'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1069,10 +1135,11 @@
       overlay_wave_reached: 'Wave reached: ', overlay_gold_earned: 'Gold earned: ',
       overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave ',
       intro_hint: 'Drag to turn the camera and aim — bonus damage dead-on. Sally to charge out, Repair if the wall weakens. More in ☰ Tips.',
-      seed_label: 'Seed:', seed_placeholder: 'Paste a seed…', seed_load_btn: 'Load',
+      seed_label: 'Seed:', seed_placeholder: 'Type or paste a seed…', seed_load_btn: 'Load',
       seed_new_btn: '🎲 New map',
       seed_confirm_new: 'Generate a new map? The current village will be replaced (note the seed above if you want to come back to it).',
-      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.'
+      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.',
+      seed_confirm_yes: 'Confirm', seed_confirm_cancel: 'Cancel'
     }
   };
   function detectLang() {
@@ -1114,6 +1181,8 @@
     document.getElementById('seedInput').placeholder = t('seed_placeholder');
     document.getElementById('seedLoadBtn').textContent = t('seed_load_btn');
     document.getElementById('seedNewBtn').textContent = t('seed_new_btn');
+    document.getElementById('seedConfirmYesBtn').textContent = t('seed_confirm_yes');
+    document.getElementById('seedConfirmCancelBtn').textContent = t('seed_confirm_cancel');
     document.getElementById('closeFaq').textContent = t('close_menu');
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
@@ -1459,7 +1528,7 @@
   const bgMusic = document.getElementById('bgMusic');
   const musicVolumeInput = document.getElementById('musicVolumeInput');
   const musicVolumeVal = document.getElementById('musicVolumeVal');
-  let musicVolume = 35;
+  let musicVolume = 20; // démarre à 20% (demandé en session, 2026-09-12)
   try {
     const v = parseInt(localStorage.getItem('bo_musicVolume'), 10);
     if (!isNaN(v) && v >= 0 && v <= 100) musicVolume = v;
@@ -1866,8 +1935,12 @@
   // tactique réel se joue à tenir Sortie ou pas pendant qu'on est faible,
   // pas dans un menu séparé. Ne soigne QUE le seigneur (pas la princesse,
   // qui n'est pas là) — à la différence du câlin.
-  const FOUNTAIN_HEAL_HP_FRAC = 0.35;    // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
-  const FOUNTAIN_HEAL_TIME = 4;          // secondes pour se soigner entièrement depuis 0 — un peu plus lent que le câlin (3s), plus exposé/loin du mur
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "augmenter les pouvoirs de
+  // la fontaine") : seuil de déclenchement relevé (0.35 -> 0.5, priorité
+  // à la fontaine dès la moitié des PV plutôt qu'à 35%) et soin accéléré
+  // (4s -> 2.5s pour un plein soin depuis 0, plus rapide que le câlin).
+  const FOUNTAIN_HEAL_HP_FRAC = 0.5;     // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
+  const FOUNTAIN_HEAL_TIME = 2.5;        // secondes pour se soigner entièrement depuis 0
   // symétrique côté ennemis (signalé en session, 2026-09-09 : "les ennemis
   // aussi peuvent boire à la fontaine... d'où l'intérêt d'activer fort la
   // zone de l'église") — confirmé ACTIF (détour délibéré, pas juste
@@ -1931,9 +2004,14 @@
   // huile bouillante: hold-to-act like Réparer/Sortie, but needs a turret
   // to pour from — the lord walks over and, once there, it periodically
   // scalds every attacker stalled at the wall near that turret's angle
-  const OIL_TICK = 1.6;
-  const OIL_DMG = 3;
-  const OIL_ANGULAR_WIDTH = 0.5; // how wide a stretch of wall one turret's oil covers
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "elle doit vraiment être
+  // efficace quand elle tombe") : dégâts et fréquence doublés/accélérés
+  // (3 tous les 1,6s ≈ 1,9 dps -> 6 tous les 1,2s = 5 dps), portée
+  // angulaire élargie (0.5 -> 0.65 rad) pour toucher plus d'ennemis
+  // massés au mur par déversement.
+  const OIL_TICK = 1.2;
+  const OIL_DMG = 6;
+  const OIL_ANGULAR_WIDTH = 0.65; // how wide a stretch of wall one turret's oil covers
   const GROUND_EASE_RATE = 4;     // how fast the lord transitions platform <-> ground
 
   const FIGHT_BANNER_DUR = 1.1;   // "FIGHT!" banner total lifetime, in seconds
@@ -2026,10 +2104,22 @@
   // à fond" sacralise tout le cœur du village, pas seulement l'église
   // elle-même. A forcé un repositionnement de HOUSES[7] (v0.79), qui
   // serait sinon tombée dans cette zone élargie — voir HOUSES plus haut.
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : le 1er palier doit être un
+  // CERCLE — pas une ellipse — et dépasser clairement l'église dans
+  // toutes les directions) : l'ancien rx=70/rz=45 ne dépassait qu'à peine
+  // la nef (32×60) côté longueur (70 vs 60) et à peine plus côté largeur
+  // (45 vs 32) — à peine visible. rx=rz=75 donne un vrai cercle avec une
+  // marge nette (15 unités côté longueur, 43 côté largeur) au-delà de la
+  // nef. Conséquence mécanique de ce changement : un cercle de rayon 75
+  // dépasse le rz=65 de l'ancien palier 2 — passer palier 1 -> 2 aurait
+  // RÉTRÉCI la zone en largeur, un vrai recul de protection à l'achat.
+  // Paliers 2 et 3 légèrement relevés en rz (65->80, 85->95) pour rester
+  // strictement croissants sur les deux axes à chaque palier — rx et cost
+  // inchangés, aucun autre équilibrage touché.
   const EGLISE_ZONE_TIERS = [
-    { cost: 25, rx: 70, rz: 45 },
-    { cost: 55, rx: 100, rz: 65 },
-    { cost: 100, rx: 135, rz: 85 },
+    { cost: 25, rx: 75, rz: 75 },
+    { cost: 55, rx: 100, rz: 80 },
+    { cost: 100, rx: 135, rz: 95 },
     { cost: 180, rx: 175, rz: 110 },
     { cost: 320, rx: 312, rz: 196 }
   ];
@@ -2245,9 +2335,42 @@
     }
     return min - r - STREAM_HALF_WIDTH;
   }
+  // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : une
+  // maison avec une roue posée quasiment dessus) : ne vérifiait que la
+  // MAISON du moulin (m.houseX/houseZ) — pas sa ROUE, qui mord dans l'eau
+  // à ~29 unités de là (voir moulinGeometry : houseX/Z à STREAM_HALF_WIDTH
+  // +26 du ruisseau, wheelX/Z à STREAM_HALF_WIDTH -3, donc sur le même
+  // rayon mais bien plus proche du ruisseau) — assez loin de la maison
+  // pour qu'une maison candidate passe le test de clearance de la maison
+  // tout en tombant en plein sur la roue. 14 ≈ MOULIN_WHEEL_R (déclarée
+  // plus bas dans le fichier, pas encore lisible ici à l'appel de
+  // buildWorld() — même contrainte d'ordre que le reste de ce bloc, voir
+  // le commentaire au-dessus de STREAM_CROSS_R).
   function moulinClearanceAt(x, z, r) {
     const m = moulinGeometry();
-    return circleClearance(x, z, r, m.houseX, m.houseZ, 26); // 26 ≈ diagonale de la maison du moulin (20×16)
+    return Math.min(
+      circleClearance(x, z, r, m.houseX, m.houseZ, 26), // 26 ≈ diagonale de la maison du moulin (20×16)
+      circleClearance(x, z, r, m.wheelX, m.wheelZ, 14)   // 14 = MOULIN_WHEEL_R
+    );
+  }
+  // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : une
+  // maison posée en plein sur le pont) : rien ne vérifiait la place prise
+  // par le PONT DE PIERRE (drawStoneBridge, à l'endroit où le ruisseau
+  // croise le réseau routier, d=0 sur le ruisseau) — streamClearanceAt
+  // protège bien l'EAU (largeur STREAM_HALF_WIDTH=11), mais le pont
+  // dépasse largement de l'eau (24 unités le long de la route, 16 de
+  // large) sans aucun garde-fou. rectClearance fait déjà exactement ce
+  // calcul (rectangle ORIENTÉ) pour l'église — même principe ici : le
+  // pont est orienté selon l'angle de la route qu'il enjambe (g.angle),
+  // etendu de BRIDGE_SPAN_HALF le long de cet angle et BRIDGE_WIDTH_HALF
+  // perpendiculairement (voir drawStoneBridge/toWorld — rx,rz porte
+  // spanHalf, tx,tz porte widthHalf, exactement les axes locaux que
+  // rectClearance attend pour halfW/halfH à ce yaw). 24/16 = BRIDGE_
+  // SPAN_HALF/BRIDGE_WIDTH_HALF (déclarées plus bas, pas encore lisibles
+  // ici — même contrainte d'ordre que MOULIN_WHEEL_R juste au-dessus).
+  function bridgeClearanceAt(x, z, r) {
+    const g = streamGeometry();
+    return rectClearance(x, z, r, g.cx, g.cz, 24, 16, g.angle);
   }
 
   // rejet-échantillonnage générique : essaie jusqu'à `tries` candidats,
@@ -2315,9 +2438,9 @@
       const cx = c.r * Math.cos(c.angle), cz = c.r * Math.sin(c.angle);
       const ex = cx + 120, ez = cz + 30, gx = cx - 110, gz = cz - 30; // église/grange, même écart fixe qu'avant
       let m = Math.min(
-        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40),
-        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8),
-        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8)
+        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40), bridgeClearanceAt(cx, cz, 40),
+        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8), bridgeClearanceAt(ex, ez, 8),
+        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8), bridgeClearanceAt(gx, gz, 8)
       );
       // le COULOIR donjon->église doit rester dégagé sur toute sa
       // longueur, pas juste à ses deux bouts — sinon la place (qui se
@@ -2345,24 +2468,69 @@
     // encore à ce stade), balayage de R pour maximiser la marge
     const eglx = vcx + 120, eglz = vcz + 30, grx = vcx - 110, grz = vcz - 30;
     const plazaAngle = Math.atan2(eglz, eglx);
-    // plage large + beaucoup d'essais (recherche 1D le long d'un seul
-    // rayon, donc peu coûteuse) : un audit sur 30 graines a montré qu'une
-    // plage trop étroite (120-380, 50 essais) pouvait ne jamais croiser
-    // un point dégagé si le ruisseau/une route coupe justement CE rayon
-    // précis — corrigé en élargissant la recherche plutôt qu'en
-    // acceptant un score négatif (dans le mur/le ruisseau).
-    const plazaMaxR = Math.min(460, VILLAGE_CENTER_R - 10);
-    const plazaCandidate = (rng) => 90 + rng() * Math.max(30, plazaMaxR - 90);
+    // BUG TROUVÉ EN SESSION (2026-09-10, capture à l'appui de Pierre : un
+    // vrai fouillis de traits croisés à la base du donjon) : rien ici ne
+    // vérifiait que la place (rayon PLAZA_RADIUS=80) reste hors du mur du
+    // donjon (BASE_R=74) — avec la recherche élargie du correctif
+    // précédent, PLAZA_R pouvait tomber aussi bas que ~90, laissant le
+    // bord de la place tourné vers une route à seulement `PLAZA_R - 80`
+    // du centre — parfois NÉGATIF, littéralement DANS la tour. C'est la
+    // bretelle (roadNearEdgePoint -> plazaEdgePoint) essayant de rejoindre
+    // ce bord-là qui créait le fouillis, pas un bug de la bretelle
+    // elle-même. Corrigé en pénalisant explicitement tout candidat dont le
+    // bord proche empiéterait sur le mur (et en relevant le plancher de
+    // recherche d'autant, pour ne plus perdre d'essais sur des candidats
+    // condamnés d'avance).
+    const plazaMinR = BASE_R + PLAZA_RADIUS + 30;
+    const plazaMaxR = Math.max(plazaMinR + 40, Math.min(460, VILLAGE_CENTER_R - 10));
+    const plazaCandidate = (rng) => plazaMinR + rng() * (plazaMaxR - plazaMinR);
     const scorePlaza = (r) => {
       const px = r * Math.cos(plazaAngle), pz = r * Math.sin(plazaAngle);
       return Math.min(
-        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80),
+        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80), bridgeClearanceAt(px, pz, 80),
         rectClearance(px, pz, 80, eglx, eglz, 32, 60, EGLISE_YAW),
-        circleClearance(px, pz, 80, grx, grz, 32)
+        circleClearance(px, pz, 80, grx, grz, 32),
+        (r - PLAZA_RADIUS) - BASE_R - 20 // bord proche de la place vs mur du donjon
       );
     };
     PLAZA_R = findPlacement(rng, plazaCandidate, scorePlaza, 25, 220);
     const plx = PLAZA_R * Math.cos(plazaAngle), plz = PLAZA_R * Math.sin(plazaAngle);
+
+    // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : deux
+    // maisons du même hameau posées quasiment l'une sur l'autre) :
+    // findPlacement() essaie `tries` candidats et garde le MEILLEUR — mais
+    // "meilleur" n'est pas "libre" : si les `tries` premiers essais tombent
+    // tous en collision (arrive facilement pour les dernières maisons d'un
+    // hameau, l'espace autour de la route s'étant déjà rempli des
+    // précédentes), la fonction renvoie quand même ce meilleur candidat,
+    // même avec un score négatif (= une vraie collision). C'est exactement
+    // ce que montrait la capture. Corrigé en deux temps : (1) tries 50 ->
+    // 300, pour qu'un vrai candidat libre soit trouvé dans l'immense
+    // majorité des cas — voir resolveHouseOverlap ci-dessous pour la
+    // garantie qui couvre les rares cas restants.
+    // filet de sécurité déterministe : si la position retenue chevauche
+    // quand même une maison déjà posée (les 300 essais ont tous échoué),
+    // on la repousse le long de l'axe centre-à-centre jusqu'à ce que les
+    // deux cercles (rayon 23 chacun) ne se touchent plus — élimine
+    // l'overlap avec certitude, plutôt que de compter sur la chance du
+    // tirage suivant.
+    function resolveHouseOverlap(x, z, houses) {
+      const HOUSE_R = 23;
+      for (let iter = 0; iter < 6; iter++) {
+        let worst = null, worstOverlap = 0;
+        for (const h of houses) {
+          const overlap = HOUSE_R * 2 - Math.hypot(x - h.x, z - h.z);
+          if (overlap > worstOverlap) { worstOverlap = overlap; worst = h; }
+        }
+        if (!worst) break;
+        let dx = x - worst.x, dz = z - worst.z;
+        let len = Math.hypot(dx, dz);
+        if (len < 1e-6) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dz = Math.sin(a); len = 1; }
+        x = worst.x + (dx / len) * (HOUSE_R * 2 + 0.5);
+        z = worst.z + (dz / len) * (HOUSE_R * 2 + 0.5);
+      }
+      return { x, z };
+    }
 
     // maisons : deux hameaux de 4, un par route, "sur le passage" (marge
     // minimale voulue face à la route, pas juste maximisée comme le
@@ -2378,16 +2546,16 @@
           const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
           if (roadClearanceAt(x, z, 23) < 6) return -1000; // dans la route : rejeté net
           let m = Math.min(
-            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23), bridgeClearanceAt(x, z, 23),
             circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
             Math.hypot(x, z) - BASE_R - 40
           );
           for (const h of houses) m = Math.min(m, circleClearance(x, z, 23, h.x, h.z, 23));
           return m;
         };
-        const c = findPlacement(rng, candidate, score, 25, 50);
-        const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
-        houses.push({ x, z, angle: c.angle, r: c.r, yaw: rng() * Math.PI * 2, hiddenCount: 0 });
+        const c = findPlacement(rng, candidate, score, 25, 300);
+        let { x, z } = resolveHouseOverlap(c.r * Math.cos(c.angle), c.r * Math.sin(c.angle), houses);
+        houses.push({ x, z, angle: Math.atan2(z, x), r: Math.hypot(x, z), yaw: rng() * Math.PI * 2, hiddenCount: 0 });
       }
     }
     HOUSES = houses;
@@ -2402,6 +2570,7 @@
         roadClearanceAt(x, z, 30), roadClearanceAt(x2, z2, 24),
         moulinClearanceAt(x, z, 30), moulinClearanceAt(x2, z2, 24),
         streamClearanceAt(x, z, 30), streamClearanceAt(x2, z2, 24),
+        bridgeClearanceAt(x, z, 30), bridgeClearanceAt(x2, z2, 24),
         circleClearance(x, z, 30, vcx, vcz, 60), circleClearance(x, z, 30, plx, plz, PLAZA_RADIUS)
       );
       for (const h of houses) m = Math.min(m, circleClearance(x, z, 30, h.x, h.z, 23));
@@ -2419,7 +2588,7 @@
     const scoreWitch = (c) => {
       const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
       let m = Math.min(
-        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23), bridgeClearanceAt(x, z, 23),
         circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
         circleClearance(x, z, 23, fax, faz, 30), circleClearance(x, z, 23, fax + 75, faz - 45, 24)
       );
@@ -2833,6 +3002,15 @@
   const MOULIN_WHEEL_R = 14;
   const MOULIN_WHEEL_SEGS = 12;
   const MOULIN_SPIN_RATE = 1.1; // rad/s — positif = undershot correct, voir drawMoulinWheel
+  // DEMANDÉ EN SESSION (2026-09-12) : "la roue elle-même change" à chaque
+  // amélioration — feedback visuel direct plutôt qu'un simple chiffre de
+  // revenu. Purement cosmétique : moulinClearanceAt (génération du monde,
+  // ligne ~2306) utilise un 14 en dur, pas cette constante, donc grossir la
+  // roue ici n'affecte aucune collision. Niveau 0 (pas encore acheté) tourne
+  // lentement pour se lire comme "à l'arrêt/pas rentable" ; niveau 6 (max)
+  // tourne ~2x plus vite et fait ~1.6x le rayon de base.
+  function moulinWheelRadius(level) { return MOULIN_WHEEL_R * (1 + Math.max(0, level) * 0.1); }
+  function moulinWheelSpinRate(level) { return level <= 0 ? MOULIN_SPIN_RATE * 0.3 : MOULIN_SPIN_RATE * (1 + level * 0.16); }
   // épaisseur de la roue (demandé en session, 2026-09-09 : "elle doit
   // avoir une épaisseur pour pouvoir fonctionner", elle était plate/2D
   // avant) — le long de l'essieu, perpendiculaire au plan de la roue
@@ -2934,7 +3112,7 @@
   // particule ondule maintenant latéralement au fil du temps (latPhase/
   // latSpeed, calculé au dessin — voir drawStreamFlow) plutôt que de
   // garder un décalage latéral figé.
-  const STREAM_FLOW_COUNT = 733;
+  const STREAM_FLOW_COUNT = 367; // divisé par 2, demandé en session (2026-09-12) — était 733
   const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
   const STREAM_FLOW_WOBBLE = 3.5; // amplitude de l'ondulation latérale
   // portée réelle utilisée (voir ensureStreamFlowSeeds) — plus une const
@@ -3204,14 +3382,26 @@
   // against; failing that, whoever's nearest the wall (or, failing that,
   // approaching), so holding Sortie always has something to do instead of
   // just idling outside the door
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "une fois qu'il a tué
+  // [sa cible], il faut qu'il attaque le plus proche ou le plus
+  // puissant") : la priorité aux engins de siège était ABSOLUE — un
+  // engin à l'opposé du donjon passait toujours devant un ennemi juste à
+  // côté du seigneur, qui se retrouvait donc à traverser tout le champ de
+  // bataille (en ignorant des ennemis adjacents) après chaque mise à
+  // mort. Corrigé : l'engin de siège garde un avantage (moitié de sa
+  // distance angulaire réelle, SIEGE_PRIORITY_BONUS) au lieu d'un
+  // passe-droit total — il gagne toujours quand il est raisonnablement
+  // proche, mais un ennemi vraiment adjacent l'emporte désormais sur un
+  // engin à l'autre bout du mur.
+  const SIEGE_PRIORITY_BONUS = 0.5;
   function nearestSortieTarget(fromAngle) {
     // fontaine-soin : affaibli en sortie, se soigner passe avant tout le
     // reste — continuer à se battre à faible PV loin du mur est le
     // meilleur moyen de mourir pour de bon (voir FOUNTAIN_HEAL_HP_FRAC)
     if (state.player.hp < state.player.maxHp * FOUNTAIN_HEAL_HP_FRAC) return FOUNTAIN_EXTRA;
     const siege = nearestSiegeEngine(fromAngle);
-    if (siege) return siege;
     let best = null, bestD = Infinity;
+    if (siege) { best = siege; bestD = Math.abs(angDiff(fromAngle, siege.angle)) * SIEGE_PRIORITY_BONUS; }
     for (const e of state.enemies) {
       if (e.state !== 'attackBase' && e.state !== 'approach') continue;
       const d = Math.abs(angDiff(fromAngle, e.angle));
@@ -3459,8 +3649,22 @@
   function updateNextWaveBonus() {
     document.getElementById('waveBonus').textContent = '+' + nextWaveBonus();
   }
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "si on reste appuyé
+  // dessus, ça augmente beaucoup de vagues d'un seul coup") : l'empilement
+  // (toSpawn +=) est voulu et déjà correct (voir commentaire au-dessus,
+  // "stacks... no cap — press it 15 times, 15 waves' worth queue up") —
+  // mais rien n'empêchait de VRAIMENT en déclencher 15 en une seule
+  // pression tenue si un appui prolongé finissait par redéclencher
+  // plusieurs fois (double-frappe tactile, rebond du bouton). Garde-fou
+  // minimal, sans changer le comportement d'empilement voulu : un appui
+  // ne compte que s'il est à au moins NEXT_WAVE_COOLDOWN de la dernière
+  // fois.
+  const NEXT_WAVE_COOLDOWN = 0.4;
+  let lastNextWaveCall = -Infinity;
   function callNextWaveEarly() {
     if (state.waveState === 'gameover') return;
+    if (state.time - lastNextWaveCall < NEXT_WAVE_COOLDOWN) return;
+    lastNextWaveCall = state.time;
     const bonus = nextWaveBonus();
     state.gold += bonus;
     goldNum.textContent = state.gold;
@@ -3488,9 +3692,16 @@
   // distingue la branche d'impact dans la boucle de mise à jour des
   // projectiles. Vol plus lent qu'une flèche (dur=0.7s) pour lire comme
   // un caillou lobé, pas un tir tendu.
-  function fireSiegeShot(s, dmg) {
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "les tours de défense qu'on
+  // construit, elles peuvent être abîmées, voire détruites par des
+  // engins de siège") : seule la "tour de siège" (isTower) visait déjà
+  // une tourelle via nearestDefender — le trébuchet (bien plus courant)
+  // touchait TOUJOURS le mur, jamais une tourelle. siegeTower prend
+  // maintenant la même cible que choisirait nearestDefender, portée par
+  // le projectile jusqu'à l'impact.
+  function fireSiegeShot(s, dmg, target) {
     const from = { x: s.r * Math.cos(s.angle), y: 0, z: s.r * Math.sin(s.angle) };
-    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true });
+    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true, siegeTarget: target });
     playSiegeShot();
   }
 
@@ -3790,7 +4001,11 @@
         if (Math.hypot(ex - ox, ez - oz) < SIEGE_GROUP_RADIUS) { group.push(o); used.add(o); }
       }
       if (group.length < 2) continue;
-      const tierIdx = Math.min(group.length - 2, SIEGE_TIERS.length - 1);
+      // DEMANDÉ EN SESSION (2026-09-12) : les tiers avancés (trébuchet, tour
+      // de siège, bélier) doivent apparaître plus souvent — décalé de -1 au
+      // lieu de -2 : un groupe de 2 donne directement arbalète (plus
+      // bouclier), un groupe de 4 donne tour de siège au lieu de trébuchet.
+      const tierIdx = Math.min(group.length - 1, SIEGE_TIERS.length - 1);
       const tier = SIEGE_TIERS[tierIdx];
       const cap = siegeCrewCap(tierIdx);
       const crew = Math.min(group.length, cap);
@@ -3928,6 +4143,28 @@
     e.angle = Math.atan2(nz, nx);
   }
 
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "j'ai pu l'attaquer mais
+  // à travers le cours d'eau, c'est pas possible, si je dois traverser le
+  // cours d'eau, je dois passer par le pont") : avoidStream ci-dessus
+  // empêche bien le seigneur de MARCHER à travers le ruisseau, mais le
+  // test de coup au corps-à-corps en sortie (plus bas, p.behavior ===
+  // 'sortie') ne vérifiait que l'angle/le rayon — pendant que le
+  // seigneur glisse le long de la berge vers le pont (avoidStream), son
+  // angle peut momentanément s'aligner avec un ennemi collé sur L'AUTRE
+  // berge, avant même d'avoir traversé — le coup portait quand même.
+  // Vérifie maintenant explicitement que les deux points sont du même
+  // côté du ruisseau (ou tous deux dans le couloir du pont).
+  function sameStreamSide(x1, z1, x2, z2) {
+    const g = streamGeometry();
+    const d1 = (x1 - g.cx) * g.tx + (z1 - g.cz) * g.tz;
+    const d2 = (x2 - g.cx) * g.tx + (z2 - g.cz) * g.tz;
+    if (Math.abs(d1) < BRIDGE_SPAN_HALF && Math.abs(d2) < BRIDGE_SPAN_HALF) return true;
+    const p1 = streamPointAt(g, d1), p2 = streamPointAt(g, d2);
+    const perp1 = (x1 - p1.x) * g.rx + (z1 - p1.z) * g.rz;
+    const perp2 = (x2 - p2.x) * g.rx + (z2 - p2.z) * g.rz;
+    return Math.sign(perp1 || 1) === Math.sign(perp2 || 1);
+  }
+
   // approaching enemies gently push each other apart instead of stacking on
   // the same spot or walking through one another — same circle-vs-circle
   // idea as avoidBushes, eased in over a few frames (spring-like) rather
@@ -4008,8 +4245,13 @@
   // qu'un habillage visuel dessus. camPanX/camPanY/camZoom sont dans le
   // repère ÉCRAN (pas le monde) : à zoom=1 (dézoomé, par défaut), pan=0,
   // le rendu est identique à avant cette fonctionnalité.
+  // DÉSACTIVÉ EN SESSION (2026-09-12, Pierre : "on voit pas du tout [les
+  // engins de siège] et on va désactiver la possibilité de zoom") : min
+  // et max ramenés à 1 — tout le reste de la mécanique (pincement,
+  // molette, ancrage) reste en place mais ne peut plus jamais bouger
+  // camZoom au-delà de 1, verrouillé au dézoomé maximal.
   let camZoom = 1, camPanX = 0, camPanY = 0;
-  const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 4;
+  const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 1;
   const activePointers = new Map(); // pointerId -> {x,y}, pour détecter le pincement à deux doigts
   let pinchStartDist = 0, pinchStartZoom = 1, pinchAnchorX = 0, pinchAnchorY = 0;
   let pinchedThisGesture = false; // évite qu'un pincement termine en tap sur un bâtiment
@@ -4151,6 +4393,56 @@
     witchMsg.hidden = !witchMsgVisible;
     if (witchMsgVisible) witchMsg.textContent = t('witch_msg');
   }
+  window.__DEBUG_ROADS = function() {
+    // road vs road : les deux routes principales se croisent-elles jamais ?
+    const crossings = [];
+    const segs0 = roadSegs(0), segs1 = roadSegs(1);
+    for (const s0 of segs0) {
+      const x1 = s0.r0 * Math.cos(s0.a0), z1 = s0.r0 * Math.sin(s0.a0);
+      const x2 = s0.r1 * Math.cos(s0.a1), z2 = s0.r1 * Math.sin(s0.a1);
+      for (const s1 of segs1) {
+        const x3 = s1.r0 * Math.cos(s1.a0), z3 = s1.r0 * Math.sin(s1.a0);
+        const x4 = s1.r1 * Math.cos(s1.a1), z4 = s1.r1 * Math.sin(s1.a1);
+        if (segsIntersect(x1, z1, x2, z2, x3, z3, x4, z4)) crossings.push({ r0: s0.r0, r1: s1.r0 });
+      }
+    }
+    return {
+      seed: currentWorldSeed,
+      ROAD_ANGLES: ROAD_ANGLES.slice(),
+      PLAZA_X, PLAZA_Z, PLAZA_R,
+      roadRoadCrossings: crossings
+    };
+  };
+  window.__DEBUG_CENTER_ON = function(x, z, zoom) {
+    const rot = state.theta - Math.PI / 4;
+    const base = project(x, 0, z, rot);
+    camZoom = zoom;
+    camPanX = W / 2 - base.x * camZoom;
+    camPanY = H / 2 - base.y * camZoom;
+  };
+  window.__DEBUG_PLAZA_POS = function() { return { x: PLAZA_X, z: PLAZA_Z, r: PLAZA_R }; };
+  window.__DEBUG_SET_THETA = function(t) { state.theta = t; };
+  window.__DEBUG_BRETELLES = function() {
+    const out = [];
+    for (let idx = 0; idx < 2; idx++) {
+      const roadPt = roadNearEdgePoint(idx, roadNearestR(idx, PLAZA_X, PLAZA_Z), PLAZA_X, PLAZA_Z);
+      const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
+      const edge = plazaEdgePoint(edgeAngle);
+      out.push({
+        idx,
+        roadPt: { x: roadPt.x, z: roadPt.z, r: Math.hypot(roadPt.x, roadPt.z), a: Math.atan2(roadPt.z, roadPt.x) },
+        edge: { x: edge.x, z: edge.z, r: Math.hypot(edge.x, edge.z), a: Math.atan2(edge.z, edge.x) }
+      });
+    }
+    const doorX = R * Math.cos(DOOR_ANGLE), doorZ = R * Math.sin(DOOR_ANGLE);
+    const doorEdgeAngle = Math.atan2(doorZ - PLAZA_Z, doorX - PLAZA_X);
+    const startEdge = plazaEdgePoint(doorEdgeAngle);
+    return {
+      seed: currentWorldSeed, PLAZA_X, PLAZA_Z, PLAZA_R,
+      bretelles: out,
+      doorPath: { start: { x: startEdge.x, z: startEdge.z, r: Math.hypot(startEdge.x, startEdge.z) }, doorR: R }
+    };
+  };
   function handleCanvasTap(clientX, clientY) {
     const rot = state.theta - Math.PI / 4;
     const tapR = WORLD_TAP_RADIUS * camZoom; // le bâtiment paraît plus grand à l'écran une fois zoomé
@@ -4190,7 +4482,7 @@
       moulinBtn.disabled = true;
     } else {
       const cost = moulinCost(state.moulinLevel + 1);
-      moulinBtn.textContent = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
+      moulinBtn.innerHTML = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
       moulinBtn.classList.toggle('unaffordable', state.gold < cost);
       moulinBtn.disabled = false;
     }
@@ -4224,7 +4516,7 @@
     } else {
       const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
       const label = state.egliseZoneLevel === 0 ? t('eglise_btn_start') : t('eglise_btn_upgrade');
-      egliseBtn.textContent = affordText(label, cost);
+      egliseBtn.innerHTML = affordText(label, cost);
       egliseBtn.classList.toggle('unaffordable', state.gold < cost);
       egliseBtn.disabled = false;
     }
@@ -4304,15 +4596,28 @@
   // visiblement grisé (opacité réduite, voir .unaffordable dans le CSS)
   // quand on n'a pas assez d'or — "rien ne se passe en silence"
   // s'applique aussi à "pourquoi ce bouton ne fait rien".
-  function affordText(label, cost) { return `${label} (${cost})`; }
-  const TOWER_COST = 5;
+  // renvoie du HTML (voir .btnCost plus haut) : le prix seul, sans
+  // parenthèses, sur sa propre ligne sous le libellé — set via innerHTML
+  // à chaque site d'appel (pas textContent, qui afficherait les balises
+  // telles quelles).
+  function affordText(label, cost) { return `${label}<span class="btnCost">${cost}</span>`; }
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "augmentation du prix des
+  // tours au fur et à mesure, peut-être à chaque vague, +10% du prix") :
+  // TOWER_COST devient une fonction de state.wave (+10% par vague,
+  // arrondi) plutôt qu'une constante — refreshBuyButtons() tourne déjà à
+  // chaque frame (voir plus bas), donc l'affichage suit automatiquement.
+  const TOWER_BASE_COST = 5;
+  const TOWER_COST_GROWTH = 1.1;
+  function towerCost() { return Math.round(TOWER_BASE_COST * Math.pow(TOWER_COST_GROWTH, state.wave - 1)); }
   function updateTowerBtn() {
-    towerBtn.textContent = affordText(t('tower_btn'), TOWER_COST);
-    towerBtn.classList.toggle('unaffordable', state.gold < TOWER_COST);
+    const cost = towerCost();
+    towerBtn.innerHTML = affordText(t('tower_btn'), cost);
+    towerBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   towerBtn.addEventListener('click', () => {
-    if (state.gold < TOWER_COST || state.player.behavior !== 'combat') return;
-    state.gold -= TOWER_COST;
+    const cost = towerCost();
+    if (state.gold < cost || state.player.behavior !== 'combat') return;
+    state.gold -= cost;
     goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
     oilBtn.disabled = false; // huile bouillante needs an actual turret to pour from
@@ -4327,7 +4632,7 @@
       return;
     }
     const cost = MOAT_TIERS[state.moatLevel].cost;
-    moatBtn.textContent = affordText(t('moat_btn'), cost);
+    moatBtn.innerHTML = affordText(t('moat_btn'), cost);
     moatBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   moatBtn.addEventListener('click', () => {
@@ -4344,7 +4649,7 @@
 
   function updateGardenBtn() {
     const cost = gardenCost(state.gardenLevel + 1);
-    gardenBtn.textContent = affordText(t('garden_btn'), cost);
+    gardenBtn.innerHTML = affordText(t('garden_btn'), cost);
     gardenBtn.classList.toggle('unaffordable', state.gold < cost);
   } // no cap any more, always buyable (funds permitting)
   gardenBtn.addEventListener('click', () => {
@@ -4364,7 +4669,7 @@
   function updateHorseBtn() {
     const cost = horseCost(state.horseLevel + 1);
     const label = state.horseLevel > 0 ? t('horse_btn') + ' ' + state.horseLevel : t('horse_btn');
-    horseBtn.textContent = affordText(label, cost);
+    horseBtn.innerHTML = affordText(label, cost);
     horseBtn.classList.toggle('active', state.horseLevel > 0);
     horseBtn.classList.toggle('unaffordable', state.gold < cost);
   }
@@ -4500,18 +4805,37 @@
   // (routes, ruisseau, villageois...), un rechargement complet est plus
   // sûr qu'un réinit partiel qui oublierait forcément quelque chose.
   document.getElementById('seedValue').textContent = currentWorldSeed;
-  document.getElementById('seedNewBtn').addEventListener('click', () => {
-    if (!confirm(t('seed_confirm_new'))) return;
-    const s = randomSeedString();
+  // confirmation intégrée à la page (remplace confirm() natif — voir le
+  // commentaire HTML sur #seedConfirmRow) : seedPendingAction mémorise ce
+  // qu'il faut faire si le joueur confirme, seedConfirmYesBtn l'exécute.
+  const seedConfirmRow = document.getElementById('seedConfirmRow');
+  const seedConfirmMsg = document.getElementById('seedConfirmMsg');
+  let seedPendingAction = null;
+  function askSeedConfirm(msg, action) {
+    seedPendingAction = action;
+    seedConfirmMsg.textContent = msg;
+    seedConfirmRow.hidden = false;
+  }
+  function applySeedAndReload(s) {
     try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
     location.reload();
+  }
+  document.getElementById('seedNewBtn').addEventListener('click', () => {
+    askSeedConfirm(t('seed_confirm_new'), () => applySeedAndReload(randomSeedString()));
   });
   document.getElementById('seedLoadBtn').addEventListener('click', () => {
     const s = document.getElementById('seedInput').value.trim();
     if (!s) return;
-    if (!confirm(t('seed_confirm_load'))) return;
-    try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
-    location.reload();
+    askSeedConfirm(t('seed_confirm_load'), () => applySeedAndReload(s));
+  });
+  document.getElementById('seedConfirmYesBtn').addEventListener('click', () => {
+    seedConfirmRow.hidden = true;
+    if (seedPendingAction) seedPendingAction();
+    seedPendingAction = null;
+  });
+  document.getElementById('seedConfirmCancelBtn').addEventListener('click', () => {
+    seedConfirmRow.hidden = true;
+    seedPendingAction = null;
   });
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
@@ -4610,6 +4934,43 @@
   // le chat : erre sur le sol de la pièce, s'arrête de temps en temps et
   // ronronne (demandé en session) — même vocabulaire d'IA simple que la
   // patrouille de créneaux du seigneur (cible aléatoire, ease, pause)
+  // DEMANDÉ EN SESSION (2026-09-12) : les paysans réfugiés étaient trop
+  // petits pour se lire comme des personnes (rayon 8 contre 17 pour le
+  // seigneur) et figés en cercle autour du feu — "ils doivent avoir la
+  // même taille... éventuellement légèrement plus petit" et "se déplacer
+  // librement". Repris avec le même idiome que cosyCat (pause/cible
+  // aléatoire) mais un par paysan caché, dans une zone resserrée près du
+  // feu plutôt que toute la pièce (ils restent "au coin du feu", juste
+  // plus vivants) ; le tableau est redimensionné à la volée pour suivre
+  // state.villagersHiddenCastle qui varie au fil de la partie.
+  const COSY_VILLAGER_R = 13;
+  const cosyVillagers = [];
+  function cosyPickVillagerTarget(v) {
+    v.tx = 4.7 + Math.random() * 2.3;
+    v.tz = 3.7 + Math.random() * 2.5;
+  }
+  function ensureCosyVillagerCount(n) {
+    while (cosyVillagers.length < n) {
+      const v = { x: 4.7 + Math.random() * 2.3, z: 3.7 + Math.random() * 2.5, tx: 0, tz: 0, pauseTimer: Math.random() * 2 };
+      cosyPickVillagerTarget(v);
+      cosyVillagers.push(v);
+    }
+    if (cosyVillagers.length > n) cosyVillagers.length = n;
+  }
+  function updateCosyVillagers(dt) {
+    for (const v of cosyVillagers) {
+      if (v.pauseTimer > 0) {
+        v.pauseTimer -= dt;
+        if (v.pauseTimer <= 0) cosyPickVillagerTarget(v);
+        continue;
+      }
+      const dx = v.tx - v.x, dz = v.tz - v.z, d = Math.hypot(dx, dz);
+      if (d < 0.08) { v.pauseTimer = 1.5 + Math.random() * 2.5; continue; }
+      const sp = 0.5;
+      v.x += (dx / d) * sp * dt;
+      v.z += (dz / d) * sp * dt;
+    }
+  }
   const cosyCat = { x: 3.2, z: 3.4, tx: 3.2, tz: 3.4, pauseTimer: 1.5, purrCooldown: 3 };
   function cosyPickCatTarget() {
     cosyCat.tx = 0.9 + Math.random() * 5.2;
@@ -4698,34 +5059,35 @@
     }
     cosyCtx.shadowBlur = 0;
 
-    function barrel(bx, bz) {
-      const base = cosyIso(bx, 0, bz), topC = cosyIso(bx, 0.9, bz);
-      const rw = 0.55 * COSY_SCALE * 0.55, rh = 0.22 * COSY_SCALE * 0.55;
-      const grad = cosyCtx.createLinearGradient(base.x - rw, 0, base.x + rw, 0);
-      grad.addColorStop(0, '#241608'); grad.addColorStop(0.5, '#8a6538'); grad.addColorStop(1, '#2e1c0d');
-      cosyCtx.fillStyle = grad;
-      cosyCtx.beginPath();
-      cosyCtx.moveTo(base.x - rw, topC.y);
-      cosyCtx.quadraticCurveTo(base.x - rw * 1.12, (topC.y + base.y) / 2, base.x - rw, base.y);
-      cosyCtx.lineTo(base.x + rw, base.y);
-      cosyCtx.quadraticCurveTo(base.x + rw * 1.12, (topC.y + base.y) / 2, base.x + rw, topC.y);
-      cosyCtx.closePath(); cosyCtx.fill();
-      cosyCtx.beginPath(); cosyCtx.ellipse(topC.x, topC.y, rw, rh, 0, 0, Math.PI * 2); cosyCtx.fillStyle = '#a3814f'; cosyCtx.fill();
-    }
-    barrel(5.6, 1.4); barrel(6.3, 2.1); barrel(1.2, 5.6);
+    // DEMANDÉ EN SESSION (2026-09-12) : "il y a 2-3 piliers chelou qui
+    // bougent pas, on supprime" — les tonneaux statiques (barrel()) sont
+    // retirés ; l'escalier juste au-dessus est conservé tel quel.
 
     const fireCenter = cosyIso(6.7, 0.5, 4.6);
-    cosyQuad([cosyIso(6.4, 0, 4.6), cosyIso(7, 0, 4.6), cosyIso(7, 2.6, 4.6), cosyIso(6.4, 2.6, 4.6)], '#160c04');
+    cosyQuad([cosyIso(6.2, 0, 4.6), cosyIso(7.2, 0, 4.6), cosyIso(7.2, 3, 4.6), cosyIso(6.2, 3, 4.6)], '#160c04');
     const flicker = 0.85 + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
-    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 120 * flicker);
+    // "beaucoup plus gros, beaucoup plus sympathique" — halo et flammes
+    // agrandis (halo ~1.6x, cœur ~1.8x), et le cœur unique remplacé par un
+    // petit foyer de 3 flammes décalées (tailles/phases différentes) pour
+    // lire comme un vrai feu qui vit plutôt qu'un simple rond qui palpite.
+    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 190 * flicker);
     fg.addColorStop(0, `rgba(255,160,60,${0.95 * flicker})`);
     fg.addColorStop(0.5, `rgba(255,120,40,${0.35 * flicker})`);
     fg.addColorStop(1, 'rgba(255,120,40,0)');
     cosyCtx.fillStyle = fg; cosyCtx.fillRect(0, 0, COSY_W, COSY_H);
-    const flame = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 1, fireCenter.x, fireCenter.y, 11 * flicker);
-    flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
-    cosyCtx.fillStyle = flame;
-    cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x, fireCenter.y, 11 * flicker, 0, Math.PI * 2); cosyCtx.fill();
+    const flames = [
+      { dx: 0, dy: 0, r: 20, phase: 0 },
+      { dx: -9, dy: -3, r: 13, phase: 2.1 },
+      { dx: 8, dy: -2, r: 14, phase: 4.4 }
+    ];
+    for (const fl of flames) {
+      const fk = 0.8 + 0.2 * Math.sin(t * 7 + fl.phase);
+      const rad = fl.r * flicker * fk;
+      const flame = cosyCtx.createRadialGradient(fireCenter.x + fl.dx, fireCenter.y + fl.dy, 1, fireCenter.x + fl.dx, fireCenter.y + fl.dy, rad);
+      flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
+      cosyCtx.fillStyle = flame;
+      cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x + fl.dx, fireCenter.y + fl.dy, rad, 0, Math.PI * 2); cosyCtx.fill();
+    }
 
     drawChessBoard();
     cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
@@ -4740,14 +5102,16 @@
 
     // les paysans réfugiés dans le château (state.villagersHiddenCastle) —
     // demandé en session : "on verra exactement le même nombre de paysans
-    // à côté du feu" — même recette cosyPerson, plus petits, en cercle
-    // autour du foyer ; plafonné pour ne pas déborder de la pièce si le
-    // nombre devient grand (le compte réel reste correct, juste pas tous
-    // dessinés un par un au-delà de ce plafond)
+    // à côté du feu" — même recette cosyPerson, en liberté près du foyer
+    // (voir cosyVillagers/updateCosyVillagers) plutôt que figés en cercle ;
+    // plafonné pour ne pas déborder de la pièce si le nombre devient grand
+    // (le compte réel reste correct, juste pas tous dessinés un par un
+    // au-delà de ce plafond)
     const shownVillagers = Math.min(state.villagersHiddenCastle, 10);
+    ensureCosyVillagerCount(shownVillagers);
     for (let i = 0; i < shownVillagers; i++) {
-      const ang = (i / Math.max(1, shownVillagers)) * Math.PI * 2;
-      cosyPerson(6.5 + Math.cos(ang) * 0.55, 5.1 + Math.sin(ang) * 0.4, 8, '#d9c48a', '#8a6a42');
+      const v = cosyVillagers[i];
+      cosyPerson(v.x, v.z, COSY_VILLAGER_R, '#d9c48a', '#8a6a42');
     }
 
     drawCosyCat(t);
@@ -4759,19 +5123,103 @@
     cosyLastT = now;
     cosyClock += dt;
     updateCosyCat(dt);
+    updateCosyVillagers(dt);
     renderCosyScene(cosyClock);
     updatePriestBtn(); // repositionné chaque frame (taille CSS du canvas responsive, peut changer au resize)
     cosyRAF = requestAnimationFrame(cosyFrame);
   }
+
+  // DEMANDÉ EN SESSION (2026-09-12) : "la musique doit changer complètement
+  // avec un fondu enchaîné sur une musique très très douce... éventuellement
+  // un petit bruit de feu". Pas de second fichier audio dans le projet —
+  // l'ambiance cosy est donc synthétisée avec le même Web Audio que
+  // playPurr/beep (nappe de 3 voix sinus en accord bas + respiration lente
+  // + crépitement de feu = bursts de bruit filtré à intervalle aléatoire),
+  // pendant que bgMusic descend en fondu plutôt que de couper net.
+  let bgMusicFadeRAF = null;
+  function fadeBgMusicTo(target, durationMs) {
+    if (bgMusicFadeRAF) cancelAnimationFrame(bgMusicFadeRAF);
+    const start = bgMusic.volume, t0 = performance.now();
+    function step(now) {
+      const p = Math.min(1, (now - t0) / durationMs);
+      bgMusic.volume = start + (target - start) * p;
+      bgMusicFadeRAF = p < 1 ? requestAnimationFrame(step) : null;
+    }
+    bgMusicFadeRAF = requestAnimationFrame(step);
+  }
+  let cosyAmbient = null;
+  function startCosyAmbient() {
+    if (!actx || cosyAmbient) return;
+    const sv = musicVolume / 100;
+    const t0 = actx.currentTime;
+    const master = actx.createGain();
+    master.gain.setValueAtTime(0.0001, t0);
+    master.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.16 * sv), t0 + 1.4);
+    master.connect(actx.destination);
+    // nappe douce : trois voix sinus, accord mineur bas (A2, C3, E3)
+    const oscs = [110, 130.81, 164.81].map(f => {
+      const osc = actx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, t0);
+      const voiceGain = actx.createGain();
+      voiceGain.gain.value = 0.33;
+      osc.connect(voiceGain).connect(master);
+      osc.start(t0);
+      return osc;
+    });
+    const lfo = actx.createOscillator(); // respiration lente du volume global
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(0.15, t0);
+    const lfoGain = actx.createGain();
+    lfoGain.gain.value = 0.05 * sv;
+    lfo.connect(lfoGain).connect(master.gain);
+    lfo.start(t0);
+    cosyAmbient = { master, oscs, lfo, crackleTimer: null };
+    (function crackle() {
+      if (!cosyAmbient) return;
+      const t1 = actx.currentTime, dur = 0.06 + Math.random() * 0.05;
+      const bufSize = Math.max(1, Math.floor(actx.sampleRate * dur));
+      const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+      const src = actx.createBufferSource();
+      src.buffer = buf;
+      const filt = actx.createBiquadFilter();
+      filt.type = 'bandpass';
+      filt.frequency.value = 1800 + Math.random() * 1400;
+      filt.Q.value = 1.2;
+      const g = actx.createGain();
+      g.gain.value = (0.4 + Math.random() * 0.4) * sv;
+      src.connect(filt).connect(g).connect(master);
+      src.start(t1);
+      cosyAmbient.crackleTimer = setTimeout(crackle, 900 + Math.random() * 2200);
+    })();
+  }
+  function stopCosyAmbient() {
+    if (!cosyAmbient || !actx) { cosyAmbient = null; return; }
+    const { master, oscs, lfo, crackleTimer } = cosyAmbient;
+    clearTimeout(crackleTimer);
+    const t0 = actx.currentTime;
+    master.gain.cancelScheduledValues(t0);
+    master.gain.setValueAtTime(master.gain.value, t0);
+    master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.8);
+    setTimeout(() => { oscs.forEach(o => o.stop()); lfo.stop(); }, 900);
+    cosyAmbient = null;
+  }
+
   document.getElementById('cosyBtn').addEventListener('click', () => {
     cosyOverlay.hidden = false;
     ensureAudio();
+    fadeBgMusicTo(0, 1200);
+    startCosyAmbient();
     if (cosyRAF === null) { cosyLastT = 0; cosyRAF = requestAnimationFrame(cosyFrame); }
   });
   document.getElementById('cosyClose').addEventListener('click', () => {
     cosyOverlay.hidden = true;
     if (cosyRAF !== null) { cancelAnimationFrame(cosyRAF); cosyRAF = null; }
     priestBtn.hidden = true;
+    stopCosyAmbient();
+    fadeBgMusicTo(musicVolume / 100, 1200);
   });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
   const faqOverlay = document.getElementById('faqOverlay');
@@ -5081,7 +5529,8 @@
       p.repairTimer = REPAIR_TICK;
       p.repairMaxedPlayed = false;
       if (sortieTarget && Math.abs(angDiff(p.angle, targetAngle)) < 0.15 &&
-          Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85) {
+          Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85 &&
+          sameStreamSide(p.r * Math.cos(p.angle), p.r * Math.sin(p.angle), targetR * Math.cos(targetAngle), targetR * Math.sin(targetAngle))) {
         p.sortieTimer -= dt;
         if (p.sortieTimer <= 0) {
           playHammer();
@@ -5587,8 +6036,12 @@
           // trébuchet : tire un projectile visible depuis là où il est
           // construit plutôt d'infliger les dégâts instantanément — même
           // dégâts/cadence qu'avant, juste un temps de vol en plus (~0.7s,
-          // négligeable vu le cooldown de plusieurs secondes)
-          fireSiegeShot(s, tier.dmg);
+          // négligeable vu le cooldown de plusieurs secondes). Vise
+          // maintenant la tourelle la plus proche de lui s'il y en a une
+          // (comme la tour de siège plus haut), sinon le mur comme avant.
+          const lx = s.r * Math.cos(s.angle), lz = s.r * Math.sin(s.angle);
+          const def = nearestDefender(lx, lz);
+          fireSiegeShot(s, tier.dmg, def.type === 'tower' ? def.ref : null);
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
           triggerShake(Math.min(14, tier.dmg * 0.5)); // arbalète : léger ; bélier (22 dmg) : net
@@ -5642,13 +6095,19 @@
       if (pr.t >= 1 && !pr.done) {
         pr.done = true;
         if (pr.siegeShot) {
-          // caillou de trébuchet : cible fixe (le donjon), pas une entité
-          // avec .hp — même dégâts que l'ancien contact instantané, juste
-          // appliqués à l'impact plutôt qu'au moment du tir
-          state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
-          triggerShake(Math.min(14, pr.dmg * 0.5));
-          triggerDamageIndicator(pr.from.x, pr.from.z);
-          if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+          // caillou de trébuchet : cible le mur par défaut (comme avant),
+          // ou la tourelle visée au tir (pr.siegeTarget) si elle existe
+          // encore à l'impact — a pu être détruite/réparée hors de danger
+          // entre le tir et l'impact (0,7s de vol), d'où le hp>0.
+          if (pr.siegeTarget && pr.siegeTarget.hp > 0) {
+            pr.siegeTarget.hp -= pr.dmg;
+            triggerDamageIndicator(pr.from.x, pr.from.z);
+          } else {
+            state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
+            triggerShake(Math.min(14, pr.dmg * 0.5));
+            triggerDamageIndicator(pr.from.x, pr.from.z);
+            if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+          }
         } else if (!pr.target.dead) {
           const isSiege = pr.target.tierIdx !== undefined;
           const tier = isSiege ? SIEGE_TIERS[pr.target.tierIdx] : null;
@@ -6271,6 +6730,11 @@
   // triangle at each end
   function drawHouse(h, rot) {
     const s = HOUSE_SIZE, wallH = s * 0.9, roofH = s * 0.7;
+    // DEMANDÉ EN SESSION (2026-09-12) : "rendre la maison distincte" pendant
+    // qu'elle abrite des ennemis — les pips rouges (drawHiddenPips) seuls
+    // étaient jugés pas assez visibles. Murs teintés vers l'ambre/doré
+    // (lueur intérieure) tant que hiddenCount>0, en plus des pips.
+    const occupied = h.hiddenCount > 0;
     const yaw = h.yaw || 0;
     const corners = [[-s, -s], [s, -s], [s, s], [-s, s]].map(([dx, dz]) => rotYaw(dx, dz, yaw)); // local (dx, dz), tournées
     const base = corners.map(([dx, dz]) => project(h.x + dx, 0, h.z + dz, rot));
@@ -6285,8 +6749,9 @@
     walls.sort((a, b) => a.depth - b.depth);
     for (const w of walls) {
       const g = Math.round(120 + w.light * 30);
-      ctx.fillStyle = `rgb(${g},${g - 25},${g - 55})`;
+      ctx.fillStyle = occupied ? `rgb(${Math.min(255, g + 55)},${Math.round(g * 0.65)},${Math.max(0, g - 90)})` : `rgb(${g},${g - 25},${g - 55})`;
       buildQuad(w.pts);
+      if (occupied) { ctx.strokeStyle = 'rgba(255,190,90,0.85)'; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.stroke(); }
     }
     // roof: a ridge along one axis, two sloped quads meeting at the top
     const [ridgeAx, ridgeAz] = rotYaw(-s, 0, yaw), [ridgeBx, ridgeBz] = rotYaw(s, 0, yaw);
@@ -6833,7 +7298,9 @@
   // trigonométrique dans le plan (tx,tz, haut)), d'où MOULIN_SPIN_RATE>0.
   function drawMoulinWheel(m, rot) {
     const { g, wheelX, wheelZ } = m;
-    const centerY = MOULIN_WHEEL_R; // le bas de la roue touche juste l'eau (y=0)
+    const wheelR = moulinWheelRadius(state.moulinLevel);
+    const spinRate = moulinWheelSpinRate(state.moulinLevel);
+    const centerY = wheelR; // le bas de la roue touche juste l'eau (y=0)
     // épaisseur : deux jantes (proche/loin), décalées le long de l'essieu
     // (rx,rz — perpendiculaire au plan de la roue, qui est lui-même dans
     // le plan courant/vertical, voir plus haut) plutôt qu'un disque plat.
@@ -6844,9 +7311,9 @@
     const farX = wheelX + g.rx * halfT, farZ = wheelZ + g.rz * halfT;
     const rimNear = [], rimFar = [];
     for (let i = 0; i < MOULIN_WHEEL_SEGS; i++) {
-      const theta = state.time * MOULIN_SPIN_RATE + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
-      const along = Math.cos(theta) * MOULIN_WHEEL_R; // le long du courant (tx,tz)
-      const up = Math.sin(theta) * MOULIN_WHEEL_R;    // vertical
+      const theta = state.time * spinRate + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
+      const along = Math.cos(theta) * wheelR; // le long du courant (tx,tz)
+      const up = Math.sin(theta) * wheelR;    // vertical
       rimNear.push(project(nearX + g.tx * along, centerY + up, nearZ + g.tz * along, rot));
       rimFar.push(project(farX + g.tx * along, centerY + up, farZ + g.tz * along, rot));
     }
@@ -7032,9 +7499,11 @@
     else drawBallSprite('enemy', rad, '#8a3b2e', '#2a1a15', pos);
     const wait = enemyWaitInfo(e);
     if (wait) drawWaitGauge(pos, rad, 1 - wait.timer / wait.max, wait.color);
+    // DEMANDÉ EN SESSION (2026-09-12, Pierre : "une barre qui elle-même
+    // rétrécit, y a pas une barre dans une barre") : plus de fond noir
+    // pleine largeur derrière la barre rouge — juste la barre rouge,
+    // dont la largeur EST la vie restante.
     if (e.hp < e.maxHp) {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(pos.x - rad, pos.y - rad - 6, rad * 2, 3);
       ctx.fillStyle = '#c95a3f';
       ctx.fillRect(pos.x - rad, pos.y - rad - 6, rad * 2 * (e.hp / e.maxHp), 3);
     }
@@ -7282,16 +7751,26 @@
   // interpolation linéaire entre r0 et r1 reste dans [min(r0,r1),
   // max(r0,r1)]), donc le chemin contourne le donjon au lieu de couper
   // au plus court à travers lui — un vrai chemin, pas une corde.
-  function bowedPathPoints(x0, z0, x1, z1, steps = 8) {
+  // bulge (EN TEST, 2026-09-10 — pas encore validé par Pierre) : quand
+  // l'écart angulaire est grand (le cas normal des bretelles depuis la
+  // refonte procédurale — village volontairement dans la poche libre
+  // ENTRE les deux routes, donc presque toujours à 70-160° de chacune),
+  // une simple interpolation de rayon reste proche du donjon tout du
+  // long ET balaie un grand arc — se lit comme "un chemin qui fait le
+  // tour de la tour" plutôt qu'un vrai chemin de campagne. Un léger
+  // bombement vers l'EXTÉRIEUR (jamais vers le donjon, toujours max(r0,
+  // r1) au minimum) fait contourner large plutôt que raser le mur.
+  function bowedPathPoints(x0, z0, x1, z1, steps = 8, bulge = 0) {
     const a0 = Math.atan2(z0, x0), r0 = Math.hypot(x0, z0);
     const a1raw = Math.atan2(z1, x1), r1 = Math.hypot(x1, z1);
     let da = a1raw - a0;
     while (da > Math.PI) da -= Math.PI * 2;
     while (da < -Math.PI) da += Math.PI * 2;
+    const b = bulge > 0 ? Math.min(bulge, Math.abs(da) * 90) : 0;
     const pts = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      const a = a0 + da * t, r = r0 + (r1 - r0) * t;
+      const a = a0 + da * t, r = r0 + (r1 - r0) * t + b * Math.sin(Math.PI * t);
       pts.push({ x: r * Math.cos(a), z: r * Math.sin(a) });
     }
     return pts;
@@ -7304,8 +7783,8 @@
   // porte, largeur DOOR_HALF_WIDTH) — seule la ROUTE qui y mène se
   // courbe, pas l'alignement final exigé en session ("les deux côtés du
   // chemin doivent toucher les deux bords de la porte").
-  function drawBowedSplitRoadPath(x0, z0, x1, z1, halfWidth, rot, wantFar) {
-    const pts = bowedPathPoints(x0, z0, x1, z1);
+  function drawBowedSplitRoadPath(x0, z0, x1, z1, halfWidth, rot, wantFar, bulge = 0) {
+    const pts = bowedPathPoints(x0, z0, x1, z1, 8, bulge);
     for (let i = 0; i < pts.length - 1; i++) {
       drawSplitRoadPath(pts[i].x, pts[i].z, pts[i + 1].x, pts[i + 1].z, halfWidth, rot, wantFar, 2);
     }
@@ -7322,6 +7801,35 @@
   // seules intersections du réseau sont ces deux jonctions bretelle/
   // route — les routes elles-mêmes ne se croisent jamais entre elles,
   // et le troisième chemin place->porte n'en touche aucune).
+  // BUG TROUVÉ EN SESSION (2026-09-10, capture à l'appui de Pierre) : cette
+  // fonction prenait `r` = PLAZA_R telle quelle — "le point de la route à
+  // la MÊME DISTANCE du donjon que la place". Rien ne garantit que la
+  // route passe par un angle compatible à CE rayon précis — avec les
+  // routes maintenant procédurales (angles/coudes variables par graine),
+  // ce point pouvait tomber presque à l'opposé de la place, forçant la
+  // bretelle à balayer un grand arc autour du donjon pour les relier (le
+  // "fouillis" signalé). roadNearestR() cherche maintenant le vrai point
+  // le plus proche de la place sur TOUTE la route, pas seulement à un
+  // rayon imposé — la bretelle en résultant est toujours la plus courte
+  // possible, jamais un détour arbitraire.
+  function roadNearestR(idx, targetX, targetZ) {
+    let bestR = BASE_R, bestD = Infinity;
+    for (let r = BASE_R; r <= roadMaxR(); r += 8) {
+      const a = roadAngleAt(idx, r);
+      const dx = r * Math.cos(a) - targetX, dz = r * Math.sin(a) - targetZ;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; bestR = r; }
+    }
+    // affinage local autour du meilleur rayon trouvé (le balayage grossier
+    // ci-dessus peut manquer le vrai minimum de quelques unités)
+    for (let r = Math.max(BASE_R, bestR - 8); r <= bestR + 8; r += 1) {
+      const a = roadAngleAt(idx, r);
+      const dx = r * Math.cos(a) - targetX, dz = r * Math.sin(a) - targetZ;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; bestR = r; }
+    }
+    return bestR;
+  }
   function roadNearEdgePoint(idx, r, towardX, towardZ) {
     const a = roadAngleAt(idx, r);
     const cx = r * Math.cos(a), cz = r * Math.sin(a);
@@ -7334,10 +7842,22 @@
     return { x: cx + px * side * ROAD_WIDTH, z: cz + pz * side * ROAD_WIDTH };
   }
   function drawPlazaAndPaths(rot, wantFar) {
+    // EN TEST (2026-09-10, pas encore validé) : une seule bretelle, celle
+    // du côté le plus court — dessiner les deux force systématiquement au
+    // moins un grand écart angulaire (la place est délibérément dans la
+    // poche LOIN des deux routes, donc quasi toujours à 70-160° de
+    // chacune), ce qui se lisait comme un tracé qui fait le tour de la
+    // tour plutôt qu'un vrai chemin de campagne.
+    let best = null, bestLen = Infinity;
     for (let idx = 0; idx < 2; idx++) {
-      const roadPt = roadNearEdgePoint(idx, PLAZA_R, PLAZA_X, PLAZA_Z);
+      const roadPt = roadNearEdgePoint(idx, roadNearestR(idx, PLAZA_X, PLAZA_Z), PLAZA_X, PLAZA_Z);
       const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
       const edge = plazaEdgePoint(edgeAngle);
+      const len = Math.hypot(roadPt.x - edge.x, roadPt.z - edge.z);
+      if (len < bestLen) { bestLen = len; best = { roadPt, edge }; }
+    }
+    {
+      const { roadPt, edge } = best;
       if (phosphorStyle === 'couleur') {
         if (pointFar((roadPt.x + edge.x) / 2, (roadPt.z + edge.z) / 2, rot) === wantFar) {
           drawSimpleRoadPath(roadPt.x, roadPt.z, edge.x, edge.z, ROAD_WIDTH, rot);
@@ -7404,10 +7924,9 @@
     ctx.stroke();
 
     if (b.hp < b.maxHp) {
+      // même traitement que drawEnemy : une seule barre qui rétrécit
       const mid = project((innerR + outerR) / 2 * Math.cos(b.angle), 10, (innerR + outerR) / 2 * Math.sin(b.angle), rot);
       const bw = 22;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(mid.x - bw / 2, mid.y - 10, bw, 3);
       ctx.fillStyle = '#c9a24a';
       ctx.fillRect(mid.x - bw / 2, mid.y - 10, bw * (b.hp / b.maxHp), 3);
     }
@@ -7453,8 +7972,7 @@
       ctx.arc(pos.x, pos.y, rad + 4, 0, Math.PI * 2);
       ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(pos.x - rad, pos.y - rad - 8, rad * 2, 3);
+    // même traitement que drawEnemy : une seule barre qui rétrécit
     ctx.fillStyle = '#c9503f';
     ctx.fillRect(pos.x - rad, pos.y - rad - 8, rad * 2 * Math.max(0, s.hp / s.maxHp), 3);
 
