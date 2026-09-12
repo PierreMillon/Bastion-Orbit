@@ -417,6 +417,13 @@
   body.phosphor #seedInput, body.phosphor #seedRow button {
     background: rgba(0,0,0,0.3); color: var(--ph-text);
   }
+  /* confirmation intégrée à la page pour Nouvelle carte/Charger (voir
+     seedPendingAction) — remplace confirm() natif, cf. commentaire HTML */
+  #seedConfirmRow { display: flex; flex-direction: column; gap: 6px; }
+  #seedConfirmRow[hidden] { display: none; }
+  #seedConfirmRow p { margin: 0; line-height: 1.35; }
+  #seedConfirmRow .seedConfirmBtns { display: flex; gap: 6px; }
+  #seedConfirmRow .seedConfirmBtns button { flex: 1; }
 
   /* fausse pub à la défaite : gag volontairement criard, aux antipodes du
      reste de l'interface (fond parchemin sobre) — c'est le but */
@@ -808,6 +815,20 @@
       <button id="seedLoadBtn">Charger</button>
     </div>
     <button id="seedNewBtn">🎲 Nouvelle carte</button>
+    <!-- DEMANDÉ EN SESSION (2026-09-12) : "le système de new map marche
+         pas" — confirm() natif était le seul de tout le jeu à ce
+         endroit ; probablement bloqué/silencieux dans certains contextes
+         mobiles (navigateur intégré d'une appli, PWA...), ce qui rendait
+         les deux boutons ci-dessus inertes sans aucun message d'erreur.
+         Remplacé par cette confirmation intégrée à la page (voir
+         seedPendingAction plus bas dans le script). -->
+    <div id="seedConfirmRow" hidden>
+      <p id="seedConfirmMsg"></p>
+      <div class="seedConfirmBtns">
+        <button id="seedConfirmYesBtn"></button>
+        <button id="seedConfirmCancelBtn"></button>
+      </div>
+    </div>
   </div>
   <div class="volumeRow">
     <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
@@ -1052,10 +1073,11 @@
       overlay_wave_reached: 'Vague atteinte : ', overlay_gold_earned: 'Or gagné : ',
       overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague ',
       intro_hint: 'Glissez pour tourner la caméra et viser — dégâts bonus droit dans l\'axe. Sortie pour charger dehors, Réparer si le mur faiblit. Plus de détails dans ☰ Astuces.',
-      seed_label: 'Graine :', seed_placeholder: 'Coller une graine…', seed_load_btn: 'Charger',
+      seed_label: 'Graine :', seed_placeholder: 'Écris ou colle une graine…', seed_load_btn: 'Charger',
       seed_new_btn: '🎲 Nouvelle carte',
       seed_confirm_new: 'Générer une nouvelle carte ? Le village actuel sera remplacé (note la graine ci-dessus si tu veux pouvoir y revenir).',
-      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.'
+      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.',
+      seed_confirm_yes: 'Confirmer', seed_confirm_cancel: 'Annuler'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1095,10 +1117,11 @@
       overlay_wave_reached: 'Wave reached: ', overlay_gold_earned: 'Gold earned: ',
       overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave ',
       intro_hint: 'Drag to turn the camera and aim — bonus damage dead-on. Sally to charge out, Repair if the wall weakens. More in ☰ Tips.',
-      seed_label: 'Seed:', seed_placeholder: 'Paste a seed…', seed_load_btn: 'Load',
+      seed_label: 'Seed:', seed_placeholder: 'Type or paste a seed…', seed_load_btn: 'Load',
       seed_new_btn: '🎲 New map',
       seed_confirm_new: 'Generate a new map? The current village will be replaced (note the seed above if you want to come back to it).',
-      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.'
+      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.',
+      seed_confirm_yes: 'Confirm', seed_confirm_cancel: 'Cancel'
     }
   };
   function detectLang() {
@@ -1140,6 +1163,8 @@
     document.getElementById('seedInput').placeholder = t('seed_placeholder');
     document.getElementById('seedLoadBtn').textContent = t('seed_load_btn');
     document.getElementById('seedNewBtn').textContent = t('seed_new_btn');
+    document.getElementById('seedConfirmYesBtn').textContent = t('seed_confirm_yes');
+    document.getElementById('seedConfirmCancelBtn').textContent = t('seed_confirm_cancel');
     document.getElementById('closeFaq').textContent = t('close_menu');
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
@@ -4762,18 +4787,37 @@
   // (routes, ruisseau, villageois...), un rechargement complet est plus
   // sûr qu'un réinit partiel qui oublierait forcément quelque chose.
   document.getElementById('seedValue').textContent = currentWorldSeed;
-  document.getElementById('seedNewBtn').addEventListener('click', () => {
-    if (!confirm(t('seed_confirm_new'))) return;
-    const s = randomSeedString();
+  // confirmation intégrée à la page (remplace confirm() natif — voir le
+  // commentaire HTML sur #seedConfirmRow) : seedPendingAction mémorise ce
+  // qu'il faut faire si le joueur confirme, seedConfirmYesBtn l'exécute.
+  const seedConfirmRow = document.getElementById('seedConfirmRow');
+  const seedConfirmMsg = document.getElementById('seedConfirmMsg');
+  let seedPendingAction = null;
+  function askSeedConfirm(msg, action) {
+    seedPendingAction = action;
+    seedConfirmMsg.textContent = msg;
+    seedConfirmRow.hidden = false;
+  }
+  function applySeedAndReload(s) {
     try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
     location.reload();
+  }
+  document.getElementById('seedNewBtn').addEventListener('click', () => {
+    askSeedConfirm(t('seed_confirm_new'), () => applySeedAndReload(randomSeedString()));
   });
   document.getElementById('seedLoadBtn').addEventListener('click', () => {
     const s = document.getElementById('seedInput').value.trim();
     if (!s) return;
-    if (!confirm(t('seed_confirm_load'))) return;
-    try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
-    location.reload();
+    askSeedConfirm(t('seed_confirm_load'), () => applySeedAndReload(s));
+  });
+  document.getElementById('seedConfirmYesBtn').addEventListener('click', () => {
+    seedConfirmRow.hidden = true;
+    if (seedPendingAction) seedPendingAction();
+    seedPendingAction = null;
+  });
+  document.getElementById('seedConfirmCancelBtn').addEventListener('click', () => {
+    seedConfirmRow.hidden = true;
+    seedPendingAction = null;
   });
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
