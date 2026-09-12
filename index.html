@@ -3640,9 +3640,16 @@
   // distingue la branche d'impact dans la boucle de mise à jour des
   // projectiles. Vol plus lent qu'une flèche (dur=0.7s) pour lire comme
   // un caillou lobé, pas un tir tendu.
-  function fireSiegeShot(s, dmg) {
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "les tours de défense qu'on
+  // construit, elles peuvent être abîmées, voire détruites par des
+  // engins de siège") : seule la "tour de siège" (isTower) visait déjà
+  // une tourelle via nearestDefender — le trébuchet (bien plus courant)
+  // touchait TOUJOURS le mur, jamais une tourelle. siegeTower prend
+  // maintenant la même cible que choisirait nearestDefender, portée par
+  // le projectile jusqu'à l'impact.
+  function fireSiegeShot(s, dmg, target) {
     const from = { x: s.r * Math.cos(s.angle), y: 0, z: s.r * Math.sin(s.angle) };
-    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true });
+    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true, siegeTarget: target });
     playSiegeShot();
   }
 
@@ -4533,14 +4540,23 @@
   // à chaque site d'appel (pas textContent, qui afficherait les balises
   // telles quelles).
   function affordText(label, cost) { return `${label}<span class="btnCost">${cost}</span>`; }
-  const TOWER_COST = 5;
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "augmentation du prix des
+  // tours au fur et à mesure, peut-être à chaque vague, +10% du prix") :
+  // TOWER_COST devient une fonction de state.wave (+10% par vague,
+  // arrondi) plutôt qu'une constante — refreshBuyButtons() tourne déjà à
+  // chaque frame (voir plus bas), donc l'affichage suit automatiquement.
+  const TOWER_BASE_COST = 5;
+  const TOWER_COST_GROWTH = 1.1;
+  function towerCost() { return Math.round(TOWER_BASE_COST * Math.pow(TOWER_COST_GROWTH, state.wave - 1)); }
   function updateTowerBtn() {
-    towerBtn.innerHTML = affordText(t('tower_btn'), TOWER_COST);
-    towerBtn.classList.toggle('unaffordable', state.gold < TOWER_COST);
+    const cost = towerCost();
+    towerBtn.innerHTML = affordText(t('tower_btn'), cost);
+    towerBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   towerBtn.addEventListener('click', () => {
-    if (state.gold < TOWER_COST || state.player.behavior !== 'combat') return;
-    state.gold -= TOWER_COST;
+    const cost = towerCost();
+    if (state.gold < cost || state.player.behavior !== 'combat') return;
+    state.gold -= cost;
     goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
     oilBtn.disabled = false; // huile bouillante needs an actual turret to pour from
@@ -5816,8 +5832,12 @@
           // trébuchet : tire un projectile visible depuis là où il est
           // construit plutôt d'infliger les dégâts instantanément — même
           // dégâts/cadence qu'avant, juste un temps de vol en plus (~0.7s,
-          // négligeable vu le cooldown de plusieurs secondes)
-          fireSiegeShot(s, tier.dmg);
+          // négligeable vu le cooldown de plusieurs secondes). Vise
+          // maintenant la tourelle la plus proche de lui s'il y en a une
+          // (comme la tour de siège plus haut), sinon le mur comme avant.
+          const lx = s.r * Math.cos(s.angle), lz = s.r * Math.sin(s.angle);
+          const def = nearestDefender(lx, lz);
+          fireSiegeShot(s, tier.dmg, def.type === 'tower' ? def.ref : null);
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
           triggerShake(Math.min(14, tier.dmg * 0.5)); // arbalète : léger ; bélier (22 dmg) : net
@@ -5871,13 +5891,19 @@
       if (pr.t >= 1 && !pr.done) {
         pr.done = true;
         if (pr.siegeShot) {
-          // caillou de trébuchet : cible fixe (le donjon), pas une entité
-          // avec .hp — même dégâts que l'ancien contact instantané, juste
-          // appliqués à l'impact plutôt qu'au moment du tir
-          state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
-          triggerShake(Math.min(14, pr.dmg * 0.5));
-          triggerDamageIndicator(pr.from.x, pr.from.z);
-          if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+          // caillou de trébuchet : cible le mur par défaut (comme avant),
+          // ou la tourelle visée au tir (pr.siegeTarget) si elle existe
+          // encore à l'impact — a pu être détruite/réparée hors de danger
+          // entre le tir et l'impact (0,7s de vol), d'où le hp>0.
+          if (pr.siegeTarget && pr.siegeTarget.hp > 0) {
+            pr.siegeTarget.hp -= pr.dmg;
+            triggerDamageIndicator(pr.from.x, pr.from.z);
+          } else {
+            state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
+            triggerShake(Math.min(14, pr.dmg * 0.5));
+            triggerDamageIndicator(pr.from.x, pr.from.z);
+            if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+          }
         } else if (!pr.target.dead) {
           const isSiege = pr.target.tierIdx !== undefined;
           const tier = isSiege ? SIEGE_TIERS[pr.target.tierIdx] : null;
