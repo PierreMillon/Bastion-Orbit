@@ -1892,8 +1892,12 @@
   // tactique réel se joue à tenir Sortie ou pas pendant qu'on est faible,
   // pas dans un menu séparé. Ne soigne QUE le seigneur (pas la princesse,
   // qui n'est pas là) — à la différence du câlin.
-  const FOUNTAIN_HEAL_HP_FRAC = 0.35;    // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
-  const FOUNTAIN_HEAL_TIME = 4;          // secondes pour se soigner entièrement depuis 0 — un peu plus lent que le câlin (3s), plus exposé/loin du mur
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "augmenter les pouvoirs de
+  // la fontaine") : seuil de déclenchement relevé (0.35 -> 0.5, priorité
+  // à la fontaine dès la moitié des PV plutôt qu'à 35%) et soin accéléré
+  // (4s -> 2.5s pour un plein soin depuis 0, plus rapide que le câlin).
+  const FOUNTAIN_HEAL_HP_FRAC = 0.5;     // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
+  const FOUNTAIN_HEAL_TIME = 2.5;        // secondes pour se soigner entièrement depuis 0
   // symétrique côté ennemis (signalé en session, 2026-09-09 : "les ennemis
   // aussi peuvent boire à la fontaine... d'où l'intérêt d'activer fort la
   // zone de l'église") — confirmé ACTIF (détour délibéré, pas juste
