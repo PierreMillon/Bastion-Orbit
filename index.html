@@ -4872,6 +4872,43 @@
   // le chat : erre sur le sol de la pièce, s'arrête de temps en temps et
   // ronronne (demandé en session) — même vocabulaire d'IA simple que la
   // patrouille de créneaux du seigneur (cible aléatoire, ease, pause)
+  // DEMANDÉ EN SESSION (2026-09-12) : les paysans réfugiés étaient trop
+  // petits pour se lire comme des personnes (rayon 8 contre 17 pour le
+  // seigneur) et figés en cercle autour du feu — "ils doivent avoir la
+  // même taille... éventuellement légèrement plus petit" et "se déplacer
+  // librement". Repris avec le même idiome que cosyCat (pause/cible
+  // aléatoire) mais un par paysan caché, dans une zone resserrée près du
+  // feu plutôt que toute la pièce (ils restent "au coin du feu", juste
+  // plus vivants) ; le tableau est redimensionné à la volée pour suivre
+  // state.villagersHiddenCastle qui varie au fil de la partie.
+  const COSY_VILLAGER_R = 13;
+  const cosyVillagers = [];
+  function cosyPickVillagerTarget(v) {
+    v.tx = 4.7 + Math.random() * 2.3;
+    v.tz = 3.7 + Math.random() * 2.5;
+  }
+  function ensureCosyVillagerCount(n) {
+    while (cosyVillagers.length < n) {
+      const v = { x: 4.7 + Math.random() * 2.3, z: 3.7 + Math.random() * 2.5, tx: 0, tz: 0, pauseTimer: Math.random() * 2 };
+      cosyPickVillagerTarget(v);
+      cosyVillagers.push(v);
+    }
+    if (cosyVillagers.length > n) cosyVillagers.length = n;
+  }
+  function updateCosyVillagers(dt) {
+    for (const v of cosyVillagers) {
+      if (v.pauseTimer > 0) {
+        v.pauseTimer -= dt;
+        if (v.pauseTimer <= 0) cosyPickVillagerTarget(v);
+        continue;
+      }
+      const dx = v.tx - v.x, dz = v.tz - v.z, d = Math.hypot(dx, dz);
+      if (d < 0.08) { v.pauseTimer = 1.5 + Math.random() * 2.5; continue; }
+      const sp = 0.5;
+      v.x += (dx / d) * sp * dt;
+      v.z += (dz / d) * sp * dt;
+    }
+  }
   const cosyCat = { x: 3.2, z: 3.4, tx: 3.2, tz: 3.4, pauseTimer: 1.5, purrCooldown: 3 };
   function cosyPickCatTarget() {
     cosyCat.tx = 0.9 + Math.random() * 5.2;
@@ -5002,14 +5039,16 @@
 
     // les paysans réfugiés dans le château (state.villagersHiddenCastle) —
     // demandé en session : "on verra exactement le même nombre de paysans
-    // à côté du feu" — même recette cosyPerson, plus petits, en cercle
-    // autour du foyer ; plafonné pour ne pas déborder de la pièce si le
-    // nombre devient grand (le compte réel reste correct, juste pas tous
-    // dessinés un par un au-delà de ce plafond)
+    // à côté du feu" — même recette cosyPerson, en liberté près du foyer
+    // (voir cosyVillagers/updateCosyVillagers) plutôt que figés en cercle ;
+    // plafonné pour ne pas déborder de la pièce si le nombre devient grand
+    // (le compte réel reste correct, juste pas tous dessinés un par un
+    // au-delà de ce plafond)
     const shownVillagers = Math.min(state.villagersHiddenCastle, 10);
+    ensureCosyVillagerCount(shownVillagers);
     for (let i = 0; i < shownVillagers; i++) {
-      const ang = (i / Math.max(1, shownVillagers)) * Math.PI * 2;
-      cosyPerson(6.5 + Math.cos(ang) * 0.55, 5.1 + Math.sin(ang) * 0.4, 8, '#d9c48a', '#8a6a42');
+      const v = cosyVillagers[i];
+      cosyPerson(v.x, v.z, COSY_VILLAGER_R, '#d9c48a', '#8a6a42');
     }
 
     drawCosyCat(t);
@@ -5021,6 +5060,7 @@
     cosyLastT = now;
     cosyClock += dt;
     updateCosyCat(dt);
+    updateCosyVillagers(dt);
     renderCosyScene(cosyClock);
     updatePriestBtn(); // repositionné chaque frame (taille CSS du canvas responsive, peut changer au resize)
     cosyRAF = requestAnimationFrame(cosyFrame);
