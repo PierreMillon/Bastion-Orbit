@@ -65,7 +65,7 @@
   #secondRow {
     background: #3b3222;
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 8px 8px 4px;
   }
@@ -75,9 +75,13 @@
     color: #f2ead9;
     padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     gap: 6px;
   }
+
+  /* boutons les plus utilisés groupés à droite, les autres à gauche
+     (demandé en session, voir commentaire HTML sur #bottomStack) */
+  .btnGroup { display: flex; gap: 8px; }
 
   #menuBtn {
     background: none;
@@ -183,12 +187,12 @@
   #bottomStack button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 11px 6px;
+    padding: 11px 4px;
     border: none;
     border-radius: 10px;
     background: #b5482e;
     color: #f2ead9;
-    font-size: 11.5px;
+    font-size: 10.5px;
     font-family: inherit;
     white-space: nowrap;
     overflow: hidden;
@@ -780,18 +784,33 @@
   <div><b>v0.8</b> — douves cachées, réparation de secours, son</div>
 </div>
 
+<!-- DEMANDÉ EN SESSION (2026-09-12) : "les boutons les plus souvent
+     utilisés doivent être à droite de l'écran, les autres à gauche" —
+     chaque rangée est scindée en deux groupes (justify-content:
+     space-between sur la rangée, voir CSS) plutôt que centrée. Sortie et
+     Réparer (boucle de combat, utilisés à chaque vague) et Tourelle
+     (rachetée très régulièrement) à droite ; Descendre/Huile (occasionnels)
+     et Jardin/Douves/Cheval (achats ponctuels) à gauche. -->
 <div id="bottomStack">
   <div id="secondRow">
-    <button id="repairBtn">Réparer</button>
-    <button id="princessBtn">Descendre</button>
-    <button id="sortieBtn">Sortie</button>
-    <button id="oilBtn" disabled>Huile</button>
+    <div class="btnGroup">
+      <button id="princessBtn">Descendre</button>
+      <button id="oilBtn" disabled>Huile</button>
+    </div>
+    <div class="btnGroup">
+      <button id="repairBtn">Réparer</button>
+      <button id="sortieBtn">Sortie</button>
+    </div>
   </div>
   <div id="bottombar">
-    <button id="towerBtn">Tourelle</button>
-    <button id="gardenBtn">Jardin</button>
-    <button id="moatBtn">Douves</button>
-    <button id="horseBtn">Cheval</button>
+    <div class="btnGroup">
+      <button id="gardenBtn">Jardin</button>
+      <button id="moatBtn">Douves</button>
+      <button id="horseBtn">Cheval</button>
+    </div>
+    <div class="btnGroup">
+      <button id="towerBtn">Tourelle</button>
+    </div>
   </div>
 </div>
 
