@@ -2959,6 +2959,15 @@
   const MOULIN_WHEEL_R = 14;
   const MOULIN_WHEEL_SEGS = 12;
   const MOULIN_SPIN_RATE = 1.1; // rad/s — positif = undershot correct, voir drawMoulinWheel
+  // DEMANDÉ EN SESSION (2026-09-12) : "la roue elle-même change" à chaque
+  // amélioration — feedback visuel direct plutôt qu'un simple chiffre de
+  // revenu. Purement cosmétique : moulinClearanceAt (génération du monde,
+  // ligne ~2306) utilise un 14 en dur, pas cette constante, donc grossir la
+  // roue ici n'affecte aucune collision. Niveau 0 (pas encore acheté) tourne
+  // lentement pour se lire comme "à l'arrêt/pas rentable" ; niveau 6 (max)
+  // tourne ~2x plus vite et fait ~1.6x le rayon de base.
+  function moulinWheelRadius(level) { return MOULIN_WHEEL_R * (1 + Math.max(0, level) * 0.1); }
+  function moulinWheelSpinRate(level) { return level <= 0 ? MOULIN_SPIN_RATE * 0.3 : MOULIN_SPIN_RATE * (1 + level * 0.16); }
   // épaisseur de la roue (demandé en session, 2026-09-09 : "elle doit
   // avoir une épaisseur pour pouvoir fonctionner", elle était plate/2D
   // avant) — le long de l'essieu, perpendiculaire au plan de la roue
@@ -3949,7 +3958,11 @@
         if (Math.hypot(ex - ox, ez - oz) < SIEGE_GROUP_RADIUS) { group.push(o); used.add(o); }
       }
       if (group.length < 2) continue;
-      const tierIdx = Math.min(group.length - 2, SIEGE_TIERS.length - 1);
+      // DEMANDÉ EN SESSION (2026-09-12) : les tiers avancés (trébuchet, tour
+      // de siège, bélier) doivent apparaître plus souvent — décalé de -1 au
+      // lieu de -2 : un groupe de 2 donne directement arbalète (plus
+      // bouclier), un groupe de 4 donne tour de siège au lieu de trébuchet.
+      const tierIdx = Math.min(group.length - 1, SIEGE_TIERS.length - 1);
       const tier = SIEGE_TIERS[tierIdx];
       const cap = siegeCrewCap(tierIdx);
       const crew = Math.min(group.length, cap);
@@ -6531,6 +6544,11 @@
   // triangle at each end
   function drawHouse(h, rot) {
     const s = HOUSE_SIZE, wallH = s * 0.9, roofH = s * 0.7;
+    // DEMANDÉ EN SESSION (2026-09-12) : "rendre la maison distincte" pendant
+    // qu'elle abrite des ennemis — les pips rouges (drawHiddenPips) seuls
+    // étaient jugés pas assez visibles. Murs teintés vers l'ambre/doré
+    // (lueur intérieure) tant que hiddenCount>0, en plus des pips.
+    const occupied = h.hiddenCount > 0;
     const yaw = h.yaw || 0;
     const corners = [[-s, -s], [s, -s], [s, s], [-s, s]].map(([dx, dz]) => rotYaw(dx, dz, yaw)); // local (dx, dz), tournées
     const base = corners.map(([dx, dz]) => project(h.x + dx, 0, h.z + dz, rot));
@@ -6545,8 +6563,9 @@
     walls.sort((a, b) => a.depth - b.depth);
     for (const w of walls) {
       const g = Math.round(120 + w.light * 30);
-      ctx.fillStyle = `rgb(${g},${g - 25},${g - 55})`;
+      ctx.fillStyle = occupied ? `rgb(${Math.min(255, g + 55)},${Math.round(g * 0.65)},${Math.max(0, g - 90)})` : `rgb(${g},${g - 25},${g - 55})`;
       buildQuad(w.pts);
+      if (occupied) { ctx.strokeStyle = 'rgba(255,190,90,0.85)'; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.stroke(); }
     }
     // roof: a ridge along one axis, two sloped quads meeting at the top
     const [ridgeAx, ridgeAz] = rotYaw(-s, 0, yaw), [ridgeBx, ridgeBz] = rotYaw(s, 0, yaw);
@@ -7093,7 +7112,9 @@
   // trigonométrique dans le plan (tx,tz, haut)), d'où MOULIN_SPIN_RATE>0.
   function drawMoulinWheel(m, rot) {
     const { g, wheelX, wheelZ } = m;
-    const centerY = MOULIN_WHEEL_R; // le bas de la roue touche juste l'eau (y=0)
+    const wheelR = moulinWheelRadius(state.moulinLevel);
+    const spinRate = moulinWheelSpinRate(state.moulinLevel);
+    const centerY = wheelR; // le bas de la roue touche juste l'eau (y=0)
     // épaisseur : deux jantes (proche/loin), décalées le long de l'essieu
     // (rx,rz — perpendiculaire au plan de la roue, qui est lui-même dans
     // le plan courant/vertical, voir plus haut) plutôt qu'un disque plat.
@@ -7104,9 +7125,9 @@
     const farX = wheelX + g.rx * halfT, farZ = wheelZ + g.rz * halfT;
     const rimNear = [], rimFar = [];
     for (let i = 0; i < MOULIN_WHEEL_SEGS; i++) {
-      const theta = state.time * MOULIN_SPIN_RATE + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
-      const along = Math.cos(theta) * MOULIN_WHEEL_R; // le long du courant (tx,tz)
-      const up = Math.sin(theta) * MOULIN_WHEEL_R;    // vertical
+      const theta = state.time * spinRate + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
+      const along = Math.cos(theta) * wheelR; // le long du courant (tx,tz)
+      const up = Math.sin(theta) * wheelR;    // vertical
       rimNear.push(project(nearX + g.tx * along, centerY + up, nearZ + g.tz * along, rot));
       rimFar.push(project(farX + g.tx * along, centerY + up, farZ + g.tz * along, rot));
     }
