@@ -555,6 +555,55 @@
     border-radius: 6px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   }
+  /* mini-jeu d'échecs (DEMANDÉ EN SESSION, 2026-09-13) : on joue dans un
+     panneau à part, pas en isométrique sur la table — à 0,84 unité de large
+     dans la pièce, une case ferait ~6 px, injouable au doigt. */
+  #chessBtn { z-index: 26; }
+  #chessOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 27;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    box-sizing: border-box;
+    background: rgba(12,7,4,0.94);
+  }
+  #chessOverlay[hidden] { display: none; }
+  /* la légende et le bouton de la salle sont sous le panneau (z-index 25
+     contre 27) mais transparaissaient à travers son fond, et leur texte se
+     superposait au statut de la partie — masqués pendant qu'on joue, le
+     halo chaud de la pièce derrière suffit à garder le contexte */
+  body.chessOpen .cosyCaption, body.chessOpen #cosyClose { visibility: hidden; }
+  #chessCanvas {
+    width: min(430px, 86vw);
+    height: min(430px, 86vw);
+    max-height: 58vh;
+    max-width: 58vh;
+    border-radius: 6px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    touch-action: none;
+  }
+  #chessStatus {
+    color: #d9b98a;
+    font-size: 12.5px;
+    font-style: italic;
+    text-align: center;
+    max-width: min(430px, 86vw);
+    min-height: 1.3em;
+  }
+  #chessPromo, #chessBar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  #chessPromo[hidden] { display: none; }
+  #chessOverlay button {
+    border: none; border-radius: 8px; padding: 9px 14px;
+    font-size: 12px; font-family: inherit;
+    background: #b5482e; color: #f2ead9; cursor: pointer;
+  }
+  #chessOverlay button.ghost { background: rgba(242,234,217,0.16); }
+
   .cosyCaption {
     color: #d9b98a;
     font-size: 12px;
@@ -667,6 +716,9 @@
      mais repositionné dans le repère du canvas cosy (cosyIso), pas
      project()/rot du monde extérieur (voir updatePriestBtn). -->
 <button id="priestBtn" class="worldBtn" hidden></button>
+<!-- échiquier de la table cosy : même bouton flottant ancré au décor que le
+     prêtre, mais il ouvre le panneau de jeu (voir updateChessBtn). -->
+<button id="chessBtn" class="worldBtn" hidden></button>
 <!-- maison de la sorcière (item 5, consigne du 2026-09-09) : au tap, un
      message plutôt qu'un achat — pas un bouton, une bulle de texte
      (worldMsg, pas worldBtn) ; même position ancrée au bâtiment, même
@@ -679,7 +731,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v0.99</button>
+  <button id="versionBtn">v1.00</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -691,6 +743,7 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v1.00</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
   <div><b>v0.99</b> — refonte procédurale du monde : routes, cœur de village, maisons, ferme et maison de la sorcière sont maintenant générés depuis une graine (rejet-échantillonnage en direct, contre les vraies routes/le vrai ruisseau/le vrai moulin) plutôt que placés à la main un par un — la vraie réponse aux croisements de routes qui recassaient régulièrement. Graine visible et partageable dans le menu, "Nouvelle carte" pour en tirer une autre, "Charger" pour reprendre celle d'un ami (même graine = même village, à l'identique)</div>
   <div><b>v0.98</b> — suite de l'amélioration de l'expérience : accroche discrète au tout premier lancement (une seule fois, jamais bloquante) ; petite flèche au bord de l'écran quand un coup au château vient de hors du cadre (surtout utile zoomé) ; sons d'achat distincts du coup de mêlée/réparation, le caillou de trébuchet sonne différemment d'un tir normal, jardin et tourelle ne sont plus silencieux à l'achat</div>
   <div><b>v0.97</b> — amélioration de l'expérience (à l'initiative de la session) : l'écran de fin de partie affiche maintenant la vague atteinte, l'or gagné et le record (persisté) ; un vrai tremblement d'écran sur les coups qui comptent (bélier au contact, caillou de trébuchet)</div>
@@ -1018,6 +1071,16 @@
   <button id="cosyClose">Retour au mur</button>
 </div>
 
+<div id="chessOverlay" hidden>
+  <canvas id="chessCanvas" width="640" height="640"></canvas>
+  <div id="chessStatus"></div>
+  <div id="chessPromo" hidden></div>
+  <div id="chessBar">
+    <button id="chessNewBtn" class="ghost"></button>
+    <button id="chessCloseBtn"></button>
+  </div>
+</div>
+
 <div id="fakeAd" hidden>
   <div id="fakeAdBox">
     <div id="fakeAdClose">✕</div>
@@ -1096,7 +1159,16 @@
       seed_new_btn: '🎲 Nouvelle carte',
       seed_confirm_new: 'Générer une nouvelle carte ? Le village actuel sera remplacé (note la graine ci-dessus si tu veux pouvoir y revenir).',
       seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.',
-      seed_confirm_yes: 'Confirmer', seed_confirm_cancel: 'Annuler'
+      seed_confirm_yes: 'Confirmer', seed_confirm_cancel: 'Annuler',
+      chess_btn: 'Jouer aux échecs', chess_new: 'Nouvelle partie', chess_close: 'Revenir au feu',
+      chess_your_turn: 'À toi de jouer, les blancs.',
+      chess_check: 'Échec au roi.',
+      chess_thinking_f: 'Elle réfléchit…', chess_thinking_m: 'Il réfléchit…',
+      chess_mate_win: 'Échec et mat. La partie est à toi.',
+      chess_mate_lose: 'Échec et mat. Cette partie lui revient.',
+      chess_stale: 'Pat : partie nulle.', chess_draw: 'Partie nulle.',
+      chess_promo: 'Ton pion arrive au bout. En quoi le promeus-tu ?',
+      chess_queen: 'Dame', chess_rook: 'Tour', chess_bishop: 'Fou', chess_knight: 'Cavalier'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1140,7 +1212,16 @@
       seed_new_btn: '🎲 New map',
       seed_confirm_new: 'Generate a new map? The current village will be replaced (note the seed above if you want to come back to it).',
       seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.',
-      seed_confirm_yes: 'Confirm', seed_confirm_cancel: 'Cancel'
+      seed_confirm_yes: 'Confirm', seed_confirm_cancel: 'Cancel',
+      chess_btn: 'Play chess', chess_new: 'New game', chess_close: 'Back to the fire',
+      chess_your_turn: 'Your move, white.',
+      chess_check: 'Check.',
+      chess_thinking_f: 'She is thinking…', chess_thinking_m: 'He is thinking…',
+      chess_mate_win: 'Checkmate. The game is yours.',
+      chess_mate_lose: 'Checkmate. This one goes to her.',
+      chess_stale: 'Stalemate: a draw.', chess_draw: 'A draw.',
+      chess_promo: 'Your pawn reached the far side. Promote it to?',
+      chess_queen: 'Queen', chess_rook: 'Rook', chess_bishop: 'Bishop', chess_knight: 'Knight'
     }
   };
   function detectLang() {
@@ -1188,6 +1269,8 @@
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
     document.querySelector('.cosyCaption').textContent = t('cosy_caption');
+    document.getElementById('chessNewBtn').textContent = t('chess_new');
+    document.getElementById('chessCloseBtn').textContent = t('chess_close');
     document.querySelector('.fakeAdSiren').textContent = t('ad_siren');
     document.querySelector('.fakeAdTitle').textContent = t('ad_title');
     document.querySelector('.fakeAdBody').textContent = t('ad_body');
@@ -4545,7 +4628,9 @@
   // quasi invulnérable en permanence, gratuitement.
   const priestBtn = document.getElementById('priestBtn');
   function updatePriestBtn() {
-    if (cosyOverlay.hidden) { priestBtn.hidden = true; return; }
+    // masqué aussi pendant que le panneau d'échecs est ouvert : il passerait
+    // par-dessus (worldBtn en position fixe, z-index 26)
+    if (cosyOverlay.hidden || !chessOverlay.hidden) { priestBtn.hidden = true; return; }
     priestBtn.hidden = false;
     const rect = cosyCanvas.getBoundingClientRect();
     const pos = cosyIso(PRIEST_X, 0.9, PRIEST_Z); // un peu au-dessus de sa tête
@@ -4917,7 +5002,7 @@
         const z0 = CHESS_CZ - CHESS_HALF_D + (cz / 8) * CHESS_HALF_D * 2;
         const z1 = CHESS_CZ - CHESS_HALF_D + ((cz + 1) / 8) * CHESS_HALF_D * 2;
         const p = [cosyIso(x0, CHESS_Y, z0), cosyIso(x1, CHESS_Y, z0), cosyIso(x1, CHESS_Y, z1), cosyIso(x0, CHESS_Y, z1)];
-        cosyQuad(p, (cx + cz) % 2 === 0 ? '#3f2b1a' : '#d9c69c');
+        cosyQuad(p, (cx + cz) % 2 === 0 ? '#6b4a2c' : '#c9ab7d');
         // pièces suggérées : rangées de départ occupées, milieu vide —
         // "des cases pleines... des cases vides", pas une vraie partie
         // simulée coup par coup
@@ -5126,6 +5211,7 @@
     updateCosyCat(dt);
     updateCosyVillagers(dt);
     renderCosyScene(cosyClock);
+    updateChessBtn();  // même raison : ancré au décor, suit le canvas
     updatePriestBtn(); // repositionné chaque frame (taille CSS du canvas responsive, peut changer au resize)
     cosyRAF = requestAnimationFrame(cosyFrame);
   }
@@ -5208,6 +5294,573 @@
     cosyAmbient = null;
   }
 
+  // ---- mini-jeu d'échecs de la vue cosy (DEMANDÉ EN SESSION, 2026-09-13) ----
+  // L'échiquier posé sur la table près du feu était purement décoratif
+  // (drawChessBoard : 8x8 de cases, pièces = simples points figés). Il
+  // devient ici une vraie partie, jouée contre la princesse — ou contre le
+  // prêtre si elle n'est plus là. Le plateau reste dessiné en isométrique
+  // dans la pièce, mais on joue dans un panneau à part : à 0,84 unité de
+  // large sur la table, une case ferait ~6 px, injouable au doigt.
+  //
+  // La partie est conservée pour toute la session : on peut poser trois
+  // coups, retourner au mur, revenir plus tard — c'est ce qui la rend
+  // reposante, la bataille dehors n'attend pas mais l'échiquier, si.
+  //
+  // Le générateur de coups a été validé par des tests perft (position
+  // initiale, Kiwipete, finales, promotions : 22 valeurs de référence
+  // exactes jusqu'à la profondeur 5), roques/prise en passant/clouages
+  // compris.
+  const Chess = (() => {
+    const PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+    // plateau = 64 cases, index = rang*8 + colonne, rang 0 = rangée 1
+    // (camp des blancs), colonne 0 = a ; les blancs avancent en +8.
+    // Pièces : signe = camp (positif = blanc), 0 = vide.
+    const fileOf = (sq) => sq & 7;
+    const rankOf = (sq) => sq >> 3;
+    const KN_OFF = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
+    const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const ORTH = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    function newGame() {
+      const board = new Int8Array(64);
+      const back = [ROOK, KNIGHT, BISHOP, QUEEN, KING, BISHOP, KNIGHT, ROOK];
+      for (let f = 0; f < 8; f++) {
+        board[f] = back[f];
+        board[8 + f] = PAWN;
+        board[48 + f] = -PAWN;
+        board[56 + f] = -back[f];
+      }
+      return { board, turn: 1, castle: { wk: true, wq: true, bk: true, bq: true }, ep: -1, half: 0, full: 1 };
+    }
+    function cloneState(s) {
+      return { board: Int8Array.from(s.board), turn: s.turn, castle: { ...s.castle }, ep: s.ep, half: s.half, full: s.full };
+    }
+    // sert deux fois : légalité (roi resté en prise) et test d'échec
+    function isAttacked(board, sq, by) {
+      const tf = fileOf(sq), tr = rankOf(sq);
+      const pawnRank = tr - by; // rangée d'où viendrait un pion du camp `by`
+      if (pawnRank >= 0 && pawnRank < 8) {
+        for (const df of [-1, 1]) {
+          const f = tf + df;
+          if (f >= 0 && f <= 7 && board[pawnRank * 8 + f] === by * PAWN) return true;
+        }
+      }
+      for (const [df, dr] of KN_OFF) {
+        const f = tf + df, r = tr + dr;
+        if (f < 0 || f > 7 || r < 0 || r > 7) continue;
+        if (board[r * 8 + f] === by * KNIGHT) return true;
+      }
+      for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) {
+        if (!df && !dr) continue;
+        const f = tf + df, r = tr + dr;
+        if (f < 0 || f > 7 || r < 0 || r > 7) continue;
+        if (board[r * 8 + f] === by * KING) return true;
+      }
+      for (const [dirs, a, b] of [[DIAG, BISHOP, QUEEN], [ORTH, ROOK, QUEEN]]) {
+        for (const [df, dr] of dirs) {
+          let f = tf + df, r = tr + dr;
+          while (f >= 0 && f <= 7 && r >= 0 && r <= 7) {
+            const p = board[r * 8 + f];
+            if (p !== 0) { if (p === by * a || p === by * b) return true; break; }
+            f += df; r += dr;
+          }
+        }
+      }
+      return false;
+    }
+    function findKing(board, side) {
+      for (let i = 0; i < 64; i++) if (board[i] === side * KING) return i;
+      return -1;
+    }
+    // coups pseudo-légaux : l'auto-échec est filtré ensuite par legalMoves
+    function pseudoMoves(s) {
+      const { board, turn } = s;
+      const moves = [];
+      const push = (from, to, promo = 0, flag = 0) => moves.push({ from, to, promo, flag });
+      for (let from = 0; from < 64; from++) {
+        const p = board[from];
+        if (p === 0 || Math.sign(p) !== turn) continue;
+        const type = Math.abs(p), f = fileOf(from), r = rankOf(from);
+        if (type === PAWN) {
+          const dir = turn, startRank = turn === 1 ? 1 : 6, lastRank = turn === 1 ? 7 : 0;
+          const one = from + dir * 8;
+          if (one >= 0 && one < 64 && board[one] === 0) {
+            if (rankOf(one) === lastRank) for (const pr of [QUEEN, ROOK, BISHOP, KNIGHT]) push(from, one, pr);
+            else {
+              push(from, one);
+              const two = from + dir * 16;
+              if (r === startRank && board[two] === 0) push(from, two, 0, 2); // 2 = double pas
+            }
+          }
+          for (const df of [-1, 1]) {
+            const cf = f + df, cr = r + dir;
+            if (cf < 0 || cf > 7 || cr < 0 || cr > 7) continue;
+            const to = cr * 8 + cf, target = board[to];
+            if (target !== 0 && Math.sign(target) !== turn) {
+              if (cr === lastRank) for (const pr of [QUEEN, ROOK, BISHOP, KNIGHT]) push(from, to, pr);
+              else push(from, to);
+            } else if (to === s.ep && target === 0) push(from, to, 0, 3); // 3 = prise en passant
+          }
+        } else if (type === KNIGHT) {
+          for (const [df, dr] of KN_OFF) {
+            const cf = f + df, cr = r + dr;
+            if (cf < 0 || cf > 7 || cr < 0 || cr > 7) continue;
+            const to = cr * 8 + cf;
+            if (board[to] === 0 || Math.sign(board[to]) !== turn) push(from, to);
+          }
+        } else if (type === KING) {
+          for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) {
+            if (!df && !dr) continue;
+            const cf = f + df, cr = r + dr;
+            if (cf < 0 || cf > 7 || cr < 0 || cr > 7) continue;
+            const to = cr * 8 + cf;
+            if (board[to] === 0 || Math.sign(board[to]) !== turn) push(from, to);
+          }
+          // roques : cases vides, roi ni en échec ni traversant une case
+          // attaquée (la case d'arrivée, elle, est filtrée par legalMoves)
+          const enemy = -turn, hr = turn === 1 ? 0 : 7;
+          if (from === hr * 8 + 4 && !isAttacked(board, from, enemy)) {
+            const kSide = turn === 1 ? s.castle.wk : s.castle.bk;
+            const qSide = turn === 1 ? s.castle.wq : s.castle.bq;
+            if (kSide && board[hr * 8 + 5] === 0 && board[hr * 8 + 6] === 0
+                && board[hr * 8 + 7] === turn * ROOK && !isAttacked(board, hr * 8 + 5, enemy)) push(from, hr * 8 + 6, 0, 4);
+            if (qSide && board[hr * 8 + 3] === 0 && board[hr * 8 + 2] === 0 && board[hr * 8 + 1] === 0
+                && board[hr * 8 + 0] === turn * ROOK && !isAttacked(board, hr * 8 + 3, enemy)) push(from, hr * 8 + 2, 0, 5);
+          }
+        } else {
+          const dirs = type === BISHOP ? DIAG : type === ROOK ? ORTH : DIAG.concat(ORTH);
+          for (const [df, dr] of dirs) {
+            let cf = f + df, cr = r + dr;
+            while (cf >= 0 && cf <= 7 && cr >= 0 && cr <= 7) {
+              const to = cr * 8 + cf, t = board[to];
+              if (t === 0) push(from, to);
+              else { if (Math.sign(t) !== turn) push(from, to); break; }
+              cf += df; cr += dr;
+            }
+          }
+        }
+      }
+      return moves;
+    }
+    function applyMove(s, m) {
+      const n = cloneState(s), b = n.board;
+      const piece = b[m.from], type = Math.abs(piece), turn = s.turn, captured = b[m.to];
+      b[m.to] = m.promo ? turn * m.promo : piece;
+      b[m.from] = 0;
+      if (m.flag === 3) b[rankOf(m.from) * 8 + fileOf(m.to)] = 0;                       // pion pris en passant
+      if (m.flag === 4) { const hr = rankOf(m.from); b[hr * 8 + 5] = b[hr * 8 + 7]; b[hr * 8 + 7] = 0; }
+      if (m.flag === 5) { const hr = rankOf(m.from); b[hr * 8 + 3] = b[hr * 8 + 0]; b[hr * 8 + 0] = 0; }
+      n.ep = m.flag === 2 ? (m.from + m.to) / 2 : -1;
+      // droits de roque perdus si le roi/la tour bouge, ou si la tour est prise
+      if (type === KING) { if (turn === 1) { n.castle.wk = n.castle.wq = false; } else { n.castle.bk = n.castle.bq = false; } }
+      if (m.from === 0 || m.to === 0) n.castle.wq = false;
+      if (m.from === 7 || m.to === 7) n.castle.wk = false;
+      if (m.from === 56 || m.to === 56) n.castle.bq = false;
+      if (m.from === 63 || m.to === 63) n.castle.bk = false;
+      n.half = (type === PAWN || captured !== 0) ? 0 : s.half + 1;
+      if (turn === -1) n.full = s.full + 1;
+      n.turn = -turn;
+      return n;
+    }
+    function legalMoves(s) {
+      const out = [];
+      for (const m of pseudoMoves(s)) {
+        const n = applyMove(s, m);
+        const k = findKing(n.board, s.turn);
+        if (k === -1 || !isAttacked(n.board, k, -s.turn)) out.push(m);
+      }
+      return out;
+    }
+    function inCheck(s) {
+      const k = findKing(s.board, s.turn);
+      return k !== -1 && isAttacked(s.board, k, -s.turn);
+    }
+    // 'mat' | 'pat' | 'nulle' | null (partie en cours)
+    function gameResult(s) {
+      if (legalMoves(s).length === 0) return inCheck(s) ? 'mat' : 'pat';
+      if (s.half >= 100) return 'nulle';
+      const heavy = [];
+      for (let i = 0; i < 64; i++) { const a = Math.abs(s.board[i]); if (a && a !== KING) heavy.push(a); }
+      if (heavy.length === 0) return 'nulle';
+      if (heavy.length === 1 && (heavy[0] === KNIGHT || heavy[0] === BISHOP)) return 'nulle';
+      return null;
+    }
+
+    // --- adversaire : minimax alpha-bêta + quiescence ---
+    const VAL = { [PAWN]: 100, [KNIGHT]: 320, [BISHOP]: 330, [ROOK]: 500, [QUEEN]: 900, [KING]: 20000 };
+    // tables de position vues des blancs (index 0 = a1), lues en miroir
+    // pour les noirs — poussent au centre et au développement
+    const PST = {
+      [PAWN]: [0,0,0,0,0,0,0,0, 5,10,10,-20,-20,10,10,5, 5,-5,-10,0,0,-10,-5,5, 0,0,0,20,20,0,0,0,
+               5,5,10,25,25,10,5,5, 10,10,20,30,30,20,10,10, 50,50,50,50,50,50,50,50, 0,0,0,0,0,0,0,0],
+      [KNIGHT]: [-50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,5,5,0,-20,-40, -30,5,10,15,15,10,5,-30, -30,0,15,20,20,15,0,-30,
+                 -30,5,15,20,20,15,5,-30, -30,0,10,15,15,10,0,-30, -40,-20,0,0,0,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50],
+      [BISHOP]: [-20,-10,-10,-10,-10,-10,-10,-20, -10,5,0,0,0,0,5,-10, -10,10,10,10,10,10,10,-10, -10,0,10,10,10,10,0,-10,
+                 -10,5,5,10,10,5,5,-10, -10,0,5,10,10,5,0,-10, -10,0,0,0,0,0,0,-10, -20,-10,-10,-10,-10,-10,-10,-20],
+      [ROOK]: [0,0,0,5,5,0,0,0, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5,
+               -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 5,10,10,10,10,10,10,5, 0,0,0,0,0,0,0,0],
+      [QUEEN]: [-20,-10,-10,-5,-5,-10,-10,-20, -10,0,5,0,0,0,0,-10, -10,5,5,5,5,5,0,-10, 0,0,5,5,5,5,0,-5,
+                -5,0,5,5,5,5,0,-5, -10,0,5,5,5,5,0,-10, -10,0,0,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20],
+      [KING]: [20,30,10,0,0,10,30,20, 20,20,0,0,0,0,20,20, -10,-20,-20,-20,-20,-20,-20,-10, -20,-30,-30,-40,-40,-30,-30,-20,
+               -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30]
+    };
+    function evaluate(s) {
+      let score = 0;
+      for (let i = 0; i < 64; i++) {
+        const p = s.board[i];
+        if (p === 0) continue;
+        const t = Math.abs(p), side = Math.sign(p);
+        const idx = side === 1 ? i : (7 - (i >> 3)) * 8 + (i & 7);
+        score += side * (VAL[t] + PST[t][idx]);
+      }
+      return score * s.turn;
+    }
+    // sans quiescence, le moteur laisse des pièces en prise juste au-delà
+    // de son horizon : on ne s'arrête jamais au milieu d'un échange
+    function quiesce(s, alpha, beta) {
+      const stand = evaluate(s);
+      if (stand >= beta) return beta;
+      if (stand > alpha) alpha = stand;
+      const caps = legalMoves(s).filter(m => s.board[m.to] !== 0 || m.flag === 3 || m.promo);
+      caps.sort((a, b) => (Math.abs(s.board[b.to]) || 0) - (Math.abs(s.board[a.to]) || 0));
+      for (const m of caps) {
+        const score = -quiesce(applyMove(s, m), -beta, -alpha);
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+      }
+      return alpha;
+    }
+    function search(s, depth, alpha, beta) {
+      if (depth === 0) return quiesce(s, alpha, beta);
+      const moves = legalMoves(s);
+      if (moves.length === 0) return inCheck(s) ? -100000 + (10 - depth) : 0; // mat plus proche = pire
+      moves.sort((a, b) => (Math.abs(s.board[b.to]) || 0) - (Math.abs(s.board[a.to]) || 0));
+      for (const m of moves) {
+        const score = -search(applyMove(s, m), depth - 1, -beta, -alpha);
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+      }
+      return alpha;
+    }
+    // `jitter` desserre volontairement le jeu : à 0 le moteur prend toujours
+    // le meilleur coup, plus haut il tire au sort parmi les coups à `jitter`
+    // centipions du meilleur — un adversaire de salon, pas un bourreau
+    function bestMove(s, depth, jitter) {
+      const moves = legalMoves(s);
+      if (moves.length === 0) return null;
+      moves.sort((a, b) => (Math.abs(s.board[b.to]) || 0) - (Math.abs(s.board[a.to]) || 0));
+      const scored = moves.map(m => ({ m, score: -search(applyMove(s, m), depth - 1, -Infinity, Infinity) }));
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0].score;
+      const pool = scored.filter(x => x.score >= best - jitter);
+      return pool[Math.floor(Math.random() * pool.length)].m;
+    }
+    return { newGame, legalMoves, applyMove, inCheck, gameResult, bestMove, fileOf, rankOf,
+             PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
+  })();
+
+  // --- panneau de jeu : plateau vu de dessus, blancs en bas ---
+  const chessOverlay = document.getElementById('chessOverlay');
+  const chessCanvas = document.getElementById('chessCanvas');
+  const chessCtx = chessCanvas.getContext('2d');
+  const chessStatusEl = document.getElementById('chessStatus');
+  const chessPromoEl = document.getElementById('chessPromo');
+  const chessBtn = document.getElementById('chessBtn');
+  const CHESS_PX = chessCanvas.width, CHESS_CELL = CHESS_PX / 8;
+  const CHESS_AI_DEPTH = 3;
+  const CHESS_AI_JITTER = 45; // centipions : laisse passer les coups presque aussi bons
+  let chessGame = null;     // conservée toute la session : la partie attend
+  let chessSel = -1;        // case sélectionnée, -1 = aucune
+  let chessTargets = [];    // coups légaux depuis chessSel
+  let chessBusy = false;    // l'adversaire réfléchit
+  let chessPromoPending = null; // coups de promotion en attente du choix
+  let chessLastMove = null; // pour surligner le dernier coup joué
+
+  // l'adversaire : la princesse tant qu'elle est en vie, sinon le prêtre
+  function chessPartnerIsPriest() { return !!state.princessDead; }
+
+  function chessSqXY(sq) {
+    return { x: Chess.fileOf(sq) * CHESS_CELL, y: (7 - Chess.rankOf(sq)) * CHESS_CELL };
+  }
+  function chessXYSq(px, py) {
+    const f = Math.floor(px / CHESS_CELL), r = 7 - Math.floor(py / CHESS_CELL);
+    if (f < 0 || f > 7 || r < 0 || r > 7) return -1;
+    return r * 8 + f;
+  }
+
+  // pièces dessinées à la main comme tout le reste du jeu (pas d'emoji :
+  // les figurines Unicode passent en emoji couleur sur iOS, ce qui jure
+  // avec le trait du reste)
+  function chessDrawPiece(type, side, cx, cy, s) {
+    const c = chessCtx, light = side === 1;
+    c.fillStyle = light ? '#f7efdb' : '#16100a';
+    c.strokeStyle = light ? '#4a3a22' : '#e0cda4';
+    c.lineWidth = Math.max(1, s * 0.05);
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    const bot = cy + s * 0.40;
+    const poly = (pts) => {
+      c.beginPath();
+      c.moveTo(cx + pts[0][0] * s, cy + pts[0][1] * s);
+      for (let i = 1; i < pts.length; i++) c.lineTo(cx + pts[i][0] * s, cy + pts[i][1] * s);
+      c.closePath();
+      c.fill(); c.stroke();
+    };
+    // socle commun, posé au même niveau pour toutes les pièces
+    c.beginPath();
+    c.ellipse(cx, bot, s * 0.28, s * 0.08, 0, 0, Math.PI * 2);
+    c.fill(); c.stroke();
+    if (type === Chess.PAWN) {
+      c.beginPath();
+      c.moveTo(cx - s * 0.19, bot);
+      c.quadraticCurveTo(cx - s * 0.11, cy + s * 0.04, cx - s * 0.085, cy - s * 0.09);
+      c.lineTo(cx + s * 0.085, cy - s * 0.09);
+      c.quadraticCurveTo(cx + s * 0.11, cy + s * 0.04, cx + s * 0.19, bot);
+      c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); c.arc(cx, cy - s * 0.20, s * 0.125, 0, Math.PI * 2); c.fill(); c.stroke();
+    } else if (type === Chess.ROOK) {
+      // fût + couronnement crénelé, même langage que les merlons du donjon
+      poly([[-0.19, 0.40], [-0.15, -0.10], [0.15, -0.10], [0.19, 0.40]]);
+      poly([[-0.25, -0.10], [-0.25, -0.31], [-0.14, -0.31], [-0.14, -0.22],
+            [-0.05, -0.22], [-0.05, -0.31], [0.05, -0.31], [0.05, -0.22],
+            [0.14, -0.22], [0.14, -0.31], [0.25, -0.31], [0.25, -0.10]]);
+    } else if (type === Chess.KNIGHT) {
+      // tête de cheval tournée vers la gauche : museau, chanfrein, deux
+      // oreilles, crinière qui redescend dans l'encolure
+      poly([[-0.20, 0.40], [-0.13, 0.10], [-0.24, -0.02], [-0.32, -0.10],
+            [-0.27, -0.20], [-0.15, -0.24], [-0.15, -0.33], [-0.05, -0.44],
+            [0.01, -0.31], [0.09, -0.41], [0.13, -0.25], [0.21, -0.05],
+            [0.19, 0.14], [0.20, 0.40]]);
+      c.fillStyle = light ? '#4a3a22' : '#e0cda4';
+      c.beginPath(); c.arc(cx - s * 0.17, cy - s * 0.20, s * 0.032, 0, Math.PI * 2); c.fill();
+      c.beginPath(); // naseau
+      c.arc(cx - s * 0.27, cy - s * 0.11, s * 0.022, 0, Math.PI * 2); c.fill();
+    } else if (type === Chess.BISHOP) {
+      c.beginPath(); // fût
+      c.moveTo(cx - s * 0.18, bot);
+      c.quadraticCurveTo(cx - s * 0.10, cy + s * 0.02, cx - s * 0.11, cy - s * 0.07);
+      c.lineTo(cx + s * 0.11, cy - s * 0.07);
+      c.quadraticCurveTo(cx + s * 0.10, cy + s * 0.02, cx + s * 0.18, bot);
+      c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); // collerette
+      c.ellipse(cx, cy - s * 0.08, s * 0.16, s * 0.045, 0, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+      c.beginPath(); // mitre
+      c.moveTo(cx, cy - s * 0.42);
+      c.quadraticCurveTo(cx + s * 0.19, cy - s * 0.24, cx + s * 0.14, cy - s * 0.11);
+      c.lineTo(cx - s * 0.14, cy - s * 0.11);
+      c.quadraticCurveTo(cx - s * 0.19, cy - s * 0.24, cx, cy - s * 0.42);
+      c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); // fente caractéristique de la mitre
+      c.moveTo(cx + s * 0.02, cy - s * 0.33);
+      c.lineTo(cx + s * 0.11, cy - s * 0.21);
+      c.stroke();
+    } else if (type === Chess.QUEEN || type === Chess.KING) {
+      c.beginPath(); // fût commun
+      c.moveTo(cx - s * 0.19, bot);
+      c.quadraticCurveTo(cx - s * 0.10, cy + s * 0.02, cx - s * 0.12, cy - s * 0.09);
+      c.lineTo(cx + s * 0.12, cy - s * 0.09);
+      c.quadraticCurveTo(cx + s * 0.10, cy + s * 0.02, cx + s * 0.19, bot);
+      c.closePath(); c.fill(); c.stroke();
+      if (type === Chess.QUEEN) {
+        poly([[-0.21, -0.09], [-0.25, -0.34], [-0.13, -0.21], [0, -0.40],
+              [0.13, -0.21], [0.25, -0.34], [0.21, -0.09]]);
+        c.fillStyle = light ? '#4a3a22' : '#e0cda4';
+        for (const dx of [-0.25, 0, 0.25]) {
+          c.beginPath(); c.arc(cx + s * dx, cy - s * (dx === 0 ? 0.40 : 0.34), s * 0.035, 0, Math.PI * 2); c.fill();
+        }
+      } else {
+        poly([[-0.20, -0.09], [-0.17, -0.26], [0.17, -0.26], [0.20, -0.09]]);
+        poly([[-0.04, -0.26], [-0.04, -0.32], [-0.12, -0.32], [-0.12, -0.39],
+              [-0.04, -0.39], [-0.04, -0.47], [0.04, -0.47], [0.04, -0.39],
+              [0.12, -0.39], [0.12, -0.32], [0.04, -0.32], [0.04, -0.26]]);
+      }
+    }
+  }
+
+  function chessRender() {
+    if (!chessGame) return;
+    const c = chessCtx;
+    c.clearRect(0, 0, CHESS_PX, CHESS_PX);
+    for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) {
+      const sq = r * 8 + f, { x, y } = chessSqXY(sq);
+      // mêmes bois que l'échiquier décoratif posé sur la table
+      // mi-tons : assez sombres pour les pièces claires, assez clairs pour
+      // les sombres — un plateau plus contrasté se lit mal dans les deux sens
+      c.fillStyle = (f + r) % 2 === 0 ? '#6b4a2c' : '#c9ab7d';
+      c.fillRect(x, y, CHESS_CELL, CHESS_CELL);
+      if (chessLastMove && (sq === chessLastMove.from || sq === chessLastMove.to)) {
+        c.fillStyle = 'rgba(255,190,90,0.30)';
+        c.fillRect(x, y, CHESS_CELL, CHESS_CELL);
+      }
+      if (sq === chessSel) {
+        c.fillStyle = 'rgba(120,220,150,0.38)';
+        c.fillRect(x, y, CHESS_CELL, CHESS_CELL);
+      }
+    }
+    // destinations possibles : pastille sur case vide, anneau sur une prise
+    for (const m of chessTargets) {
+      const { x, y } = chessSqXY(m.to);
+      const cx = x + CHESS_CELL / 2, cy = y + CHESS_CELL / 2;
+      c.fillStyle = 'rgba(120,220,150,0.55)';
+      c.strokeStyle = 'rgba(120,220,150,0.75)';
+      c.lineWidth = CHESS_CELL * 0.07;
+      c.beginPath();
+      if (chessGame.board[m.to] !== 0 || m.flag === 3) { c.arc(cx, cy, CHESS_CELL * 0.40, 0, Math.PI * 2); c.stroke(); }
+      else { c.arc(cx, cy, CHESS_CELL * 0.13, 0, Math.PI * 2); c.fill(); }
+    }
+    // roi en échec : liseré rouge, pour qu'on ne le rate pas
+    if (Chess.inCheck(chessGame)) {
+      for (let i = 0; i < 64; i++) {
+        if (chessGame.board[i] === chessGame.turn * Chess.KING) {
+          const { x, y } = chessSqXY(i);
+          c.strokeStyle = 'rgba(220,70,60,0.9)';
+          c.lineWidth = CHESS_CELL * 0.09;
+          c.strokeRect(x + CHESS_CELL * 0.05, y + CHESS_CELL * 0.05, CHESS_CELL * 0.9, CHESS_CELL * 0.9);
+        }
+      }
+    }
+    for (let i = 0; i < 64; i++) {
+      const p = chessGame.board[i];
+      if (p === 0) continue;
+      const { x, y } = chessSqXY(i);
+      chessDrawPiece(Math.abs(p), Math.sign(p), x + CHESS_CELL / 2, y + CHESS_CELL / 2, CHESS_CELL * 0.86);
+    }
+  }
+
+  function chessSetStatus(msg) { chessStatusEl.textContent = msg; }
+
+  function chessRefreshStatus() {
+    const res = Chess.gameResult(chessGame);
+    if (res === 'mat') chessSetStatus(chessGame.turn === 1 ? t('chess_mate_lose') : t('chess_mate_win'));
+    else if (res === 'pat') chessSetStatus(t('chess_stale'));
+    else if (res === 'nulle') chessSetStatus(t('chess_draw'));
+    else if (chessBusy) chessSetStatus(chessPartnerIsPriest() ? t('chess_thinking_m') : t('chess_thinking_f'));
+    else chessSetStatus(Chess.inCheck(chessGame) ? t('chess_check') : t('chess_your_turn'));
+  }
+
+  function chessPlay(m) {
+    chessGame = Chess.applyMove(chessGame, m);
+    chessLastMove = m;
+    chessSel = -1;
+    chessTargets = [];
+    chessRender();
+    chessRefreshStatus();
+  }
+
+  // l'adversaire joue après un temps de latence : sans lui le coup apparaît
+  // instantanément, ce qui casse net le rythme posé de la scène
+  function chessOpponentTurn() {
+    if (Chess.gameResult(chessGame)) return;
+    chessBusy = true;
+    chessRefreshStatus();
+    setTimeout(() => {
+      if (!chessGame || chessGame.turn !== -1) { chessBusy = false; return; }
+      const m = Chess.bestMove(chessGame, CHESS_AI_DEPTH, CHESS_AI_JITTER);
+      chessBusy = false;
+      if (!m) { chessRefreshStatus(); return; }
+      const capture = chessGame.board[m.to] !== 0;
+      chessPlay(m);
+      beep(capture ? { freq: 150, freqEnd: 90, dur: 0.12, type: 'triangle', vol: 0.18 }
+                   : { freq: 320, freqEnd: 250, dur: 0.07, type: 'sine', vol: 0.12 });
+    }, 420 + Math.random() * 520);
+  }
+
+  function chessShowPromo(moves) {
+    chessPromoPending = moves;
+    chessPromoEl.innerHTML = '';
+    const names = { [Chess.QUEEN]: t('chess_queen'), [Chess.ROOK]: t('chess_rook'),
+                    [Chess.BISHOP]: t('chess_bishop'), [Chess.KNIGHT]: t('chess_knight') };
+    for (const pr of [Chess.QUEEN, Chess.ROOK, Chess.BISHOP, Chess.KNIGHT]) {
+      const mv = moves.find(m => m.promo === pr);
+      if (!mv) continue;
+      const b = document.createElement('button');
+      b.textContent = names[pr];
+      b.addEventListener('click', () => {
+        chessPromoEl.hidden = true;
+        chessPromoPending = null;
+        chessPlay(mv);
+        beep({ freq: 520, freqEnd: 700, dur: 0.16, type: 'sine', vol: 0.16 });
+        chessOpponentTurn();
+      });
+      chessPromoEl.appendChild(b);
+    }
+    chessPromoEl.hidden = false;
+    chessSetStatus(t('chess_promo'));
+  }
+
+  chessCanvas.addEventListener('pointerdown', (e) => {
+    if (!chessGame || chessBusy || chessPromoPending) return;
+    if (Chess.gameResult(chessGame) || chessGame.turn !== 1) return;
+    const rect = chessCanvas.getBoundingClientRect();
+    const sq = chessXYSq((e.clientX - rect.left) * (CHESS_PX / rect.width),
+                         (e.clientY - rect.top) * (CHESS_PX / rect.height));
+    if (sq < 0) return;
+    const hit = chessTargets.filter(m => m.to === sq);
+    if (hit.length > 0) {
+      if (hit.length > 1 && hit[0].promo) { chessShowPromo(hit); return; } // promotion : on demande la pièce
+      const capture = chessGame.board[sq] !== 0 || hit[0].flag === 3;
+      chessPlay(hit[0]);
+      beep(capture ? { freq: 170, freqEnd: 100, dur: 0.12, type: 'triangle', vol: 0.2 }
+                   : { freq: 380, freqEnd: 300, dur: 0.07, type: 'sine', vol: 0.14 });
+      chessOpponentTurn();
+      return;
+    }
+    const p = chessGame.board[sq];
+    if (p > 0) { // une de ses propres pièces : (re)sélection
+      chessSel = sq;
+      chessTargets = Chess.legalMoves(chessGame).filter(m => m.from === sq);
+    } else {
+      chessSel = -1;
+      chessTargets = [];
+    }
+    chessRender();
+  });
+
+  function chessOpen() {
+    if (!chessGame) { chessGame = Chess.newGame(); chessLastMove = null; }
+    chessSel = -1;
+    chessTargets = [];
+    chessPromoPending = null;
+    chessPromoEl.hidden = true;
+    chessOverlay.hidden = false;
+    document.body.classList.add('chessOpen');
+    chessBtn.hidden = true;
+    priestBtn.hidden = true;
+    chessRender();
+    chessRefreshStatus();
+    // reprise d'une partie laissée en plan : c'est au tour des noirs
+    if (chessGame.turn === -1 && !Chess.gameResult(chessGame)) chessOpponentTurn();
+  }
+  chessBtn.addEventListener('click', chessOpen);
+  document.getElementById('chessNewBtn').addEventListener('click', () => {
+    chessGame = Chess.newGame();
+    chessLastMove = null;
+    chessSel = -1;
+    chessTargets = [];
+    chessBusy = false;
+    chessPromoPending = null;
+    chessPromoEl.hidden = true;
+    chessRender();
+    chessRefreshStatus();
+  });
+  document.getElementById('chessCloseBtn').addEventListener('click', () => {
+    chessOverlay.hidden = true;
+    document.body.classList.remove('chessOpen');
+  });
+
+  // bouton flottant ancré à l'échiquier posé sur la table, même recette que
+  // le prêtre (repère du canvas cosy, repositionné à chaque frame)
+  function updateChessBtn() {
+    if (cosyOverlay.hidden || !chessOverlay.hidden) { chessBtn.hidden = true; return; }
+    chessBtn.hidden = false;
+    const rect = cosyCanvas.getBoundingClientRect();
+    const pos = cosyIso(CHESS_CX, 0.55, CHESS_CZ);
+    chessBtn.style.left = (rect.left + pos.x * (rect.width / COSY_W)) + 'px';
+    chessBtn.style.top = (rect.top + pos.y * (rect.height / COSY_H)) + 'px';
+    chessBtn.textContent = t('chess_btn');
+  }
+
   document.getElementById('cosyBtn').addEventListener('click', () => {
     cosyOverlay.hidden = false;
     ensureAudio();
@@ -5219,6 +5872,9 @@
     cosyOverlay.hidden = true;
     if (cosyRAF !== null) { cancelAnimationFrame(cosyRAF); cosyRAF = null; }
     priestBtn.hidden = true;
+    chessBtn.hidden = true;
+    chessOverlay.hidden = true;
+    document.body.classList.remove('chessOpen');
     stopCosyAmbient();
     fadeBgMusicTo(musicVolume / 100, 1200);
   });
