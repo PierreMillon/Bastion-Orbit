@@ -743,7 +743,7 @@
 </div>
 
 <div id="changelog" hidden>
-  <div><b>v1.00</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
+  <div><b>v1.00</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Un mode « défi : mat en 1 » tire au sort une position parmi six, chacune vérifiée comme légale et n’admettant qu’une seule solution. On peut aussi simplement attiser le feu et caresser le chat, sans enjeu. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
   <div><b>v0.99</b> — refonte procédurale du monde : routes, cœur de village, maisons, ferme et maison de la sorcière sont maintenant générés depuis une graine (rejet-échantillonnage en direct, contre les vraies routes/le vrai ruisseau/le vrai moulin) plutôt que placés à la main un par un — la vraie réponse aux croisements de routes qui recassaient régulièrement. Graine visible et partageable dans le menu, "Nouvelle carte" pour en tirer une autre, "Charger" pour reprendre celle d'un ami (même graine = même village, à l'identique)</div>
   <div><b>v0.98</b> — suite de l'amélioration de l'expérience : accroche discrète au tout premier lancement (une seule fois, jamais bloquante) ; petite flèche au bord de l'écran quand un coup au château vient de hors du cadre (surtout utile zoomé) ; sons d'achat distincts du coup de mêlée/réparation, le caillou de trébuchet sonne différemment d'un tir normal, jardin et tourelle ne sont plus silencieux à l'achat</div>
   <div><b>v0.97</b> — amélioration de l'expérience (à l'initiative de la session) : l'écran de fin de partie affiche maintenant la vague atteinte, l'or gagné et le record (persisté) ; un vrai tremblement d'écran sur les coups qui comptent (bélier au contact, caillou de trébuchet)</div>
@@ -1076,6 +1076,7 @@
   <div id="chessStatus"></div>
   <div id="chessPromo" hidden></div>
   <div id="chessBar">
+    <button id="chessPuzzleBtn" class="ghost"></button>
     <button id="chessNewBtn" class="ghost"></button>
     <button id="chessCloseBtn"></button>
   </div>
@@ -1168,7 +1169,11 @@
       chess_mate_lose: 'Échec et mat. Cette partie lui revient.',
       chess_stale: 'Pat : partie nulle.', chess_draw: 'Partie nulle.',
       chess_promo: 'Ton pion arrive au bout. En quoi le promeus-tu ?',
-      chess_queen: 'Dame', chess_rook: 'Tour', chess_bishop: 'Fou', chess_knight: 'Cavalier'
+      chess_queen: 'Dame', chess_rook: 'Tour', chess_bishop: 'Fou', chess_knight: 'Cavalier',
+      chess_puzzle_btn: 'Défi : mat en 1',
+      chess_puzzle_prompt: 'Les blancs jouent et matent en un coup.',
+      chess_puzzle_solved: 'Mat. Bien vu.',
+      chess_puzzle_missed: 'Ce n\'est pas le mat — on remet la position.'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1221,7 +1226,11 @@
       chess_mate_lose: 'Checkmate. This one goes to her.',
       chess_stale: 'Stalemate: a draw.', chess_draw: 'A draw.',
       chess_promo: 'Your pawn reached the far side. Promote it to?',
-      chess_queen: 'Queen', chess_rook: 'Rook', chess_bishop: 'Bishop', chess_knight: 'Knight'
+      chess_queen: 'Queen', chess_rook: 'Rook', chess_bishop: 'Bishop', chess_knight: 'Knight',
+      chess_puzzle_btn: 'Puzzle: mate in 1',
+      chess_puzzle_prompt: 'White to play and mate in one.',
+      chess_puzzle_solved: 'Mate. Well spotted.',
+      chess_puzzle_missed: 'Not mate — resetting the position.'
     }
   };
   function detectLang() {
@@ -1269,6 +1278,7 @@
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
     document.querySelector('.cosyCaption').textContent = t('cosy_caption');
+    document.getElementById('chessPuzzleBtn').textContent = t('chess_puzzle_btn');
     document.getElementById('chessNewBtn').textContent = t('chess_new');
     document.getElementById('chessCloseBtn').textContent = t('chess_close');
     document.querySelector('.fakeAdSiren').textContent = t('ad_siren');
@@ -5057,6 +5067,11 @@
       v.z += (dz / d) * sp * dt;
     }
   }
+  // DEMANDÉ EN SESSION (2026-09-13) : registre contemplatif — on doit pouvoir
+  // toucher la scène sans enjeu. Attiser le feu le fait gonfler un instant,
+  // caresser le chat le fait ronronner et s'installer. Rien à gagner, rien
+  // à perdre : c'est le point.
+  let cosyFireBoost = 0;
   const cosyCat = { x: 3.2, z: 3.4, tx: 3.2, tz: 3.4, pauseTimer: 1.5, purrCooldown: 3 };
   function cosyPickCatTarget() {
     cosyCat.tx = 0.9 + Math.random() * 5.2;
@@ -5151,7 +5166,7 @@
 
     const fireCenter = cosyIso(6.7, 0.5, 4.6);
     cosyQuad([cosyIso(6.2, 0, 4.6), cosyIso(7.2, 0, 4.6), cosyIso(7.2, 3, 4.6), cosyIso(6.2, 3, 4.6)], '#160c04');
-    const flicker = 0.85 + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
+    const flicker = 0.85 + cosyFireBoost + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
     // "beaucoup plus gros, beaucoup plus sympathique" — halo et flammes
     // agrandis (halo ~1.6x, cœur ~1.8x), et le cœur unique remplacé par un
     // petit foyer de 3 flammes décalées (tailles/phases différentes) pour
@@ -5208,6 +5223,7 @@
     const dt = cosyLastT ? Math.min(0.1, (now - cosyLastT) / 1000) : 0;
     cosyLastT = now;
     cosyClock += dt;
+    cosyFireBoost = Math.max(0, cosyFireBoost - dt * 0.45);
     updateCosyCat(dt);
     updateCosyVillagers(dt);
     renderCosyScene(cosyClock);
@@ -5555,7 +5571,27 @@
       const pool = scored.filter(x => x.score >= best - jitter);
       return pool[Math.floor(Math.random() * pool.length)].m;
     }
-    return { newGame, legalMoves, applyMove, inCheck, gameResult, bestMove, fileOf, rankOf,
+    // lecture d'une position FEN — sert aux positions de défi, pas au jeu
+    // normal ; on ignore les compteurs de coups, inutiles ici
+    function fromFEN(fen) {
+      const [pos, turn, castle = '-', ep = '-'] = fen.split(/\s+/);
+      const board = new Int8Array(64);
+      const map = { p: PAWN, n: KNIGHT, b: BISHOP, r: ROOK, q: QUEEN, k: KING };
+      let rank = 7, file = 0;
+      for (const ch of pos) {
+        if (ch === '/') { rank--; file = 0; continue; }
+        if (ch >= '1' && ch <= '8') { file += +ch; continue; }
+        const tp = map[ch.toLowerCase()];
+        board[rank * 8 + file] = ch === ch.toLowerCase() ? -tp : tp;
+        file++;
+      }
+      let epSq = -1;
+      if (ep !== '-') epSq = (+ep[1] - 1) * 8 + (ep.charCodeAt(0) - 97);
+      return { board, turn: turn === 'w' ? 1 : -1,
+               castle: { wk: castle.includes('K'), wq: castle.includes('Q'), bk: castle.includes('k'), bq: castle.includes('q') },
+               ep: epSq, half: 0, full: 1 };
+    }
+    return { newGame, legalMoves, applyMove, inCheck, gameResult, bestMove, fromFEN, fileOf, rankOf,
              PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
   })();
 
@@ -5575,6 +5611,21 @@
   let chessBusy = false;    // l'adversaire réfléchit
   let chessPromoPending = null; // coups de promotion en attente du choix
   let chessLastMove = null; // pour surligner le dernier coup joué
+  // Défi court (DEMANDÉ EN SESSION, 2026-09-13 : Pierre voulait les trois
+  // registres — réflexion, contemplation, petit défi). Positions vérifiées
+  // par le moteur avant d'être retenues : chacune est légale (le camp qui
+  // vient de jouer n'est pas en échec) et n'admet qu'UN seul coup de mat,
+  // sinon l'énigme aurait plusieurs réponses justes.
+  const CHESS_PUZZLES = [
+    '6k1/5ppp/8/8/8/8/5PPP/R5K1 w - -',      // couloir : a1a8
+    '6rk/6pp/7N/8/8/8/8/6K1 w - -',          // étouffé : h6f7
+    '6k1/4Bppp/8/8/8/8/5PPP/3Q2K1 w - -',    // fou et dame : d1d8
+    '7k/R7/8/8/8/8/8/1R6 w - -',             // escalier : b1b8
+    '6k1/8/6K1/8/8/8/8/R7 w - -',            // roi et tour : a1a8
+    '6k1/5ppp/8/8/8/5N2/8/3Q2K1 w - -'       // dame et cavalier : d1d8
+  ];
+  let chessPuzzle = false;  // en mode défi, l'adversaire ne rejoue pas
+  let chessPuzzleIdx = -1;
 
   // l'adversaire : la princesse tant qu'elle est en vie, sinon le prêtre
   function chessPartnerIsPriest() { return !!state.princessDead; }
@@ -5731,6 +5782,10 @@
   function chessSetStatus(msg) { chessStatusEl.textContent = msg; }
 
   function chessRefreshStatus() {
+    if (chessPuzzle) {
+      chessSetStatus(Chess.gameResult(chessGame) === 'mat' ? t('chess_puzzle_solved') : t('chess_puzzle_prompt'));
+      return;
+    }
     const res = Chess.gameResult(chessGame);
     if (res === 'mat') chessSetStatus(chessGame.turn === 1 ? t('chess_mate_lose') : t('chess_mate_win'));
     else if (res === 'pat') chessSetStatus(t('chess_stale'));
@@ -5781,7 +5836,7 @@
         chessPromoPending = null;
         chessPlay(mv);
         beep({ freq: 520, freqEnd: 700, dur: 0.16, type: 'sine', vol: 0.16 });
-        chessOpponentTurn();
+        if (chessPuzzle) chessPuzzleResolve(); else chessOpponentTurn();
       });
       chessPromoEl.appendChild(b);
     }
@@ -5803,7 +5858,7 @@
       chessPlay(hit[0]);
       beep(capture ? { freq: 170, freqEnd: 100, dur: 0.12, type: 'triangle', vol: 0.2 }
                    : { freq: 380, freqEnd: 300, dur: 0.07, type: 'sine', vol: 0.14 });
-      chessOpponentTurn();
+      if (chessPuzzle) chessPuzzleResolve(); else chessOpponentTurn();
       return;
     }
     const p = chessGame.board[sq];
@@ -5815,6 +5870,37 @@
       chessTargets = [];
     }
     chessRender();
+  });
+
+  function chessLoadPuzzle(idx) {
+    chessPuzzle = true;
+    chessPuzzleIdx = idx;
+    chessGame = Chess.fromFEN(CHESS_PUZZLES[idx]);
+    chessLastMove = null;
+    chessSel = -1;
+    chessTargets = [];
+    chessBusy = false;
+    chessPromoPending = null;
+    chessPromoEl.hidden = true;
+    chessRender();
+    chessRefreshStatus();
+  }
+  function chessPuzzleResolve() {
+    if (Chess.gameResult(chessGame) === 'mat') {
+      beep({ freq: 620, freqEnd: 880, dur: 0.22, type: 'sine', vol: 0.18 });
+      return; // chessRefreshStatus a déjà affiché la réussite
+    }
+    // raté : on laisse voir le coup joué une seconde, puis on remet la
+    // position — un défi qu'on ne peut pas retenter n'en est pas un
+    chessSetStatus(t('chess_puzzle_missed'));
+    const idx = chessPuzzleIdx;
+    setTimeout(() => { if (chessPuzzle && chessPuzzleIdx === idx) chessLoadPuzzle(idx); }, 1200);
+  }
+  document.getElementById('chessPuzzleBtn').addEventListener('click', () => {
+    // tire une autre position que celle affichée, pour ne pas rejouer la même
+    let idx = Math.floor(Math.random() * CHESS_PUZZLES.length);
+    if (CHESS_PUZZLES.length > 1 && idx === chessPuzzleIdx) idx = (idx + 1) % CHESS_PUZZLES.length;
+    chessLoadPuzzle(idx);
   });
 
   function chessOpen() {
@@ -5834,6 +5920,8 @@
   }
   chessBtn.addEventListener('click', chessOpen);
   document.getElementById('chessNewBtn').addEventListener('click', () => {
+    chessPuzzle = false;
+    chessPuzzleIdx = -1;
     chessGame = Chess.newGame();
     chessLastMove = null;
     chessSel = -1;
@@ -5860,6 +5948,28 @@
     chessBtn.style.top = (rect.top + pos.y * (rect.height / COSY_H)) + 'px';
     chessBtn.textContent = t('chess_btn');
   }
+
+  // On teste le toucher en coordonnées écran plutôt qu'en coordonnées de la
+  // pièce : projeter les deux cibles avec cosyIso et comparer les distances
+  // évite d'avoir à inverser la projection isométrique pour deux points.
+  cosyCanvas.addEventListener('pointerdown', (e) => {
+    if (!chessOverlay.hidden) return;
+    const rect = cosyCanvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (COSY_W / rect.width);
+    const py = (e.clientY - rect.top) * (COSY_H / rect.height);
+    const cat = cosyIso(cosyCat.x, 0.13, cosyCat.z);
+    if (Math.hypot(px - cat.x, py - cat.y) < 80) {
+      playPurr();
+      cosyCat.pauseTimer = Math.max(cosyCat.pauseTimer, 3.5); // il s'installe
+      cosyCat.purrCooldown = 5 + Math.random() * 4;           // pas deux ronrons coup sur coup
+      return;
+    }
+    const fire = cosyIso(6.7, 0.5, 4.6);
+    if (Math.hypot(px - fire.x, py - fire.y) < 150) {
+      cosyFireBoost = Math.min(0.6, cosyFireBoost + 0.45);
+      beep({ freq: 90, freqEnd: 260, dur: 0.38, type: 'sawtooth', vol: 0.1 });
+    }
+  });
 
   document.getElementById('cosyBtn').addEventListener('click', () => {
     cosyOverlay.hidden = false;
