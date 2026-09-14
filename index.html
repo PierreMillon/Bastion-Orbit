@@ -558,6 +558,28 @@
   /* mini-jeu d'échecs (DEMANDÉ EN SESSION, 2026-09-13) : on joue dans un
      panneau à part, pas en isométrique sur la table — à 0,84 unité de large
      dans la pièce, une case ferait ~6 px, injouable au doigt. */
+  /* Le dernier rempart : la seconde chance, proposée au moment exact où le
+     donjon allait tomber. Overlay le plus haut du jeu — c'est la seule
+     décision qui compte à cet instant. */
+  #lastStandOverlay {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    padding: 20px; box-sizing: border-box;
+    background: rgba(24,6,4,0.93);
+    text-align: center;
+  }
+  #lastStandOverlay[hidden] { display: none; }
+  #lastStandTitle { color: #ffcf7a; font-size: 19px; font-weight: 600; }
+  #lastStandText { color: #e8d6b8; font-size: 13px; line-height: 1.5; max-width: 340px; }
+  #lastStandCount { color: #c95a3f; font-size: 26px; font-variant-numeric: tabular-nums; }
+  #lastStandOverlay button {
+    border: none; border-radius: 9px; padding: 11px 18px;
+    font-size: 13px; font-family: inherit; cursor: pointer;
+    background: #b5482e; color: #f2ead9;
+  }
+  #lastStandOverlay button.ghost { background: rgba(242,234,217,0.16); font-size: 12px; padding: 8px 14px; }
+
   #chessBtn { z-index: 26; }
   #chessOverlay {
     position: fixed;
@@ -731,7 +753,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v1.04</button>
+  <button id="versionBtn">v1.05</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -743,6 +765,7 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v1.05</b> — <b>Le dernier rempart</b> : quand le donjon allait tomber, il vous reste un souffle. Tenir repousse tout ce qui mordait le mur, rend un tiers de la hauteur et vous laisse une vague pour vous refaire — une seule fois par partie, et vous avez huit secondes pour choisir (ne rien choisir, c’est renoncer). Le monde est en pause pendant la décision</div>
   <div><b>v1.04</b> — les <b>engins de siège s’étalent en distance</b>. Avant, il n’existait que deux distances dans tout le jeu : collé au mur, ou pile à 300 — tous les trébuchets se posaient sur le même cercle invisible. Désormais chaque type a sa bande : bouclier et tour de siège au contact, arbalète proche, trébuchet loin, bélier très loin, avec une variation par engin pour qu’aucun ne partage le rayon d’un autre. Et monter sur une tourelle double les dégâts du seigneur</div>
   <div><b>v1.03</b> — le seigneur <b>monte sur les tourelles</b>. Il grimpe tout seul en arrivant dessus et redescend en repartant : de là-haut il frappe plus fort, verse l’huile, et les assaillants montés sur la plateforme ne l’atteignent plus — ils s’en prennent à la tourelle sous ses pieds à la place. La tour de siège, elle, le touche encore : elle surplombe tout</div>
   <div><b>v1.02</b> — le jeu devient un <b>niveau unique de 20 vagues</b>, avec une vraie victoire au bout. Les vagues ne sont plus calculées par une formule mais écrites une par une : chacune a son effectif, ses points de vie, sa vitesse, sa cadence, ses échelles et son débarquement. Les paliers de répit (5, 10, 15) sont posés exprès, les débarquements aussi. Courbe réglée au simulateur sur 400 parties par palier : un joueur correct termine 89% du temps en Facile, 58% en Normal, 32% en Difficile, 18% en Très difficile. Au passage, Difficile et Très difficile donnaient exactement les mêmes points de vie en fin de partie — ils sont enfin distincts</div>
@@ -1073,6 +1096,14 @@
   <button id="cosyClose">Retour au mur</button>
 </div>
 
+<div id="lastStandOverlay" hidden>
+  <div id="lastStandTitle"></div>
+  <div id="lastStandText"></div>
+  <div id="lastStandCount"></div>
+  <button id="lastStandTakeBtn"></button>
+  <button id="lastStandRefuseBtn" class="ghost"></button>
+</div>
+
 <div id="chessOverlay" hidden>
   <canvas id="chessCanvas" width="640" height="640"></canvas>
   <div id="chessStatus"></div>
@@ -1178,7 +1209,11 @@
       chess_puzzle_missed: 'Ce n\'est pas le mat — on remet la position.',
       victory_text: 'Le siège est levé, Seigneur. Le bastion a tenu.',
       victory_waves_pre: 'Les ', victory_waves_post: ' vagues sont passées.',
-      victory_sub: 'Le village est encore debout — et vous aussi.'
+      victory_sub: 'Le village est encore debout — et vous aussi.',
+      ls_title: 'Le donjon vacille.',
+      ls_text: 'Il reste un souffle. Tenir maintenant repousse tout ce qui est au pied du mur et vous laisse une vague pour vous refaire. Une seule fois par partie.',
+      ls_take: 'Tenir bon', ls_refuse: 'Laisser tomber',
+      ls_used: 'Le dernier rempart a déjà servi.'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1238,7 +1273,11 @@
       chess_puzzle_missed: 'Not mate — resetting the position.',
       victory_text: 'The siege is broken, my lord. The bastion held.',
       victory_waves_pre: 'All ', victory_waves_post: ' waves survived.',
-      victory_sub: 'The village still stands — and so do you.'
+      victory_sub: 'The village still stands — and so do you.',
+      ls_title: 'The keep is buckling.',
+      ls_text: 'One breath left. Holding now throws back everything at the foot of the wall and buys you a wave to recover. Once per game.',
+      ls_take: 'Hold fast', ls_refuse: 'Let it fall',
+      ls_used: 'The last stand has already been spent.'
     }
   };
   function detectLang() {
@@ -1287,6 +1326,10 @@
     document.getElementById('cosyClose').textContent = t('cosy_return');
     document.querySelector('.cosyCaption').textContent = t('cosy_caption');
     document.getElementById('chessPuzzleBtn').textContent = t('chess_puzzle_btn');
+    document.getElementById('lastStandTitle').textContent = t('ls_title');
+    document.getElementById('lastStandText').textContent = t('ls_text');
+    document.getElementById('lastStandTakeBtn').textContent = t('ls_take');
+    document.getElementById('lastStandRefuseBtn').textContent = t('ls_refuse');
     document.getElementById('chessNewBtn').textContent = t('chess_new');
     document.getElementById('chessCloseBtn').textContent = t('chess_close');
     document.querySelector('.fakeAdSiren').textContent = t('ad_siren');
@@ -3394,6 +3437,8 @@
     castleH: CASTLE_MAX_H, // starts fully built — the lord has no reason to be rebuilding on wave 1
     fightBanner: 0,
     gold: 0,
+    lastStandUsed: false, // la seconde chance ne sert qu'une fois par partie
+
     totalGoldEarned: 0, // cumul jamais dépensé/décrémenté — juste pour le récap de fin de partie, voir showGameOver()
     moatLevel: 0,
     gardenLevel: 0,
@@ -4129,7 +4174,71 @@
   // CASTLE_MIN_H and just sits there forever, with nothing to stop the
   // game. This is the missing loss condition, called wherever castleH is
   // reduced (attackBase chipping, siege-engine bombardment).
+  // ---- Le dernier rempart (seconde chance, DEMANDÉ EN SESSION 2026-09-14) ----
+  // Pierre : elle doit sauver du donjon qui tombe (la défaite principale),
+  // et il veut qu'elle s'obtienne "par vidéo".
+  //
+  // Point important : AUCUNE vidéo n'est branchée aujourd'hui, et le bouton
+  // ne prétend pas le contraire — il serait malhonnête d'afficher "regarder
+  // une vidéo" sans rien montrer. Tout le travail d'intégration est isolé
+  // dans offerRewardedContinue() ci-dessous : le jour où la candidature
+  // AdSense H5 Games Ads aboutit, c'est la seule fonction à changer, et le
+  // reste de la mécanique n'en saura rien.
+  const LAST_STAND_DECIDE_TIME = 8;   // secondes pour choisir
+  const LAST_STAND_RESTORE = 0.35;    // fraction de CASTLE_MAX_H rendue — de quoi continuer, pas une remise à neuf
+  const LAST_STAND_PUSHBACK = 70;     // unités dont les assaillants au mur sont repoussés
+  const LAST_STAND_DMG = 4;           // dégâts de l'onde de choc
+  let lastStandTimer = 0;
+  const lastStandOverlay = document.getElementById('lastStandOverlay');
+
+  // Seul point de contact avec une régie publicitaire, aujourd'hui vide.
+  // Pour brancher AdSense H5 Games Ads plus tard : appeler adBreak({
+  // type: 'reward', beforeReward, adViewed: () => grant(true),
+  // adDismissed/adBreakDone: () => grant(false) }) à la place du grant(true)
+  // direct. Rien d'autre dans le jeu n'a à bouger.
+  function offerRewardedContinue(grant) {
+    grant(true);
+  }
+
+  function showLastStand() {
+    state.waveState = 'lastStand';   // ni 'active' ni 'gameover' : le jeu attend
+    lastStandTimer = LAST_STAND_DECIDE_TIME;
+    document.getElementById('lastStandCount').textContent = Math.ceil(lastStandTimer);
+    lastStandOverlay.hidden = false;
+  }
+  function takeLastStand() {
+    lastStandOverlay.hidden = true;
+    state.lastStandUsed = true;
+    offerRewardedContinue((granted) => {
+      if (!granted) { showGameOver(t('gameover_castle')); return; }
+      state.castleH = Math.max(state.castleH, CASTLE_MAX_H * LAST_STAND_RESTORE);
+      // l'onde de choc : tout ce qui mordait le mur est renvoyé au loin,
+      // sinon le donjon retomberait dans la seconde qui suit
+      for (const e of state.enemies) {
+        if (e.state === 'attackBase' || e.state === 'onTop') {
+          e.state = 'approach';
+          e.r += LAST_STAND_PUSHBACK;
+          e.hp -= LAST_STAND_DMG;
+          if (e.hp <= 0) killEnemy(e);
+        }
+      }
+      for (const se of state.siegeEngines) se.hp -= LAST_STAND_DMG;
+      state.siegeEngines = state.siegeEngines.filter(se => se.hp > 0);
+      state.waveState = 'active';
+      triggerShake(1);
+      beep({ freq: 120, freqEnd: 420, dur: 0.5, type: 'sawtooth', vol: 0.3 });
+    });
+  }
+  function refuseLastStand() {
+    lastStandOverlay.hidden = true;
+    showGameOver(t('gameover_castle'));
+  }
+  document.getElementById('lastStandTakeBtn').addEventListener('click', takeLastStand);
+  document.getElementById('lastStandRefuseBtn').addEventListener('click', refuseLastStand);
+
   function castleDestroyed() {
+    if (state.waveState === 'lastStand' || state.waveState === 'gameover') return;
+    if (!state.lastStandUsed) { showLastStand(); return; }
     showGameOver(t('gameover_castle'));
   }
 
@@ -6199,6 +6308,17 @@
   let frameDt = 0;
   function update(dt) {
     const p = state.player;
+
+    // Décision du dernier rempart : le monde est mis en pause le temps de
+    // choisir. Sans ça le donjon continuerait d'être frappé pendant qu'on
+    // lit l'écran, et la seconde chance serait déjà consommée en
+    // apparaissant. Seuls le décompte et l'horloge tournent.
+    if (state.waveState === 'lastStand') {
+      lastStandTimer -= dt;
+      document.getElementById('lastStandCount').textContent = Math.max(0, Math.ceil(lastStandTimer));
+      if (lastStandTimer <= 0) refuseLastStand(); // ne rien choisir, c'est renoncer
+      return;
+    }
 
     state.time += dt; // horloge simple, réutilisée par l'animation de l'eau (voir drawWaterGlints)
 

@@ -59,6 +59,14 @@ const K = {
   // donjon / défaite
   CASTLE_MAX_H: 208,          // index.html:872 CASTLE_MAX_H
   CASTLE_MIN_H: 16,           // index.html:873 CASTLE_MIN_H (castleDestroyed en dessous)
+  // "Le dernier rempart" (2026-09-14) : une seule fois par partie, la chute
+  // du donjon est annulée — il remonte à 35% et tout ce qui mordait le mur
+  // est repoussé. Sans le modéliser ici, le simulateur sous-estimerait
+  // systématiquement les chances réelles, et ses cibles deviendraient
+  // fausses en silence. On suppose le joueur assez avisé pour la prendre
+  // (le refuser n'a aucun intérêt).
+  LAST_STAND_RESTORE: 0.35,
+  LAST_STAND_PUSHBACK_CLEARS_WALL: true,
   JUMP_H: 56,                 // index.html:874 JUMP_H
   JUMP_CHANCE_MAX: 0.16,      // update(): jumpChance = 0.16 * (1 - castleH/JUMP_H)
   REPAIR_RATE: 8 / 0.5,       // CASTLE_HEAL_STEP(8) / REPAIR_TICK(0.5) = 16 hauteur/s en réparation active
@@ -285,6 +293,7 @@ function simulateRun(policyName, seed, maxWaves) {
 
   let wave = 1;
   let castleH = K.CASTLE_MAX_H;
+  let lastStandUsed = false;
   let playerHp = K.PLAYER_HP;
   let princessHp = K.PRINCESS_HP;
   let princessAlive = true;
@@ -438,7 +447,10 @@ function simulateRun(policyName, seed, maxWaves) {
           a.onTop = true; a.onTopTimer = K.ONTOP_TICK; stillAtWall.push(a); continue;
         }
         castleH = Math.max(K.CASTLE_MIN_H, castleH - K.ENEMY_WALL_DMG);
-        if (castleH <= K.CASTLE_MIN_H) { deathCause = 'château détruit'; break; }
+        if (castleH <= K.CASTLE_MIN_H) {
+          if (!lastStandUsed) { lastStandUsed = true; castleH = K.CASTLE_MAX_H * K.LAST_STAND_RESTORE; wallQueue.length = 0; }
+          else { deathCause = 'château détruit'; break; }
+        }
         a.timer = 1.2;
       }
       stillAtWall.push(a);
@@ -487,7 +499,10 @@ function simulateRun(policyName, seed, maxWaves) {
             if (playerHp <= 0) { deathCause = 'joueur à 0 PV (tour de siège)'; break; }
           } else {
             castleH = Math.max(K.CASTLE_MIN_H, castleH - tier.dmg);
-            if (castleH <= K.CASTLE_MIN_H) { deathCause = 'château détruit (engin de siège)'; break; }
+            if (castleH <= K.CASTLE_MIN_H) {
+              if (!lastStandUsed) { lastStandUsed = true; castleH = K.CASTLE_MAX_H * K.LAST_STAND_RESTORE; wallQueue.length = 0; }
+              else { deathCause = 'château détruit (engin de siège)'; break; }
+            }
           }
         }
       }
@@ -617,7 +632,12 @@ const REGRESSION_TARGETS = [
   { policy: 'good', tier: 'normal', wave: 20, min: 0.85, label: 'bon doit finir le niveau presque toujours (≥85% à la vague 20, Normal)' },
   { policy: 'correct', tier: 'facile', wave: 20, min: 0.70, label: 'correct en Facile (~85% visé, ≥70% au bout des 20 vagues)' },
   { policy: 'correct', tier: 'normal', wave: 20, min: 0.45, max: 0.80, label: 'correct en Normal (~55-65% visé, zone de tension 45-80% au bout des 20 vagues)' },
-  { policy: 'correct', tier: 'normal', wave: 18, min: 0.50, max: 0.88, label: 'correct en Normal : l\'avant-dernier palier ne doit pas déjà tout trancher (50-88% à la vague 18)' },
+  // plafond relevé de 88 à 92 le 2026-09-14, DÉLIBÉRÉMENT : "Le dernier
+  // rempart" garde en vie des joueurs qui tombaient jusque-là avant la
+  // vague 18. L'intention de la cible est inchangée — l'essentiel de
+  // l'usure doit se jouer sur les deux dernières vagues (89% en 18 contre
+  // 62% en 20), ce qui est bien le cas.
+  { policy: 'correct', tier: 'normal', wave: 18, min: 0.50, max: 0.92, label: 'correct en Normal : l\'avant-dernier palier ne doit pas déjà tout trancher (50-92% à la vague 18)' },
   { policy: 'correct', tier: 'difficile', wave: 20, min: 0.20, max: 0.55, label: 'correct en Difficile (~30-40% visé, 20-55% au bout des 20 vagues)' },
   { policy: 'correct', tier: 'tresDifficile', wave: 20, max: 0.30, label: 'correct en Très difficile (~15-20% visé, ≤30% au bout des 20 vagues)' },
 ];

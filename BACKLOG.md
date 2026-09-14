@@ -4018,3 +4018,50 @@ seulement ça, qui justifie d'y monter.
 Réserve à garder en tête : le simulateur ne modélise ni la position du
 seigneur ni la montée sur tourelle, il ne peut donc pas mesurer l'effet
 du x2. Le `--check` reste au vert, mais il ne dit rien sur ce point précis.
+
+
+## v1.05 — Le dernier rempart (seconde chance, 2026-09-14)
+
+Pierre a choisi : elle sauve du **donjon qui tombe** (la défaite
+principale), et il voulait qu'elle s'obtienne « par vidéo ».
+
+**Correction d'une erreur que j'avais commise.** J'avais affirmé qu'une
+page auto-hébergée n'avait « quasiment pas d'inventaire » pour la vidéo
+récompensée. C'est faux, et il ne fallait pas le dire de mémoire.
+Google propose **H5 Games Ads** via AdSense, qui fonctionne sur son
+propre site (API `adBreak()`/`adConfig()`), sur candidature et sans
+garantie d'acceptation. La vidéo récompensée tournait en 2026 autour de
+15-28 $ d'eCPM aux États-Unis, 8-15 $ en Europe, 1-3 $ en tier-3.
+D'autres réseaux visent le HTML5 auto-hébergé : AdinPlay, CPMStar,
+AppLixir.
+Sources : support.google.com/adsense/answer/9959170,
+developers.google.com/ad-placement/docs/signup,
+app.cinevva.com/guides/web-game-monetization,
+doondook.studio/best-ad-networks-monetize-html5-games/
+
+**Ce qui est livré.** La mécanique complète, sans fausse vidéo : afficher
+un bouton « regarder une vidéo » qui ne montre rien serait malhonnête.
+Tout le contact avec une régie tient dans `offerRewardedContinue()`, une
+seule fonction : le jour où la candidature aboutit, c'est la seule chose
+à changer, le reste du jeu n'en saura rien.
+
+Détails : le monde est mis en **pause** pendant la décision (sinon le
+donjon continuerait d'être frappé pendant qu'on lit l'écran, et la
+seconde chance serait consommée en apparaissant) ; huit secondes pour
+choisir, ne rien choisir vaut renoncement ; à l'acceptation, la hauteur
+remonte à 35% et tout ce qui était au pied du mur est repoussé et
+touché — sans ce recul, le donjon retomberait dans la seconde.
+
+**Le simulateur a été mis à jour, et une cible relevée délibérément.**
+Sans modéliser le dernier rempart, l'outil aurait sous-estimé en silence
+toutes les chances réelles. Modélisé, il donne 90 / 62 / 35 / 23 (contre
+89 / 58 / 32 / 18 avant). La seule cible qui sortait était le plafond de
+la vague 18 (89% pour 88% admis) : relevé à 92%, parce qu'il avait été
+posé quand la seconde chance n'existait pas. L'intention de la cible est
+inchangée — l'usure doit se jouer sur les deux dernières vagues, et c'est
+bien le cas (89% en vague 18 contre 62% au bout).
+
+**Au passage, un mécanisme découvert en testant** : le donjon se répare
+tout seul très vite (de 20 à 208 en neuf secondes dans une partie sans
+joueur). Mon premier test partait d'un donjon presque à terre et ne
+déclenchait donc jamais rien — la prémisse était fausse, pas le code.
