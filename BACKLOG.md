@@ -3806,3 +3806,98 @@ Retirés à la demande de Pierre : le portfolio
 (pierremillon.github.io/pierremillon) est désormais l'endroit unique
 pour naviguer d'un projet à l'autre, chaque jeu n'a plus à porter ses
 propres liens vers ses voisins.
+
+
+## Monter sur les tourelles : texte introuvable (2026-09-14)
+
+Pierre : "j'avais parlé au moment de pouvoir monter sur les tourelles, il
+y a tout un texte là-dessus, il est où là".
+
+Recherché sans rien trouver : BACKLOG.md entier (toutes les formulations —
+monter, grimper, escalader, se poster, occuper), les commentaires de
+index.html, et l'historique git complet (`git log --all -S`) sur toutes
+les branches. **Ce texte n'existe nulle part dans le dépôt.** Il n'a donc
+jamais été écrit, ou il l'a été dans une conversation dont le résumé l'a
+mangé — même accident que "Deux routes serpentantes" plus haut dans ce
+fichier, qui avait dû être reconstituée sur demande.
+
+Ce qui existe et s'en approche, pour ne pas confondre :
+- **Échelles** (v0.35) : un ennemi plante une échelle et les autres
+  montent sur la plateforme du donjon sans démolir le mur. C'est bien de
+  la montée, mais par les ennemis et sur le donjon, pas sur les tourelles.
+- **Tour de siège** (`isTower`) : engin ennemi qui grandit
+  (`TOWER_GROW_RATE`) et, passé `TOWER_DANGER_H`, frappe la plateforme
+  directement.
+- **Huile** : le seigneur marche jusqu'à la tourelle la plus proche pour
+  verser — il va *à* la tourelle, il ne monte pas *dessus*.
+
+À faire redicter par Pierre. Ne pas inventer une mécanique à sa place.
+
+## Trois orientations proposées le 2026-09-14 — analyse avant décision
+
+### 1. Passer à un moteur de rendu 3D
+
+Motivation de Pierre : "mieux contrôler toutes les images et les
+générations procédurales de la carte".
+
+Distinction importante à ne pas perdre : **la génération procédurale ne
+dépend pas du moteur de rendu**. `buildWorld()`, les graines, le
+rejet-échantillonnage, le placement des maisons — tout cela est du calcul
+de positions, totalement indépendant de la façon dont on dessine ensuite.
+Passer en 3D n'améliorerait donc *rien* de ce côté. Ce que la 3D
+améliorerait vraiment : la profondeur (plus d'artefacts de tri par
+peintre), la lumière et les ombres (il y a justement une section
+"Système d'éclairage à concevoir" en attente dans ce fichier), et la
+liberté de caméra.
+
+Coût réel : le rendu est écrit à la main en canvas 2D de bout en bout
+(`project()`, `cosyIso()`, tri en profondeur, chaque bâtiment en
+quadrilatères facettés). Une bascule en 3D réécrit ~100% du rendu. La
+logique de jeu (modèle polaire, vagues, IA, collisions) survivrait.
+Risque principal : perdre l'identité visuelle actuelle (le fil de fer /
+phosphore est activé par défaut) et des mois de réglages.
+
+Chemin recommandé si on y va : **prototyper à côté**, dans un fichier
+séparé, en pilotant le même modèle de monde, puis comparer — pas
+réécrire à l'aveugle.
+
+### 2. Un seul niveau, 20 vagues
+
+Motivation : "on pourra équilibrer beaucoup plus précisément la mécanique
+de jeu".
+
+C'est la proposition la plus solide des trois, et de loin la moins
+risquée. Aujourd'hui les vagues sont infinies et pilotées par des
+formules ; la progression multi-niveaux est encore une idée en attente
+(section "Chemin vers un autre château"). Un arc fixe de 20 vagues donne :
+une courbe de difficulté *dessinée* plutôt que calculée, une vraie
+condition de victoire (donc une fin, donc une envie de rejouer et de
+partager son score), et un espace de réglage fini où chaque changement
+est mesurable.
+
+À faire en premier : tout le reste (équilibrage, mécanique de seconde
+chance, et même le jugement sur la 3D) devient plus facile à évaluer une
+fois l'arc fermé.
+
+### 3. Vidéos récompensées adossées à l'aléatoire
+
+Motivation de Pierre : "tu peux être très bon mais des fois tu perds
+quand même et t'as envie de regarder une vidéo pour contrôler le hasard".
+
+Le constat est juste : une défaite due au hasard donne envie d'une
+seconde chance, et c'est exactement le moment où une vidéo récompensée
+fonctionne.
+
+Le piège à éviter : si la vidéo *contrôle* le hasard, le hasard cesse
+d'être honnête et le joueur finit par sentir que ses défaites sont
+fabriquées pour vendre des vidéos. La version saine donne toujours
+quelque chose que le joueur **pourrait aussi obtenir en jouant** —
+seconde chance, relance d'une vague ratée — jamais un avantage
+inaccessible autrement.
+
+Réserve technique à dire franchement : sur une page statique GitHub
+Pages, la vidéo récompensée réelle n'a presque pas d'inventaire (les
+régies de rewarded video visent les applis natives). Concevoir la
+mécanique de seconde chance comme une *mécanique de jeu* d'abord, gagnée
+en jouant ; brancher une vidéo dessus reste possible plus tard, mais ce
+n'est pas là que ce projet rapportera de l'argent.
