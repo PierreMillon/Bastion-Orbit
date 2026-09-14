@@ -3798,3 +3798,11 @@ Tous les hooks de debug retirés avant commit (`grep -c "__DEBUG_"` = 1).
   charger une graine) — remplacer tout un village n'est pas anodin,
   mieux vaut un clic de confirmation qu'un village aimé perdu par
   accident.
+
+## v1.00 — retrait des liens vers les autres jeux
+
+Le menu contenait deux liens directs vers Forge Line et Knight Wars.
+Retirés à la demande de Pierre : le portfolio
+(pierremillon.github.io/pierremillon) est désormais l'endroit unique
+pour naviguer d'un projet à l'autre, chaque jeu n'a plus à porter ses
+propres liens vers ses voisins.
