@@ -731,7 +731,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v1.01</button>
+  <button id="versionBtn">v1.02</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -743,6 +743,7 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v1.02</b> — le jeu devient un <b>niveau unique de 20 vagues</b>, avec une vraie victoire au bout. Les vagues ne sont plus calculées par une formule mais écrites une par une : chacune a son effectif, ses points de vie, sa vitesse, sa cadence, ses échelles et son débarquement. Les paliers de répit (5, 10, 15) sont posés exprès, les débarquements aussi. Courbe réglée au simulateur sur 400 parties par palier : un joueur correct termine 89% du temps en Facile, 58% en Normal, 32% en Difficile, 18% en Très difficile. Au passage, Difficile et Très difficile donnaient exactement les mêmes points de vie en fin de partie — ils sont enfin distincts</div>
   <div><b>v1.01</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Un mode « défi : mat en 1 » tire au sort une position parmi six, chacune vérifiée comme légale et n’admettant qu’une seule solution. On peut aussi simplement attiser le feu et caresser le chat, sans enjeu. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
   <div><b>v1.00</b> — retrait des liens vers Forge Line et Knight Wars dans le menu : le portfolio (pierremillon.github.io/pierremillon) est désormais l'endroit unique pour naviguer d'un jeu à l'autre</div>
   <div><b>v0.99</b> — refonte procédurale du monde : routes, cœur de village, maisons, ferme et maison de la sorcière sont maintenant générés depuis une graine (rejet-échantillonnage en direct, contre les vraies routes/le vrai ruisseau/le vrai moulin) plutôt que placés à la main un par un — la vraie réponse aux croisements de routes qui recassaient régulièrement. Graine visible et partageable dans le menu, "Nouvelle carte" pour en tirer une autre, "Charger" pour reprendre celle d'un ami (même graine = même village, à l'identique)</div>
@@ -1172,7 +1173,10 @@
       chess_puzzle_btn: 'Défi : mat en 1',
       chess_puzzle_prompt: 'Les blancs jouent et matent en un coup.',
       chess_puzzle_solved: 'Mat. Bien vu.',
-      chess_puzzle_missed: 'Ce n\'est pas le mat — on remet la position.'
+      chess_puzzle_missed: 'Ce n\'est pas le mat — on remet la position.',
+      victory_text: 'Le siège est levé, Seigneur. Le bastion a tenu.',
+      victory_waves_pre: 'Les ', victory_waves_post: ' vagues sont passées.',
+      victory_sub: 'Le village est encore debout — et vous aussi.'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1229,7 +1233,10 @@
       chess_puzzle_btn: 'Puzzle: mate in 1',
       chess_puzzle_prompt: 'White to play and mate in one.',
       chess_puzzle_solved: 'Mate. Well spotted.',
-      chess_puzzle_missed: 'Not mate — resetting the position.'
+      chess_puzzle_missed: 'Not mate — resetting the position.',
+      victory_text: 'The siege is broken, my lord. The bastion held.',
+      victory_waves_pre: 'All ', victory_waves_post: ' waves survived.',
+      victory_sub: 'The village still stands — and so do you.'
     }
   };
   function detectLang() {
@@ -1359,7 +1366,7 @@
   function phosphorLine() { return `rgb(${PHOSPHOR_HUES[phosphorHue]})`; }
 
   // paliers de difficulté (demandé et validé en session, priorité n°1
-  // sur les 3 jeux) : hpDivisor est LE levier réglé au simulateur de
+  // sur les 3 jeux) : hpMul/countMul sont LES leviers réglés au simulateur de
   // difficulté (sim/balance-sim.js) — voir enemyHp() plus bas et
   // BACKLOG.md pour la méthode et les résultats mesurés. Cibles visées,
   // validées par Pierre (joueur "correct", mesuré vers la vague 28) :
@@ -1368,10 +1375,17 @@
   // ne change pas d'un palier à l'autre — un seul levier, plus simple à
   // garder cohérent avec le simulateur.
   const DIFFICULTY_TIERS = [
-    { key: 'facile', label: 'Facile', hpDivisor: 6.4 },
-    { key: 'normal', label: 'Normal', hpDivisor: 4.5 },
-    { key: 'difficile', label: 'Difficile', hpDivisor: 3.2 },
-    { key: 'tresDifficile', label: 'Très difficile', hpDivisor: 2.9 }
+    // Deux leviers par palier, et pas seulement les PV : les PV d'un ennemi
+    // sont un petit entier (2 à 7), si bien que round(hp*1.10) et
+    // round(hp*1.15) tombent sur LE MÊME entier — le palier était quantifié,
+    // et Difficile se retrouvait à égalité avec Très difficile (27% contre
+    // 28% mesurés au simulateur). L'effectif est un grand nombre : un
+    // multiplicateur dessus se règle finement.
+    // GARDER SYNCHRONISÉ avec DIFFICULTY_TIERS dans sim/balance-sim.js.
+    { key: 'facile', label: 'Facile', hpMul: 0.8, countMul: 0.85 },
+    { key: 'normal', label: 'Normal', hpMul: 1.0, countMul: 1.0 },
+    { key: 'difficile', label: 'Difficile', hpMul: 1.08, countMul: 1.06 },
+    { key: 'tresDifficile', label: 'Très difficile', hpMul: 1.18, countMul: 1.14 }
   ];
   let difficultyIdx = 1; // Normal par défaut
   try {
@@ -3578,7 +3592,7 @@
   // diviseur vient du palier de difficulté choisi (DIFFICULTY_TIERS,
   // plus haut) — chacun calibré séparément au simulateur pour tenir sa
   // propre cible (voir BACKLOG.md).
-  function enemyHp(wave) { return 2 + Math.floor(wave / DIFFICULTY_TIERS[difficultyIdx].hpDivisor); }
+  function enemyHp(wave) { return Math.max(1, Math.round(waveDef(wave).hp * DIFFICULTY_TIERS[difficultyIdx].hpMul)); }
 
   function spawnEnemy() {
     if (!state.villagePanic) villageTriggerPanic(); // tout premier ennemi qui apparaît — "à la première attaque"
@@ -3597,7 +3611,7 @@
     state.enemies.push({
       angle,
       r: tightSpawnR(angle),
-      speed: 24 + state.wave * 1.5, // wave-paced approach speed once actually on screen — see OFFSCREEN_APPROACH_MUL for the unseen leg
+      speed: waveDef(state.wave).sp, // vitesse posée par la table (WAVES) — voir OFFSCREEN_APPROACH_MUL pour le trajet hors champ
       hp: enemyHp(state.wave),
       maxHp: enemyHp(state.wave),
       wt: Math.random() * 10,      // phase accumulator, drives the lateral wander
@@ -3624,7 +3638,7 @@
   function flushHouseEnemy(house) {
     state.enemies.push({
       angle: house.angle, r: house.r,
-      speed: 24 + state.wave * 1.5,
+      speed: waveDef(state.wave).sp,
       hp: enemyHp(state.wave), maxHp: enemyHp(state.wave),
       wt: Math.random() * 10, wanderSeed: Math.random() * 10,
       hopping: false, hopT: 0, fleeing: false,
@@ -3644,7 +3658,7 @@
     if (!state.villagePanic) villageTriggerPanic();
     state.enemies.push({
       angle, r,
-      speed: 24 + state.wave * 1.5,
+      speed: waveDef(state.wave).sp,
       hp: enemyHp(state.wave), maxHp: enemyHp(state.wave),
       wt: Math.random() * 10, wanderSeed: Math.random() * 10,
       hopping: false, hopT: 0, fleeing: false,
@@ -3681,9 +3695,51 @@
   // "recalibrer" avant le pic suivant (cf. AI Director de Left 4 Dead,
   // analyses Kingdom Rush — voir BACKLOG.md, section difficulté). Une
   // vague sur cinq est une vague de répit à effectif réduit.
+  // ARC DE 20 VAGUES (DEMANDÉ EN SESSION, 2026-09-14) : "un seul niveau
+  // avec 20 vagues, comme ça on pourra équilibrer beaucoup plus
+  // précisément la mécanique de jeu". Les formules (3+2w pour l'effectif,
+  // 2+floor(w/div) pour les PV, 1.1-0.05w pour la cadence) laissent place
+  // à une table explicite : chaque vague a son intention, et se règle
+  // seule sans déformer toutes les autres.
+  //
+  // Les paliers de répit (5, 10, 15) sont maintenant POSÉS, au lieu de
+  // tomber sur les multiples de 5 par effet de bord d'un modulo.
+  //
+  // Calibrée au simulateur (sim/balance-sim.js, 400 parties par palier) :
+  // le poids d'une vague (effectif x PV) suit la courbe déjà éprouvée du
+  // jeu, compressée d'environ 1,35 en index — la vague 20 pèse ce que
+  // pesait la vague 27, pas davantage. Résultat mesuré pour un joueur
+  // "correct" au bout des 20 vagues : 87% en Facile, 59% en Normal, 27%
+  // en Difficile, 18% en Très difficile.
+  // GARDER SYNCHRONISÉ avec K.WAVES dans sim/balance-sim.js.
+  const WAVE_COUNT = 20;
+  const WAVES = [
+    // effectif, PV, vitesse, cadence, échelles, débarquement
+    { n: 6,  hp: 2, sp: 26, iv: 1.05, lad: 0, boat: false }, // 1  éclaireurs
+    { n: 9,  hp: 2, sp: 28, iv: 1.00, lad: 0, boat: false }, // 2
+    { n: 11, hp: 2, sp: 30, iv: 0.95, lad: 0, boat: false }, // 3
+    { n: 14, hp: 3, sp: 31, iv: 0.90, lad: 1, boat: false }, // 4  première échelle
+    { n: 12, hp: 3, sp: 33, iv: 0.88, lad: 1, boat: false }, // 5  RÉPIT
+    { n: 19, hp: 3, sp: 35, iv: 0.82, lad: 1, boat: true  }, // 6  premier débarquement
+    { n: 22, hp: 4, sp: 36, iv: 0.76, lad: 1, boat: false }, // 7
+    { n: 25, hp: 4, sp: 38, iv: 0.70, lad: 1, boat: false }, // 8
+    { n: 27, hp: 4, sp: 40, iv: 0.64, lad: 1, boat: true  }, // 9
+    { n: 21, hp: 5, sp: 41, iv: 0.60, lad: 1, boat: false }, // 10 RÉPIT
+    { n: 33, hp: 5, sp: 43, iv: 0.54, lad: 1, boat: true  }, // 11
+    { n: 35, hp: 5, sp: 45, iv: 0.48, lad: 2, boat: false }, // 12
+    { n: 38, hp: 5, sp: 46, iv: 0.44, lad: 2, boat: true  }, // 13
+    { n: 41, hp: 6, sp: 48, iv: 0.40, lad: 2, boat: false }, // 14
+    { n: 30, hp: 6, sp: 49, iv: 0.40, lad: 2, boat: true  }, // 15 RÉPIT
+    { n: 46, hp: 6, sp: 51, iv: 0.38, lad: 2, boat: false }, // 16
+    { n: 46, hp: 6, sp: 53, iv: 0.37, lad: 3, boat: true  }, // 17
+    { n: 48, hp: 7, sp: 55, iv: 0.36, lad: 3, boat: true  }, // 18
+    { n: 46, hp: 7, sp: 57, iv: 0.35, lad: 3, boat: false }, // 19
+    { n: 49, hp: 7, sp: 58, iv: 0.35, lad: 3, boat: true  }  // 20 ASSAUT FINAL
+  ];
+  // au-delà de 20 le niveau est gagné ; le clamp protège les appels tardifs
+  function waveDef(w) { return WAVES[Math.min(Math.max(1, w), WAVE_COUNT) - 1]; }
   function waveSpawnCount(wave) {
-    const base = 3 + wave * 2;
-    return Math.max(1, Math.round(wave % 5 === 0 ? base * 0.7 : base));
+    return Math.max(1, Math.round(waveDef(wave).n * DIFFICULTY_TIERS[difficultyIdx].countMul));
   }
 
   function startWave() {
@@ -3695,7 +3751,7 @@
     // it's fading — instead of enemies spawning the instant the wave starts
     state.fightBanner = FIGHT_BANNER_DUR;
     state.spawnTimer = FIGHT_BANNER_SPAWN_DELAY;
-    state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
+    state.spawnInterval = waveDef(state.wave).iv;
 
     // last wave got slowed by the moat: a couple of this wave's spawns
     // will stop and lay a crossing instead of just wading through
@@ -3704,11 +3760,17 @@
     }
     state.moatSlowedThisWave = false;
 
-    // from wave 4 on, one attacker each wave brings a ladder — a guaranteed
-    // way onto the platform, bypassing the wall (and its jumpChance dice
-    // roll) entirely, unlike a regular attacker who only rarely scales it
-    // once the donjon is nearly ruined
-    if (state.wave >= 4) state.laddersToSpawn = 1;
+    // les échelles sont désormais dosées vague par vague dans WAVES (lad) :
+    // une échelle est un accès GARANTI à la plateforme, contrairement au
+    // saut qui dépend d'un jet de dés et de la ruine du donjon. En monter
+    // le nombre est le levier de tension le plus fort de la table — un
+    // premier jet à 5 par vague en fin d'arc effondrait le taux de
+    // réussite à 0%.
+    state.laddersToSpawn = waveDef(state.wave).lad;
+
+    // débarquement : posé par la table plutôt que sur un minuteur libre,
+    // pour que l'arc soit vraiment maîtrisé de bout en bout
+    if (waveDef(state.wave).boat) spawnBoat();
   }
 
   // manual early call: stacks a fresh wave's worth of spawns on top of
@@ -3732,7 +3794,7 @@
   // son tout début). maxBonus garde l'ancienne échelle (basée sur la
   // taille de la vague), juste réduit par la progression restante.
   function nextWaveBonus() {
-    const maxBonus = Math.max(1, Math.floor((3 + state.wave * 2) / 2));
+    const maxBonus = Math.max(1, Math.floor(waveSpawnCount(state.wave) / 2));
     if (state.waveState !== 'active') return maxBonus;
     const initial = Math.max(1, waveSpawnCount(state.wave));
     const remaining = state.toSpawn + state.enemies.length + state.siegeEngines.length;
@@ -3763,10 +3825,14 @@
     goldNum.textContent = state.gold;
     const pw = playerWorld();
     spawnFloatingGold(pw.x, pw.y, pw.z, bonus);
+    // l'arc s'arrête à WAVE_COUNT : appeler la suivante depuis la dernière
+    // vague n'a plus de sens, le bouton devient inerte (et se grise, voir
+    // updateNextWaveBonus)
+    if (state.wave >= WAVE_COUNT) return;
     state.wave++;
     updateWaveNum();
-    state.toSpawn += 3 + state.wave * 2;
-    state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
+    state.toSpawn += waveSpawnCount(state.wave);
+    state.spawnInterval = waveDef(state.wave).iv;
     state.waveState = 'active';
     updateNextWaveBonus();
     if (state.villagePanic) villageDispatchWave(); // même mobilisation que startWave() quand la vague est appelée en avance
@@ -3990,6 +4056,27 @@
       ? t('overlay_new_record')
       : t('overlay_best_wave') + bestWaveEver;
     document.getElementById('fakeAd').hidden = false;
+  }
+
+  // Victoire : même récap que la défaite, mais sans le gag de la fausse
+  // pub — celui-ci est une blague sur la défaite, il tomberait à plat sur
+  // une fin heureuse. On passe directement à l'écran, et le record
+  // enregistré est la vague atteinte comme ailleurs (ici, le maximum).
+  function showVictory() {
+    if (state.waveState === 'gameover') return;
+    state.waveState = 'gameover';
+    document.getElementById('overlayText').textContent = t('victory_text');
+    const isRecord = state.wave > bestWaveEver;
+    if (isRecord) {
+      bestWaveEver = state.wave;
+      try { localStorage.setItem('bo_bestWave', String(bestWaveEver)); } catch (e) { /* ignore */ }
+    }
+    // construit depuis WAVE_COUNT plutôt que figé dans la traduction :
+    // une chaîne en dur annoncerait toujours 20, même si l'arc changeait
+    document.getElementById('overlayWave').textContent = t('victory_waves_pre') + WAVE_COUNT + t('victory_waves_post');
+    document.getElementById('overlayGold').textContent = t('overlay_gold_earned') + state.totalGoldEarned;
+    document.getElementById('overlayRecord').textContent = t('victory_sub');
+    document.getElementById('overlay').hidden = false;
   }
 
   // the donjon never actually loses on its own — castleH clamps at
@@ -6536,6 +6623,10 @@
       // can't just sit there forever with no consequence — it still has to
       // be broken (ranged, slowly, or sortied against, faster) before the
       // wave is truly over.
+      // l'arc se referme ici : la vague 20 nettoyée, le niveau est gagné.
+      // C'est tout l'intérêt d'un niveau unique — il y a une fin, donc une
+      // victoire à raconter, et pas seulement un record à battre.
+      if (state.wave >= WAVE_COUNT) { showVictory(); return; }
       state.wave++;
       updateWaveNum();
       // a breather between waves: half of whatever's missing comes back,
@@ -6561,11 +6652,10 @@
     // débarquement par bateau : évènement indépendant des vagues normales
     // ("de temps en temps", pas mélangé — confirmé par Pierre), sur son
     // propre minuteur plutôt que lié à state.wave/startWave
-    state.boatTimer -= dt;
-    if (state.boatTimer <= 0) {
-      spawnBoat();
-      state.boatTimer = BOAT_EVENT_MIN_INTERVAL + Math.random() * (BOAT_EVENT_MAX_INTERVAL - BOAT_EVENT_MIN_INTERVAL);
-    }
+    // les débarquements sont maintenant déclenchés par la table des vagues
+    // (WAVES, champ boat) dans startWave(), et non plus par un minuteur
+    // libre — sur un arc de 20 vagues, un évènement au hasard pouvait
+    // tomber deux fois dans la même vague ou pas du tout de la partie
     updateBoats(dt);
 
     // enemies

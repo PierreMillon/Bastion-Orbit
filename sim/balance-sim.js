@@ -76,28 +76,77 @@ const K = {
   // vague 28-30, bon quasiment toujours jusque-là) puis reporté dans
   // index.html:enemyHp() — GARDER LES DEUX SYNCHRONISÉS.
   ENEMY_HP: 2,
-  // hpDivisor mutable : change-le (K.hpDivisor = X) pour tester un autre
+  // hpMul mutable : change-le (K.hpMul = X) pour tester un autre
   // palier de difficulté sans réassigner toute la fonction — voir
   // DIFFICULTY_TIERS plus bas, == DIFFICULTY_TIERS/enemyHp() dans
   // index.html. 4.5 = palier "Normal" par défaut.
-  hpDivisor: 4.5,
-  enemyHp: (wave) => 2 + Math.floor(wave / K.hpDivisor),
+  // ARC DE 20 VAGUES (2026-09-14) : le jeu devient un niveau unique qui se
+  // termine. Les formules (3+2w, 2+floor(w/div), 1.1-0.05w) sont remplacées
+  // par une table explicite — chaque vague a une intention lisible et se
+  // règle seule, sans déformer toutes les autres. C'était la demande :
+  // "un seul niveau avec 20 vagues, comme ça on pourra équilibrer
+  // beaucoup plus précisément".
+  //
+  // Les paliers de répit (5, 10, 15) sont maintenant POSÉS plutôt que
+  // tombant sur les multiples de 5 par effet de bord du modulo.
+  // GARDER SYNCHRONISÉ avec WAVES dans index.html.
+  WAVE_COUNT: 20,
+  WAVES: [
+    // effectif, PV, vitesse, cadence, échelles, débarquement.
+    // Calibrage : le "poids" d'une vague (effectif x PV) suit la courbe
+    // déjà éprouvée du jeu, compressée d'un facteur ~1,35 en index de
+    // vague — la vague 20 pèse ce que pesait la vague 27, pas davantage.
+    // Un premier jet plus raide (620 de poids et 5 échelles en vague 20)
+    // faisait tomber le joueur "correct" à 0% de réussite.
+    { n: 6,  hp: 2, sp: 26, iv: 1.05, lad: 0, boat: false }, // 1  éclaireurs
+    { n: 9,  hp: 2, sp: 28, iv: 1.00, lad: 0, boat: false }, // 2
+    { n: 11, hp: 2, sp: 30, iv: 0.95, lad: 0, boat: false }, // 3
+    { n: 14, hp: 3, sp: 31, iv: 0.90, lad: 1, boat: false }, // 4  première échelle
+    { n: 12, hp: 3, sp: 33, iv: 0.88, lad: 1, boat: false }, // 5  RÉPIT
+    { n: 19, hp: 3, sp: 35, iv: 0.82, lad: 1, boat: true  }, // 6  premier débarquement
+    { n: 22, hp: 4, sp: 36, iv: 0.76, lad: 1, boat: false }, // 7
+    { n: 25, hp: 4, sp: 38, iv: 0.70, lad: 1, boat: false }, // 8
+    { n: 27, hp: 4, sp: 40, iv: 0.64, lad: 1, boat: true  }, // 9
+    { n: 21, hp: 5, sp: 41, iv: 0.60, lad: 1, boat: false }, // 10 RÉPIT
+    { n: 33, hp: 5, sp: 43, iv: 0.54, lad: 1, boat: true  }, // 11
+    { n: 35, hp: 5, sp: 45, iv: 0.48, lad: 2, boat: false }, // 12
+    { n: 38, hp: 5, sp: 46, iv: 0.44, lad: 2, boat: true  }, // 13
+    { n: 41, hp: 6, sp: 48, iv: 0.40, lad: 2, boat: false }, // 14
+    { n: 30, hp: 6, sp: 49, iv: 0.40, lad: 2, boat: true  }, // 15 RÉPIT
+    { n: 46, hp: 6, sp: 51, iv: 0.38, lad: 2, boat: false }, // 16
+    { n: 46, hp: 6, sp: 53, iv: 0.37, lad: 3, boat: true  }, // 17
+    { n: 48, hp: 7, sp: 55, iv: 0.36, lad: 3, boat: true  }, // 18
+    { n: 46, hp: 7, sp: 57, iv: 0.35, lad: 3, boat: false }, // 19
+    { n: 49, hp: 7, sp: 58, iv: 0.35, lad: 3, boat: true  }  // 20 ASSAUT FINAL
+  ],
+  // au-delà de la vague 20 le jeu est gagné ; on prolonge quand même la
+  // dernière ligne pour que --waves=50 reste utilisable en diagnostic
+  waveDef: (w) => K.WAVES[Math.min(Math.max(1, w), K.WAVE_COUNT) - 1],
+  // le palier de difficulté devient un MULTIPLICATEUR de PV. L'ancien
+  // diviseur donnait 8 PV en Difficile ET en Très difficile à la vague 20
+  // (2+floor(20/3.2) = 2+floor(20/2.9) = 8) : les deux paliers étaient
+  // littéralement identiques en fin de partie. Le multiplicateur les
+  // sépare vraiment.
+  hpMul: 1.0,
+  enemyHp: (wave) => Math.max(1, Math.round(K.waveDef(wave).hp * K.hpMul)),
   ENEMY_WALL_DMG: 6,           // attackBase: castleH -= 6
   ENEMY_WALL_TICK: 1.2,        // attackBase: e.timer = 1.2
   ONTOP_TICK: 1.4,             // onTop: attaque toutes les 1.4s
   ONTOP_PLAYER_DMG: 1,         // onTop -> joueur: p.hp -= 1
   ONTOP_TURRET_DMG: 2,         // onTop -> tourelle: def.ref.hp -= 2
-  BASE_SPEED: 24,              // speed = 24 + wave*1.5
+  BASE_SPEED: 24,              // conservé : sert encore de repère hors table
   SPEED_PER_WAVE: 1.5,
+  WAVE_SPEED: (w) => K.waveDef(w).sp,
   // "dents de scie" (tension sawtooth, cf. Left 4 Dead AI Director /
   // analyses Kingdom Rush — voir BACKLOG.md) : sans ça, la pression monte
   // en ligne droite, sans jamais de palier de répit pour "recalibrer" le
   // joueur avant le pic suivant. Toutes les 5 vagues, une vague de
   // répit à -30% d'effectif — le pic suivant se ressent comme un vrai
   // pic, pas comme "encore plus de la même chose".
-  SPAWN_COUNT: (w) => Math.max(1, Math.round((3 + w * 2) * (w % 5 === 0 ? 0.7 : 1))),
-  SPAWN_INTERVAL: (w) => Math.max(0.35, 1.1 - w * 0.05), // startWave(): spawnInterval
-  LADDER_FROM_WAVE: 4,         // startWave(): if wave>=4, laddersToSpawn=1
+  countMul: 1.0,
+  SPAWN_COUNT: (w) => Math.max(1, Math.round(K.waveDef(w).n * K.countMul)),
+  SPAWN_INTERVAL: (w) => K.waveDef(w).iv,
+  WAVE_LADDERS: (w) => K.waveDef(w).lad,
   LADDER_SETUP_TIME: 2.2,      // LADDER_SETUP_TIME
   ROAD_CHANCE: 0.4,            // ROAD_CHANCE
   ROAD_SPEED_MUL: 1.45,        // ROAD_SPEED_MUL
@@ -209,13 +258,19 @@ const POLICIES = {
 };
 
 // paliers de difficulté == DIFFICULTY_TIERS dans index.html — GARDER
-// SYNCHRONISÉS. Un seul levier par palier (hpDivisor, via K.hpDivisor),
+// SYNCHRONISÉS. Un seul levier par palier (hpMul, via K.hpMul),
 // calibré séparément pour chacun (voir BACKLOG.md, section difficulté).
 const DIFFICULTY_TIERS = [
-  { key: 'facile', label: 'Facile', hpDivisor: 6.4 },
-  { key: 'normal', label: 'Normal', hpDivisor: 4.5 },
-  { key: 'difficile', label: 'Difficile', hpDivisor: 3.2 },
-  { key: 'tresDifficile', label: 'Très difficile', hpDivisor: 2.9 }
+  // Deux leviers par palier, et pas seulement les PV : les PV d'un ennemi
+  // sont un petit entier (2 à 7), si bien que round(hp*1.10) et
+  // round(hp*1.15) tombent sur LE MÊME entier — le palier est quantifié et
+  // Difficile revenait coller à Très difficile (27% contre 28% mesurés).
+  // L'effectif, lui, est un grand nombre : un multiplicateur dessus se
+  // règle finement. GARDER SYNCHRONISÉ avec DIFFICULTY_TIERS d'index.html.
+  { key: 'facile', label: 'Facile', hpMul: 0.8, countMul: 0.85 },
+  { key: 'normal', label: 'Normal', hpMul: 1.0, countMul: 1.0 },
+  { key: 'difficile', label: 'Difficile', hpMul: 1.08, countMul: 1.06 },
+  { key: 'tresDifficile', label: 'Très difficile', hpMul: 1.18, countMul: 1.14 }
 ];
 
 // ---------------------------------------------------------------------
@@ -250,7 +305,7 @@ function simulateRun(policyName, seed, maxWaves) {
   let toSpawn = K.SPAWN_COUNT(wave);
   let spawnInterval = K.SPAWN_INTERVAL(wave);
   let spawnTimer = 0.75; // FIGHT_BANNER_SPAWN_DELAY
-  let laddersToSpawn = wave >= K.LADDER_FROM_WAVE ? 1 : 0;
+  let laddersToSpawn = K.WAVE_LADDERS(wave);
   let bridgeBuildersLeft = 0;
   let siegeCheckTimer = K.SIEGE_CHECK_INTERVAL;
 
@@ -328,7 +383,7 @@ function simulateRun(policyName, seed, maxWaves) {
         const bridged = moatLevel > 0 && bridges > 0 && rng() < Math.min(0.6, bridges * 0.25);
         approaching.push({
           ladder: isLadder, builder: isBuilder, onRoad, bridged,
-          speed: K.BASE_SPEED + wave * K.SPEED_PER_WAVE,
+          speed: K.WAVE_SPEED(wave),
           dist: K.SPAWN_R_BASE - K.BASE_R,
           fled: false,
         });
@@ -499,7 +554,7 @@ function simulateRun(policyName, seed, maxWaves) {
       toSpawn = K.SPAWN_COUNT(wave);
       spawnInterval = K.SPAWN_INTERVAL(wave);
       spawnTimer = 0.75;
-      if (wave >= K.LADDER_FROM_WAVE) laddersToSpawn = 1;
+      laddersToSpawn = K.WAVE_LADDERS(wave);
       if (moatLevel > 0) bridgeBuildersLeft = K.BRIDGE_BUILDERS_PER_WAVE;
     }
   }
@@ -553,25 +608,25 @@ function runBatch(policyName, runs, maxWaves, checkpoints) {
 // runs augmenté. Sort avec un code non-zéro si une cible est ratée.
 // ---------------------------------------------------------------------
 // chaque cible précise son palier de difficulté (tier, une clé de
-// DIFFICULTY_TIERS) — sans ça, un seul K.hpDivisor global ne peut pas
+// DIFFICULTY_TIERS) — sans ça, un seul K.hpMul global ne peut pas
 // représenter les 4 paliers à la fois. "naïf" et "bon" ne sont testés
 // qu'au palier Normal (leur profil ne dépend pas vraiment du palier :
 // naïf perd partout, bon gagne presque partout aux waves testées).
 const REGRESSION_TARGETS = [
   { policy: 'naive', tier: 'normal', wave: 10, max: 0.15, label: 'naïf doit perdre (≤15% encore en vie à la vague 10, Normal)' },
-  { policy: 'good', tier: 'normal', wave: 25, min: 0.85, label: 'bon doit gagner presque toujours (≥85% à la vague 25, Normal)' },
-  { policy: 'correct', tier: 'facile', wave: 28, min: 0.70, label: 'correct en Facile (~85% visé, ≥70% à la vague 28)' },
-  { policy: 'correct', tier: 'normal', wave: 28, min: 0.45, max: 0.80, label: 'correct en Normal (~55-65% visé, zone de tension 45-80% à la vague 28)' },
-  { policy: 'correct', tier: 'normal', wave: 30, min: 0.35, max: 0.75, label: 'correct en Normal (~55-65% visé, bornes élargies à la vague 30)' },
-  { policy: 'correct', tier: 'difficile', wave: 28, min: 0.20, max: 0.55, label: 'correct en Difficile (~30-40% visé, 20-55% à la vague 28)' },
-  { policy: 'correct', tier: 'tresDifficile', wave: 28, max: 0.30, label: 'correct en Très difficile (~15-20% visé, ≤30% à la vague 28)' },
+  { policy: 'good', tier: 'normal', wave: 20, min: 0.85, label: 'bon doit finir le niveau presque toujours (≥85% à la vague 20, Normal)' },
+  { policy: 'correct', tier: 'facile', wave: 20, min: 0.70, label: 'correct en Facile (~85% visé, ≥70% au bout des 20 vagues)' },
+  { policy: 'correct', tier: 'normal', wave: 20, min: 0.45, max: 0.80, label: 'correct en Normal (~55-65% visé, zone de tension 45-80% au bout des 20 vagues)' },
+  { policy: 'correct', tier: 'normal', wave: 18, min: 0.50, max: 0.88, label: 'correct en Normal : l\'avant-dernier palier ne doit pas déjà tout trancher (50-88% à la vague 18)' },
+  { policy: 'correct', tier: 'difficile', wave: 20, min: 0.20, max: 0.55, label: 'correct en Difficile (~30-40% visé, 20-55% au bout des 20 vagues)' },
+  { policy: 'correct', tier: 'tresDifficile', wave: 20, max: 0.30, label: 'correct en Très difficile (~15-20% visé, ≤30% au bout des 20 vagues)' },
 ];
 
 function runRegressionCheck(runs) {
   console.log(`Vérification de régression (${runs} parties/politique)...\n`);
   let ok = true;
   // un run par (politique, palier), couvrant tous les paliers que ses
-  // cibles référencent — le hpDivisor du palier est posé juste avant
+  // cibles référencent — le hpMul du palier est posé juste avant
   // chaque lot, puis restauré (Normal) à la fin
   const byKey = {};
   for (const target of REGRESSION_TARGETS) {
@@ -581,10 +636,12 @@ function runRegressionCheck(runs) {
   const cache = {};
   for (const [k, { policy, tier, waves }] of Object.entries(byKey)) {
     const tierDef = DIFFICULTY_TIERS.find(t => t.key === tier);
-    K.hpDivisor = tierDef.hpDivisor;
+    K.hpMul = tierDef.hpMul;
+    K.countMul = tierDef.countMul;
     cache[k] = runBatch(policy, runs, Math.max(...waves) + 5, waves);
   }
-  K.hpDivisor = DIFFICULTY_TIERS.find(t => t.key === 'normal').hpDivisor;
+  K.hpMul = DIFFICULTY_TIERS.find(t => t.key === 'normal').hpMul;
+  K.countMul = DIFFICULTY_TIERS.find(t => t.key === 'normal').countMul;
   for (const target of REGRESSION_TARGETS) {
     const s = cache[target.policy + ':' + target.tier];
     const rate = s.survivalAt[target.wave];
@@ -606,7 +663,12 @@ function main() {
   const runs = runsArg ? parseInt(runsArg.split('=')[1], 10) : 60;
 
   if (args.includes('--check')) {
-    const ok = runRegressionCheck(runsArg ? runs : 80);
+    // 250 par défaut et pas 80 : à 80 parties le bruit atteint +/-6 points
+    // pour des cibles larges de 20, au point que Difficile a mesuré
+    // successivement 0%, 18%, 26% puis 19% sur des réglages de plus en
+    // plus FACILES. On ne peut pas régler contre une mesure qui bouge plus
+    // que l'effet qu'on cherche.
+    const ok = runRegressionCheck(runsArg ? runs : 250);
     process.exit(ok ? 0 : 1);
   }
 

@@ -3833,6 +3833,15 @@ Ce qui existe et s'en approche, pour ne pas confondre :
 
 À faire redicter par Pierre. Ne pas inventer une mécanique à sa place.
 
+**Redicté le 2026-09-14** : « Le seigneur doit pouvoir monter sur les
+tourelles pour attaquer si elle le bloque. »
+
+Lecture : aujourd'hui le seigneur se déplace le long du mur ; quand une
+tourelle se trouve sur son chemin, il ne doit pas rester coincé — il
+monte dessus et peut attaquer depuis là-haut. La tourelle cesse d'être
+un obstacle pour devenir un poste. Reste à préciser avec lui ce que la
+hauteur change vraiment (portée, angle, vulnérabilité).
+
 ## Trois orientations proposées le 2026-09-14 — analyse avant décision
 
 ### 1. Passer à un moteur de rendu 3D
@@ -3901,3 +3910,44 @@ régies de rewarded video visent les applis natives). Concevoir la
 mécanique de seconde chance comme une *mécanique de jeu* d'abord, gagnée
 en jouant ; brancher une vidéo dessus reste possible plus tard, mais ce
 n'est pas là que ce projet rapportera de l'argent.
+
+
+## v1.02 — arc de 20 vagues (2026-09-14)
+
+Décision prise : un seul niveau, 20 vagues, une victoire au bout.
+
+**Ce qui remplace quoi.** Les trois formules (`3+2w` pour l'effectif,
+`2+floor(w/div)` pour les PV, `1.1-0.05w` pour la cadence) laissent place
+à une table `WAVES` de 20 lignes, dupliquée à l'identique dans
+`sim/balance-sim.js`. Vitesse, échelles et débarquements y sont aussi,
+si bien que l'arc entier se lit et se règle d'un coup d'œil.
+
+**Ce que le simulateur a appris.**
+
+1. Un premier jet compressait 28 vagues en 20 beaucoup trop fort : poids
+   de 620 en vague 20 (contre 258 aujourd'hui) et jusqu'à 5 échelles par
+   vague (contre 1). Le joueur « correct » tombait à **0%** de réussite.
+   Le calibrage retenu vise un poids de vague qui suit la courbe déjà
+   éprouvée, compressée d'environ 1,35 en index : la vague 20 pèse ce que
+   pesait la vague 27.
+2. Les échelles sont le levier de tension le plus fort de la table — un
+   accès *garanti* à la plateforme, là où le saut dépend d'un jet de dés.
+   Elles montent de 0 à 3 sur tout l'arc, pas davantage.
+3. **Les paliers de difficulté étaient quantifiés.** Les PV d'un ennemi
+   sont un petit entier (2 à 7) : `round(hp*1.10)` et `round(hp*1.15)`
+   tombent sur le même entier. Difficile et Très difficile mesuraient 27%
+   et 28% — littéralement le même jeu. Chaque palier agit désormais sur
+   les PV *et* sur l'effectif, qui est un grand nombre et se règle donc
+   finement. Écarts obtenus : 89 / 58 / 32 / 18.
+4. **Le `--check` par défaut mentait.** À 80 parties, le bruit atteint
+   ±6 points pour des cibles larges de 20 : un palier a mesuré 0%, 18%,
+   26% puis 19% sur des réglages successivement plus *faciles*. Défaut
+   porté à 250 parties.
+
+**Vérifié dans le navigateur**, pas seulement au simulateur : la vague
+plafonne bien à 20 même en martelant le bouton 40 fois, et l'écran de
+victoire s'affiche par le vrai chemin de code (testé sur une copie à arc
+réduit, sans ajouter de trappe de test au jeu) — sans le gag de fausse
+pub, qui est une blague sur la défaite. Le récap est construit depuis
+`WAVE_COUNT` et non écrit en dur : une chaîne figée annonçait « 20 »
+même sur un arc d'une vague.
