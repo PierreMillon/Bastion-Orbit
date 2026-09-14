@@ -3984,3 +3984,37 @@ engins lointains sans monter sur une tourelle). À décider avec Pierre, et
 d'autant plus que c'est le même sujet que son idée d'étaler les engins de
 siège en distance. À noter aussi : le simulateur ne modélise pas du tout
 la portée, il ne pourra pas trancher à notre place.
+
+
+## v1.04 — étalement des engins de siège en distance (2026-09-14)
+
+Demande de Pierre : « les engins de siège doivent s'étaler en distance
+par rapport à la tour ».
+
+**Le constat.** Il n'existait que DEUX distances dans tout le jeu : le
+rayon du groupe (au pied du mur) ou `SIEGE_RANGED_R` = 300, pile. Tous
+les trébuchets de toutes les parties se posaient sur le même cercle
+invisible, au pixel près — d'où la sensation de masse uniforme.
+
+**La règle retenue.** Chaque type porte sa distance (`buildR`), plus une
+variation par engin (`SIEGE_BUILD_JITTER` = 35) :
+bouclier au contact (c'est un abri, sa place est devant), arbalète 150,
+trébuchet 300, tour de siège au contact (elle doit toucher le mur, c'est
+sa définition), bélier 380 puis il rampe.
+
+**Défaut attrapé par le test.** À 380 le bélier a été posé après coup :
+à 360, sa bande (325-395) recouvrait celle du trébuchet (265-335), si
+bien qu'un trébuchet pouvait se poser plus loin qu'un bélier et que
+l'étalement cessait de se lire. Les bandes sont désormais disjointes :
+115-185, 265-335, 345-415. Un contrôle lit le tableau directement dans
+`index.html` et vérifie la disjonction — il ne travaille pas sur une
+copie recopiée à la main.
+
+**Portée : décision de Pierre.** Pas de portée à instaurer pour le
+seigneur. La tourelle ne lui donne pas de l'allonge mais des dégâts,
+« type berserk » : x2 tant qu'il y est perché. C'est donc ça, et
+seulement ça, qui justifie d'y monter.
+
+Réserve à garder en tête : le simulateur ne modélise ni la position du
+seigneur ni la montée sur tourelle, il ne peut donc pas mesurer l'effet
+du x2. Le `--check` reste au vert, mais il ne dit rien sur ce point précis.

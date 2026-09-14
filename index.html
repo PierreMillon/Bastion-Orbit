@@ -731,7 +731,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v1.03</button>
+  <button id="versionBtn">v1.04</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -743,6 +743,7 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v1.04</b> — les <b>engins de siège s’étalent en distance</b>. Avant, il n’existait que deux distances dans tout le jeu : collé au mur, ou pile à 300 — tous les trébuchets se posaient sur le même cercle invisible. Désormais chaque type a sa bande : bouclier et tour de siège au contact, arbalète proche, trébuchet loin, bélier très loin, avec une variation par engin pour qu’aucun ne partage le rayon d’un autre. Et monter sur une tourelle double les dégâts du seigneur</div>
   <div><b>v1.03</b> — le seigneur <b>monte sur les tourelles</b>. Il grimpe tout seul en arrivant dessus et redescend en repartant : de là-haut il frappe plus fort, verse l’huile, et les assaillants montés sur la plateforme ne l’atteignent plus — ils s’en prennent à la tourelle sous ses pieds à la place. La tour de siège, elle, le touche encore : elle surplombe tout</div>
   <div><b>v1.02</b> — le jeu devient un <b>niveau unique de 20 vagues</b>, avec une vraie victoire au bout. Les vagues ne sont plus calculées par une formule mais écrites une par une : chacune a son effectif, ses points de vie, sa vitesse, sa cadence, ses échelles et son débarquement. Les paliers de répit (5, 10, 15) sont posés exprès, les débarquements aussi. Courbe réglée au simulateur sur 400 parties par palier : un joueur correct termine 89% du temps en Facile, 58% en Normal, 32% en Difficile, 18% en Très difficile. Au passage, Difficile et Très difficile donnaient exactement les mêmes points de vie en fin de partie — ils sont enfin distincts</div>
   <div><b>v1.01</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Un mode « défi : mat en 1 » tire au sort une position parmi six, chacune vérifiée comme légale et n’admettant qu’une seule solution. On peut aussi simplement attiser le feu et caresser le chat, sans enjeu. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
@@ -1920,7 +1921,10 @@
   // déclenchent exactement au même endroit plutôt qu'à trois seuils voisins.
   const TURRET_MOUNT_ANGLE = 0.12;
   const TURRET_MOUNT_LIFT = 15;  // surélévation visuelle, aussi l'origine des tirs
-  const TURRET_ATK_MUL = 1.5;    // le surplomb frappe plus fort
+  // Pierre a tranché (2026-09-14) : pas de portée à instaurer, la tourelle
+  // "donne juste des dégâts, type berserk". C'est donc ça, et seulement ça,
+  // qui justifie d'y monter — un poste de frappe, pas un poste de tir long.
+  const TURRET_ATK_MUL = 2;
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
   const N_SEG = 12; // demandé en session : divise par deux le nombre de facettes du donjon (24→12) — un polygone plus visiblement anguleux
@@ -2082,18 +2086,32 @@
   // changed to "very resistant" instead: still takes a while (~5x the
   // hits of a normal target) from the platform, but staying up top and
   // shooting is no longer a hard dead end if you don't want to sortie.
+  // DEMANDÉ EN SESSION (2026-09-14) : "les engins de siège doivent s'étaler
+  // en distance par rapport à la tour". Avant, il n'existait que DEUX
+  // distances dans tout le jeu : collé au mur, ou pile à SIEGE_RANGED_R —
+  // tous les trébuchets de la partie se posaient sur le même cercle
+  // invisible, au pixel près, ce qui les faisait lire comme une masse
+  // uniforme. `buildR` donne sa distance à chaque type (null = là où le
+  // groupe s'est formé, c'est-à-dire au pied du mur), et SIEGE_BUILD_JITTER
+  // fait que deux engins du même type ne partagent jamais leur rayon.
   const SIEGE_TIERS = [
-    { name: 'bouclier', hp: 6, passive: true, rangedResist: 0.2 },
-    { name: 'arbalète', hp: 8, dmg: 5, cooldown: 1.6 },
-    { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2, ranged: true },
-    { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true },
+    // le bouclier est un abri : sa place est devant, au contact
+    { name: 'bouclier', hp: 6, passive: true, rangedResist: 0.2, buildR: null },
+    { name: 'arbalète', hp: 8, dmg: 5, cooldown: 1.6, buildR: 150 },
+    { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2, ranged: true, buildR: 300 },
+    // la tour de siège doit toucher le mur pour servir à quelque chose :
+    // elle reste au contact, c'est sa définition même
+    { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true, buildR: null },
     // bélier (consigne du 2026-09-08, stats confirmées par Pierre : "très
     // tanky, très lent, gros dégâts au contact") — seul tier `crawl` : se
     // fabrique loin comme le trébuchet, mais au lieu de tirer à distance il
     // avance en rampant vers le mur (BELIER_CRAWL_SPEED) et ne frappe
     // qu'une fois arrivé au contact, en mêlée, très fort. hp très élevé —
     // il doit survivre toute la traversée sous le feu des tourelles.
-    { name: 'bélier', hp: 55, dmg: 22, cooldown: 3.4, crawl: true }
+    // 380 et non 360 : à 360 sa bande (325-395) recouvrait celle du
+    // trébuchet (265-335), si bien qu'un trébuchet pouvait se poser plus
+    // loin qu'un bélier — l'étalement ne se lisait plus
+    { name: 'bélier', hp: 55, dmg: 22, cooldown: 3.4, crawl: true, buildR: 380 }
   ];
   const SIEGE_GROUP_RADIUS = 68;  // how close stalled enemies must be to combine — raised (était 45) : les tiers 2/3 (trébuchet, tour) demandent 4-5 attaquants au même endroit, trop rare pour jamais apparaître avec un rayon aussi serré
   const SIEGE_CHECK_INTERVAL = 1.2;
@@ -2103,8 +2121,9 @@
   // nettement au-delà d'ATTACK_RANGE=260 pour que ni les tourelles ni le
   // seigneur sur les remparts ne puissent les toucher sans sortir), mais
   // encore bien en-deçà de SPAWN_R (>=480) pour rester visibles à l'écran.
-  const SIEGE_RANGED_R = 300;
-  const BELIER_CRAWL_SPEED = 4; // unités/s — ~57s pour traverser de SIEGE_RANGED_R au mur, "très lentement"
+  const SIEGE_RANGED_R = 300; // conservé comme repère ; la vraie distance vient de tier.buildR
+  const SIEGE_BUILD_JITTER = 35; // +/- unités, pour qu'aucun engin ne partage le rayon d'un autre
+  const BELIER_CRAWL_SPEED = 4; // unités/s — ~76s pour traverser depuis sa bande (380) jusqu'au mur, "très lentement"
   const TOWER_GROW_RATE = 0.28;   // height gained per second, capped at TOWER_MAX_H
   const TOWER_MAX_H = 4;
   const TOWER_DANGER_H = 3;       // tall enough to start hitting the platform directly
@@ -4230,7 +4249,11 @@
       // mur (ils y ont marché comme les autres, sinon ils ne se
       // regrouperaient jamais), mais l'engin fini apparaît directement
       // positionné au loin, même angle, comme s'il venait d'y être monté
-      const r = (tier.ranged || tier.crawl) ? SIEGE_RANGED_R : Math.hypot(ax, az);
+      // distance propre au type, plus une variation par engin : la
+      // profondeur du champ de bataille devient lisible d'un coup d'œil
+      const r = tier.buildR === null
+        ? Math.hypot(ax, az)
+        : Math.max(BASE_R + 30, tier.buildR + (Math.random() - 0.5) * 2 * SIEGE_BUILD_JITTER);
       state.siegeEngines.push({
         angle, r,
         tierIdx, soldiers, hp: tier.hp, maxHp: tier.hp, atkTimer: tier.cooldown, growH: 0
