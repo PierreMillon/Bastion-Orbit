@@ -731,7 +731,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v1.02</button>
+  <button id="versionBtn">v1.03</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -743,6 +743,7 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v1.03</b> — le seigneur <b>monte sur les tourelles</b>. Il grimpe tout seul en arrivant dessus et redescend en repartant : de là-haut il frappe plus fort, verse l’huile, et les assaillants montés sur la plateforme ne l’atteignent plus — ils s’en prennent à la tourelle sous ses pieds à la place. La tour de siège, elle, le touche encore : elle surplombe tout</div>
   <div><b>v1.02</b> — le jeu devient un <b>niveau unique de 20 vagues</b>, avec une vraie victoire au bout. Les vagues ne sont plus calculées par une formule mais écrites une par une : chacune a son effectif, ses points de vie, sa vitesse, sa cadence, ses échelles et son débarquement. Les paliers de répit (5, 10, 15) sont posés exprès, les débarquements aussi. Courbe réglée au simulateur sur 400 parties par palier : un joueur correct termine 89% du temps en Facile, 58% en Normal, 32% en Difficile, 18% en Très difficile. Au passage, Difficile et Très difficile donnaient exactement les mêmes points de vie en fin de partie — ils sont enfin distincts</div>
   <div><b>v1.01</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Un mode « défi : mat en 1 » tire au sort une position parmi six, chacune vérifiée comme légale et n’admettant qu’une seule solution. On peut aussi simplement attiser le feu et caresser le chat, sans enjeu. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
   <div><b>v1.00</b> — retrait des liens vers Forge Line et Knight Wars dans le menu : le portfolio (pierremillon.github.io/pierremillon) est désormais l'endroit unique pour naviguer d'un jeu à l'autre</div>
@@ -1909,6 +1910,17 @@
   const PATROL_STEP_BACK = 16;       // recul radial pendant une rotation rapide
   const PATROL_OMEGA_THRESHOLD = 0.6; // |omega| au-delà duquel la caméra est "en train de tourner"
   const TURRET_HEAL = 4;        // hp/s while player repairs a turret
+  // DEMANDÉ EN SESSION (2026-09-14) : "le seigneur doit pouvoir monter sur
+  // les tourelles pour attaquer si elle le bloque". Constat avant travaux :
+  // une tourelle ne bloquait rien du tout — ce n'est qu'un angle sur le mur,
+  // le seigneur la traversait. La montée est donc créée de toutes pièces.
+  // Montée AUTOMATIQUE (choix de Pierre) : il grimpe en arrivant dessus et
+  // redescend en repartant, aucun bouton à apprendre. Même largeur d'accroche
+  // que la réparation et l'huile (0.12 rad), pour que les trois gestes se
+  // déclenchent exactement au même endroit plutôt qu'à trois seuils voisins.
+  const TURRET_MOUNT_ANGLE = 0.12;
+  const TURRET_MOUNT_LIFT = 15;  // surélévation visuelle, aussi l'origine des tirs
+  const TURRET_ATK_MUL = 1.5;    // le surplomb frappe plus fort
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
   const N_SEG = 12; // demandé en session : divise par deux le nombre de facettes du donjon (24→12) — un polygone plus visiblement anguleux
@@ -3448,6 +3460,8 @@
       sortieTimer: SORTIE_TICK,
       repairTimer: REPAIR_TICK,
       oilTimer: OIL_TICK,
+      onTurret: null,   // tourelle sur laquelle il se tient, sinon null
+
       oilDripTimer: 0, // separate, faster cadence — just the falling-drops visual, not the damage tick
       repairMaxedPlayed: false,
       // sortied out with nothing to fight: wanders the grounds instead of
@@ -3469,9 +3483,22 @@
     return state.castleH + PLATFORM_H;
   }
 
+  // Est-il sur une tourelle ? Recalculé chaque frame plutôt que mémorisé :
+  // une tourelle peut être détruite sous ses pieds, et il descend de toute
+  // façon dès qu'il sort (groundPos), sans qu'aucun code n'ait à y penser.
+  function updateTurretMount() {
+    const p = state.player;
+    if (p.groundPos > 0.15) { p.onTurret = null; return; } // en sortie, il est en bas
+    let found = null;
+    for (const t of state.towers) {
+      if (Math.abs(angDiff(p.angle, t.angle)) < TURRET_MOUNT_ANGLE) { found = t; break; }
+    }
+    p.onTurret = found;
+  }
   function playerWorld() {
     const p = state.player;
-    const y = platformTopY() * (1 - p.groundPos); // sortied out: down at ground level
+    let y = platformTopY() * (1 - p.groundPos); // sortied out: down at ground level
+    if (p.onTurret) y += TURRET_MOUNT_LIFT;     // perché sur une tourelle
     return worldPos(p.r, p.angle, y);
   }
 
@@ -6202,6 +6229,7 @@
     const threat = nearestEnemyTo(guardPos, ATTACK_RANGE);
     const damagedTurret = threat ? null : nearestDamagedTurret(p.angle);
     const sortieTarget = state.sortieHeld ? nearestSortieTarget(p.angle) : null;
+    updateTurretMount();
     const oilTower = state.oilHeld ? nearestTower(p.angle) : null;
 
     // calin only ever triggers if she's already down there — holding the
@@ -6845,8 +6873,14 @@
         if (e.timer <= 0) {
           const lx = e.r * Math.cos(e.angle), lz = e.r * Math.sin(e.angle);
           const def = nearestDefender(lx, lz);
-          if (def.type === 'player') {
+          // perché sur une tourelle, il est hors d'atteinte de ceux qui
+          // viennent de monter sur la plateforme : ils s'en prennent à la
+          // tourelle sous ses pieds à la place. La pression ne disparaît
+          // donc pas, elle change de cible.
+          if (def.type === 'player' && !p.onTurret) {
             hurtPlayer(1); // centralisé — voir le bonus de défense de la prière
+          } else if (def.type === 'player') {
+            p.onTurret.hp -= 2;
           } else {
             def.ref.hp -= 2;
           }
@@ -6886,6 +6920,9 @@
         if (tier.isTower) {
           const lx = s.r * Math.cos(s.angle), lz = s.r * Math.sin(s.angle);
           const def = nearestDefender(lx, lz);
+          // la tour de siège, elle, surplombe la plateforme : être sur une
+          // tourelle ne met pas à l'abri d'elle (Pierre : à l'abri du corps
+          // à corps, "mais les engins de siège à distance si")
           if (def.type === 'player') hurtPlayer(1);
           else def.ref.hp -= tier.dmg;
         } else if (tier.ranged) {
@@ -6915,7 +6952,7 @@
     if (p.behavior === 'combat') {
       p.atkTimer -= dt;
       if (p.atkTimer <= 0) {
-        const from = worldPos(p.r, p.angle, platformTopY());
+        const from = playerWorld(); // suit la surélévation quand il est sur une tourelle
         const target = princessDecoyTarget || nearestVisibleTarget();
         if (target) {
           // facing it dead-on hits much harder; drifting off to the side
@@ -6925,6 +6962,7 @@
           // tir du seigneur depuis les remparts, "dans l'axe" — PAS la
           // charge en sortie, précisée à part) — voir PLAYER_RAMPART_ATK_MUL
           let dmg = facingMultiplier(target.angle) * PLAYER_RAMPART_ATK_MUL;
+          if (p.onTurret) dmg *= TURRET_ATK_MUL; // le surplomb frappe plus fort
           if (state.princessDead) dmg *= PRINCESS_DEATH_ATK_MUL;
           else if (state.princess.pos < 0.08) dmg *= PRINCESS_ATK_BONUS;
           fire(from, target, dmg);

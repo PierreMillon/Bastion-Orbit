@@ -3951,3 +3951,36 @@ réduit, sans ajouter de trappe de test au jeu) — sans le gag de fausse
 pub, qui est une blague sur la défaite. Le récap est construit depuis
 `WAVE_COUNT` et non écrit en dur : une chaîne figée annonçait « 20 »
 même sur un arc d'une vague.
+
+
+## v1.03 — le seigneur monte sur les tourelles (2026-09-14)
+
+Mécanique redictée par Pierre après que le texte d'origine se soit perdu.
+Montée **automatique** (son choix) : il grimpe en arrivant sur la
+tourelle, redescend en repartant, aucun bouton. Seuil d'accroche à 0,12
+rad — le même que la réparation et l'huile, pour que les trois gestes se
+déclenchent exactement au même endroit.
+
+Les quatre effets demandés, trois livrés :
+- **frappe plus fort** : x1,5 sur le tir depuis la tourelle ;
+- **à l'abri du corps à corps** : les assaillants montés sur la
+  plateforme ne l'atteignent plus et s'en prennent à la tourelle sous ses
+  pieds — la pression ne disparaît pas, elle change de cible. La tour de
+  siège, elle, le touche encore : elle surplombe la plateforme ;
+- **huile de là-haut** : la position d'huile coïncidait déjà avec l'angle
+  de la tourelle, il y est désormais visiblement perché.
+
+**Quatrième effet non livré, et pourquoi.** « Il tire plus loin » n'a
+aucun sens en l'état : la portée du seigneur n'est aujourd'hui limitée
+que par le bord de l'écran. `ATTACK_RANGE` (260) n'est utilisé nulle part
+pour ses tirs — uniquement pour la logique de garde de la princesse — et
+ce, malgré deux commentaires affirmant le contraire, dont celui qui
+justifie de bâtir les trébuchets à 300 « hors de portée du seigneur sur
+les remparts ». Ils sont donc parfaitement touchables depuis le mur.
+
+Donner un bonus de portée suppose d'abord d'**instaurer** une portée, ce
+qui est un vrai changement de forme du jeu (le mur ne répondrait plus aux
+engins lointains sans monter sur une tourelle). À décider avec Pierre, et
+d'autant plus que c'est le même sujet que son idée d'étaler les engins de
+siège en distance. À noter aussi : le simulateur ne modélise pas du tout
+la portée, il ne pourra pas trancher à notre place.
