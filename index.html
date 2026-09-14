@@ -65,7 +65,7 @@
   #secondRow {
     background: #3b3222;
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 8px 8px 4px;
   }
@@ -75,9 +75,13 @@
     color: #f2ead9;
     padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     gap: 6px;
   }
+
+  /* boutons les plus utilisés groupés à droite, les autres à gauche
+     (demandé en session, voir commentaire HTML sur #bottomStack) */
+  .btnGroup { display: flex; gap: 8px; }
 
   #menuBtn {
     background: none;
@@ -183,18 +187,33 @@
   #bottomStack button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 11px 6px;
+    padding: 11px 4px;
     border: none;
     border-radius: 10px;
     background: #b5482e;
     color: #f2ead9;
-    font-size: 11.5px;
+    font-size: 10.5px;
     font-family: inherit;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   #bottomStack button:disabled { opacity: 0.4; }
+  /* DEMANDÉ EN SESSION (2026-09-12, Pierre : "le prix c'est juste un
+     chiffre, y a pas de parenthèse, il est juste en dessous du mot") :
+     affordText() construit maintenant deux lignes (voir plus bas) — le
+     prix est un <span> à part, en bloc pour forcer le retour à la ligne,
+     un ton plus clair/discret que le libellé (même esprit que .volumeVal
+     ailleurs dans cette page pour un chiffre secondaire). Règle partagée
+     (pas juste #bottomStack) : affordText() alimente aussi moulinBtn/
+     egliseBtn (.worldBtn), même traitement partout où un prix s'affiche. */
+  .btnCost {
+    display: block;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(242,234,217,0.75);
+    margin-top: 1px;
+  }
 
   /* Réparer/Sortie only ever involve the lord — his own sprite blue.
      Descendre/Remonter only ever involves the princess — her sprite pink.
@@ -347,7 +366,17 @@
      déborder de sa propre largeur max, le curseur débordant visiblement
      à droite des autres boutons du menu. Piège flexbox classique, fix
      standard. */
-  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; }
+  /* BUG TROUVÉ EN SESSION (2026-09-12, Pierre : "ils sont juste des
+     boutons, on/off que ça marche vraiment") : le code JS des deux
+     curseurs était correct (volume vraiment proportionnel, pas juste
+     muet/pas muet — vérifié) ; sur mobile, sans touch-action, le
+     navigateur peut interpréter un glissé horizontal sur le curseur comme
+     un DÉFILEMENT du menu (qui, lui, défile verticalement) plutôt qu'un
+     vrai glissé du curseur — ne laissant qu'un simple TAP (qui définit la
+     valeur au point touché, ressemble à un bouton on/off) passer. Fix
+     standard : touch-action: none retire l'input du système de gestes de
+     défilement du navigateur, tout le glissé lui revient. */
+  .volumeRow input[type="range"] { flex: 1; min-width: 0; accent-color: #f2ead9; touch-action: none; }
   .volumeRow .volumeVal { flex: none; width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
   body.phosphor .volumeRow {
     background: var(--ph-fill);
@@ -392,6 +421,13 @@
   body.phosphor #seedInput, body.phosphor #seedRow button {
     background: rgba(0,0,0,0.3); color: var(--ph-text);
   }
+  /* confirmation intégrée à la page pour Nouvelle carte/Charger (voir
+     seedPendingAction) — remplace confirm() natif, cf. commentaire HTML */
+  #seedConfirmRow { display: flex; flex-direction: column; gap: 6px; }
+  #seedConfirmRow[hidden] { display: none; }
+  #seedConfirmRow p { margin: 0; line-height: 1.35; }
+  #seedConfirmRow .seedConfirmBtns { display: flex; gap: 6px; }
+  #seedConfirmRow .seedConfirmBtns button { flex: 1; }
 
   /* fausse pub à la défaite : gag volontairement criard, aux antipodes du
      reste de l'interface (fond parchemin sobre) — c'est le but */
@@ -519,6 +555,77 @@
     border-radius: 6px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
   }
+  /* mini-jeu d'échecs (DEMANDÉ EN SESSION, 2026-09-13) : on joue dans un
+     panneau à part, pas en isométrique sur la table — à 0,84 unité de large
+     dans la pièce, une case ferait ~6 px, injouable au doigt. */
+  /* Le dernier rempart : la seconde chance, proposée au moment exact où le
+     donjon allait tomber. Overlay le plus haut du jeu — c'est la seule
+     décision qui compte à cet instant. */
+  #lastStandOverlay {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    padding: 20px; box-sizing: border-box;
+    background: rgba(24,6,4,0.93);
+    text-align: center;
+  }
+  #lastStandOverlay[hidden] { display: none; }
+  #lastStandTitle { color: #ffcf7a; font-size: 19px; font-weight: 600; }
+  #lastStandText { color: #e8d6b8; font-size: 13px; line-height: 1.5; max-width: 340px; }
+  #lastStandCount { color: #c95a3f; font-size: 26px; font-variant-numeric: tabular-nums; }
+  #lastStandOverlay button {
+    border: none; border-radius: 9px; padding: 11px 18px;
+    font-size: 13px; font-family: inherit; cursor: pointer;
+    background: #b5482e; color: #f2ead9;
+  }
+  #lastStandOverlay button.ghost { background: rgba(242,234,217,0.16); font-size: 12px; padding: 8px 14px; }
+
+  #chessBtn { z-index: 26; }
+  #chessOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 27;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    box-sizing: border-box;
+    background: rgba(12,7,4,0.94);
+  }
+  #chessOverlay[hidden] { display: none; }
+  /* la légende et le bouton de la salle sont sous le panneau (z-index 25
+     contre 27) mais transparaissaient à travers son fond, et leur texte se
+     superposait au statut de la partie — masqués pendant qu'on joue, le
+     halo chaud de la pièce derrière suffit à garder le contexte */
+  body.chessOpen .cosyCaption, body.chessOpen #cosyClose { visibility: hidden; }
+  #chessCanvas {
+    width: min(430px, 86vw);
+    height: min(430px, 86vw);
+    max-height: 58vh;
+    max-width: 58vh;
+    border-radius: 6px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    touch-action: none;
+  }
+  #chessStatus {
+    color: #d9b98a;
+    font-size: 12.5px;
+    font-style: italic;
+    text-align: center;
+    max-width: min(430px, 86vw);
+    min-height: 1.3em;
+  }
+  #chessPromo, #chessBar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  #chessPromo[hidden] { display: none; }
+  #chessOverlay button {
+    border: none; border-radius: 8px; padding: 9px 14px;
+    font-size: 12px; font-family: inherit;
+    background: #b5482e; color: #f2ead9; cursor: pointer;
+  }
+  #chessOverlay button.ghost { background: rgba(242,234,217,0.16); }
+
   .cosyCaption {
     color: #d9b98a;
     font-size: 12px;
@@ -631,6 +738,9 @@
      mais repositionné dans le repère du canvas cosy (cosyIso), pas
      project()/rot du monde extérieur (voir updatePriestBtn). -->
 <button id="priestBtn" class="worldBtn" hidden></button>
+<!-- échiquier de la table cosy : même bouton flottant ancré au décor que le
+     prêtre, mais il ouvre le panneau de jeu (voir updateChessBtn). -->
+<button id="chessBtn" class="worldBtn" hidden></button>
 <!-- maison de la sorcière (item 5, consigne du 2026-09-09) : au tap, un
      message plutôt qu'un achat — pas un bouton, une bulle de texte
      (worldMsg, pas worldBtn) ; même position ancrée au bâtiment, même
@@ -643,7 +753,7 @@
   <div class="stat"><span id="goldNum">0</span></div>
   <div class="spacer"></div>
   <button id="cosyBtn" aria-label="Voir l'intérieur du donjon">🔥</button>
-  <button id="versionBtn">v1.00</button>
+  <button id="versionBtn">v1.05</button>
 </div>
 
 <!-- accroche premier lancement (2026-09-10, item 3 de la réflexion
@@ -655,6 +765,11 @@
 </div>
 
 <div id="changelog" hidden>
+  <div><b>v1.05</b> — <b>Le dernier rempart</b> : quand le donjon allait tomber, il vous reste un souffle. Tenir repousse tout ce qui mordait le mur, rend un tiers de la hauteur et vous laisse une vague pour vous refaire — une seule fois par partie, et vous avez huit secondes pour choisir (ne rien choisir, c’est renoncer). Le monde est en pause pendant la décision</div>
+  <div><b>v1.04</b> — les <b>engins de siège s’étalent en distance</b>. Avant, il n’existait que deux distances dans tout le jeu : collé au mur, ou pile à 300 — tous les trébuchets se posaient sur le même cercle invisible. Désormais chaque type a sa bande : bouclier et tour de siège au contact, arbalète proche, trébuchet loin, bélier très loin, avec une variation par engin pour qu’aucun ne partage le rayon d’un autre. Et monter sur une tourelle double les dégâts du seigneur</div>
+  <div><b>v1.03</b> — le seigneur <b>monte sur les tourelles</b>. Il grimpe tout seul en arrivant dessus et redescend en repartant : de là-haut il frappe plus fort, verse l’huile, et les assaillants montés sur la plateforme ne l’atteignent plus — ils s’en prennent à la tourelle sous ses pieds à la place. La tour de siège, elle, le touche encore : elle surplombe tout</div>
+  <div><b>v1.02</b> — le jeu devient un <b>niveau unique de 20 vagues</b>, avec une vraie victoire au bout. Les vagues ne sont plus calculées par une formule mais écrites une par une : chacune a son effectif, ses points de vie, sa vitesse, sa cadence, ses échelles et son débarquement. Les paliers de répit (5, 10, 15) sont posés exprès, les débarquements aussi. Courbe réglée au simulateur sur 400 parties par palier : un joueur correct termine 89% du temps en Facile, 58% en Normal, 32% en Difficile, 18% en Très difficile. Au passage, Difficile et Très difficile donnaient exactement les mêmes points de vie en fin de partie — ils sont enfin distincts</div>
+  <div><b>v1.01</b> — l’échiquier de la salle du donjon devient un vrai jeu : partie complète contre la princesse (ou le prêtre si elle n’est plus là), toutes les règles — roques, prise en passant, promotion, pat, nulle — générateur de coups vérifié par tests perft. La partie reste en place quand on retourne au mur : on peut poser trois coups, aller défendre, revenir. Un mode « défi : mat en 1 » tire au sort une position parmi six, chacune vérifiée comme légale et n’admettant qu’une seule solution. On peut aussi simplement attiser le feu et caresser le chat, sans enjeu. Plus : ambiance sonore très douce en fondu à l’entrée de la salle, feu agrandi, tonneaux statiques retirés, paysans réfugiés visibles et qui se déplacent près du feu</div>
   <div><b>v1.00</b> — retrait des liens vers Forge Line et Knight Wars dans le menu : le portfolio (pierremillon.github.io/pierremillon) est désormais l'endroit unique pour naviguer d'un jeu à l'autre</div>
   <div><b>v0.99</b> — refonte procédurale du monde : routes, cœur de village, maisons, ferme et maison de la sorcière sont maintenant générés depuis une graine (rejet-échantillonnage en direct, contre les vraies routes/le vrai ruisseau/le vrai moulin) plutôt que placés à la main un par un — la vraie réponse aux croisements de routes qui recassaient régulièrement. Graine visible et partageable dans le menu, "Nouvelle carte" pour en tirer une autre, "Charger" pour reprendre celle d'un ami (même graine = même village, à l'identique)</div>
   <div><b>v0.98</b> — suite de l'amélioration de l'expérience : accroche discrète au tout premier lancement (une seule fois, jamais bloquante) ; petite flèche au bord de l'écran quand un coup au château vient de hors du cadre (surtout utile zoomé) ; sons d'achat distincts du coup de mêlée/réparation, le caillou de trébuchet sonne différemment d'un tir normal, jardin et tourelle ne sont plus silencieux à l'achat</div>
@@ -749,18 +864,33 @@
   <div><b>v0.8</b> — douves cachées, réparation de secours, son</div>
 </div>
 
+<!-- DEMANDÉ EN SESSION (2026-09-12) : "les boutons les plus souvent
+     utilisés doivent être à droite de l'écran, les autres à gauche" —
+     chaque rangée est scindée en deux groupes (justify-content:
+     space-between sur la rangée, voir CSS) plutôt que centrée. Sortie et
+     Réparer (boucle de combat, utilisés à chaque vague) et Tourelle
+     (rachetée très régulièrement) à droite ; Descendre/Huile (occasionnels)
+     et Jardin/Douves/Cheval (achats ponctuels) à gauche. -->
 <div id="bottomStack">
   <div id="secondRow">
-    <button id="repairBtn">Réparer</button>
-    <button id="princessBtn">Descendre</button>
-    <button id="sortieBtn">Sortie</button>
-    <button id="oilBtn" disabled>Huile</button>
+    <div class="btnGroup">
+      <button id="princessBtn">Descendre</button>
+      <button id="oilBtn" disabled>Huile</button>
+    </div>
+    <div class="btnGroup">
+      <button id="repairBtn">Réparer</button>
+      <button id="sortieBtn">Sortie</button>
+    </div>
   </div>
   <div id="bottombar">
-    <button id="towerBtn">Tourelle</button>
-    <button id="gardenBtn">Jardin</button>
-    <button id="moatBtn">Douves</button>
-    <button id="horseBtn">Cheval</button>
+    <div class="btnGroup">
+      <button id="gardenBtn">Jardin</button>
+      <button id="moatBtn">Douves</button>
+      <button id="horseBtn">Cheval</button>
+    </div>
+    <div class="btnGroup">
+      <button id="towerBtn">Tourelle</button>
+    </div>
   </div>
 </div>
 
@@ -782,11 +912,25 @@
       <button id="seedLoadBtn">Charger</button>
     </div>
     <button id="seedNewBtn">🎲 Nouvelle carte</button>
+    <!-- DEMANDÉ EN SESSION (2026-09-12) : "le système de new map marche
+         pas" — confirm() natif était le seul de tout le jeu à ce
+         endroit ; probablement bloqué/silencieux dans certains contextes
+         mobiles (navigateur intégré d'une appli, PWA...), ce qui rendait
+         les deux boutons ci-dessus inertes sans aucun message d'erreur.
+         Remplacé par cette confirmation intégrée à la page (voir
+         seedPendingAction plus bas dans le script). -->
+    <div id="seedConfirmRow" hidden>
+      <p id="seedConfirmMsg"></p>
+      <div class="seedConfirmBtns">
+        <button id="seedConfirmYesBtn"></button>
+        <button id="seedConfirmCancelBtn"></button>
+      </div>
+    </div>
   </div>
   <div class="volumeRow">
     <label for="musicVolumeInput" id="musicVolumeLabel">Musique</label>
-    <input type="range" id="musicVolumeInput" min="0" max="100" value="35">
-    <span class="volumeVal" id="musicVolumeVal">35%</span>
+    <input type="range" id="musicVolumeInput" min="0" max="100" value="20">
+    <span class="volumeVal" id="musicVolumeVal">20%</span>
   </div>
   <div class="volumeRow">
     <label for="sfxVolumeInput" id="sfxVolumeLabel">Bruitages</label>
@@ -952,6 +1096,25 @@
   <button id="cosyClose">Retour au mur</button>
 </div>
 
+<div id="lastStandOverlay" hidden>
+  <div id="lastStandTitle"></div>
+  <div id="lastStandText"></div>
+  <div id="lastStandCount"></div>
+  <button id="lastStandTakeBtn"></button>
+  <button id="lastStandRefuseBtn" class="ghost"></button>
+</div>
+
+<div id="chessOverlay" hidden>
+  <canvas id="chessCanvas" width="640" height="640"></canvas>
+  <div id="chessStatus"></div>
+  <div id="chessPromo" hidden></div>
+  <div id="chessBar">
+    <button id="chessPuzzleBtn" class="ghost"></button>
+    <button id="chessNewBtn" class="ghost"></button>
+    <button id="chessCloseBtn"></button>
+  </div>
+</div>
+
 <div id="fakeAd" hidden>
   <div id="fakeAdBox">
     <div id="fakeAdClose">✕</div>
@@ -1026,10 +1189,31 @@
       overlay_wave_reached: 'Vague atteinte : ', overlay_gold_earned: 'Or gagné : ',
       overlay_new_record: '🏆 Nouveau record !', overlay_best_wave: 'Record : vague ',
       intro_hint: 'Glissez pour tourner la caméra et viser — dégâts bonus droit dans l\'axe. Sortie pour charger dehors, Réparer si le mur faiblit. Plus de détails dans ☰ Astuces.',
-      seed_label: 'Graine :', seed_placeholder: 'Coller une graine…', seed_load_btn: 'Charger',
+      seed_label: 'Graine :', seed_placeholder: 'Écris ou colle une graine…', seed_load_btn: 'Charger',
       seed_new_btn: '🎲 Nouvelle carte',
       seed_confirm_new: 'Générer une nouvelle carte ? Le village actuel sera remplacé (note la graine ci-dessus si tu veux pouvoir y revenir).',
-      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.'
+      seed_confirm_load: 'Charger cette graine ? Le village actuel sera remplacé par celui de la graine tapée.',
+      seed_confirm_yes: 'Confirmer', seed_confirm_cancel: 'Annuler',
+      chess_btn: 'Jouer aux échecs', chess_new: 'Nouvelle partie', chess_close: 'Revenir au feu',
+      chess_your_turn: 'À toi de jouer, les blancs.',
+      chess_check: 'Échec au roi.',
+      chess_thinking_f: 'Elle réfléchit…', chess_thinking_m: 'Il réfléchit…',
+      chess_mate_win: 'Échec et mat. La partie est à toi.',
+      chess_mate_lose: 'Échec et mat. Cette partie lui revient.',
+      chess_stale: 'Pat : partie nulle.', chess_draw: 'Partie nulle.',
+      chess_promo: 'Ton pion arrive au bout. En quoi le promeus-tu ?',
+      chess_queen: 'Dame', chess_rook: 'Tour', chess_bishop: 'Fou', chess_knight: 'Cavalier',
+      chess_puzzle_btn: 'Défi : mat en 1',
+      chess_puzzle_prompt: 'Les blancs jouent et matent en un coup.',
+      chess_puzzle_solved: 'Mat. Bien vu.',
+      chess_puzzle_missed: 'Ce n\'est pas le mat — on remet la position.',
+      victory_text: 'Le siège est levé, Seigneur. Le bastion a tenu.',
+      victory_waves_pre: 'Les ', victory_waves_post: ' vagues sont passées.',
+      victory_sub: 'Le village est encore debout — et vous aussi.',
+      ls_title: 'Le donjon vacille.',
+      ls_text: 'Il reste un souffle. Tenir maintenant repousse tout ce qui est au pied du mur et vous laisse une vague pour vous refaire. Une seule fois par partie.',
+      ls_take: 'Tenir bon', ls_refuse: 'Laisser tomber',
+      ls_used: 'Le dernier rempart a déjà servi.'
     },
     en: {
       menu_aria: 'Menu', wave_label: 'Wave',
@@ -1069,10 +1253,31 @@
       overlay_wave_reached: 'Wave reached: ', overlay_gold_earned: 'Gold earned: ',
       overlay_new_record: '🏆 New record!', overlay_best_wave: 'Best: wave ',
       intro_hint: 'Drag to turn the camera and aim — bonus damage dead-on. Sally to charge out, Repair if the wall weakens. More in ☰ Tips.',
-      seed_label: 'Seed:', seed_placeholder: 'Paste a seed…', seed_load_btn: 'Load',
+      seed_label: 'Seed:', seed_placeholder: 'Type or paste a seed…', seed_load_btn: 'Load',
       seed_new_btn: '🎲 New map',
       seed_confirm_new: 'Generate a new map? The current village will be replaced (note the seed above if you want to come back to it).',
-      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.'
+      seed_confirm_load: 'Load this seed? The current village will be replaced by the one from the typed seed.',
+      seed_confirm_yes: 'Confirm', seed_confirm_cancel: 'Cancel',
+      chess_btn: 'Play chess', chess_new: 'New game', chess_close: 'Back to the fire',
+      chess_your_turn: 'Your move, white.',
+      chess_check: 'Check.',
+      chess_thinking_f: 'She is thinking…', chess_thinking_m: 'He is thinking…',
+      chess_mate_win: 'Checkmate. The game is yours.',
+      chess_mate_lose: 'Checkmate. This one goes to her.',
+      chess_stale: 'Stalemate: a draw.', chess_draw: 'A draw.',
+      chess_promo: 'Your pawn reached the far side. Promote it to?',
+      chess_queen: 'Queen', chess_rook: 'Rook', chess_bishop: 'Bishop', chess_knight: 'Knight',
+      chess_puzzle_btn: 'Puzzle: mate in 1',
+      chess_puzzle_prompt: 'White to play and mate in one.',
+      chess_puzzle_solved: 'Mate. Well spotted.',
+      chess_puzzle_missed: 'Not mate — resetting the position.',
+      victory_text: 'The siege is broken, my lord. The bastion held.',
+      victory_waves_pre: 'All ', victory_waves_post: ' waves survived.',
+      victory_sub: 'The village still stands — and so do you.',
+      ls_title: 'The keep is buckling.',
+      ls_text: 'One breath left. Holding now throws back everything at the foot of the wall and buys you a wave to recover. Once per game.',
+      ls_take: 'Hold fast', ls_refuse: 'Let it fall',
+      ls_used: 'The last stand has already been spent.'
     }
   };
   function detectLang() {
@@ -1114,10 +1319,19 @@
     document.getElementById('seedInput').placeholder = t('seed_placeholder');
     document.getElementById('seedLoadBtn').textContent = t('seed_load_btn');
     document.getElementById('seedNewBtn').textContent = t('seed_new_btn');
+    document.getElementById('seedConfirmYesBtn').textContent = t('seed_confirm_yes');
+    document.getElementById('seedConfirmCancelBtn').textContent = t('seed_confirm_cancel');
     document.getElementById('closeFaq').textContent = t('close_menu');
     document.getElementById('langBtn').textContent = t('lang_prefix') + (lang === 'fr' ? t('lang_fr') : t('lang_en'));
     document.getElementById('cosyClose').textContent = t('cosy_return');
     document.querySelector('.cosyCaption').textContent = t('cosy_caption');
+    document.getElementById('chessPuzzleBtn').textContent = t('chess_puzzle_btn');
+    document.getElementById('lastStandTitle').textContent = t('ls_title');
+    document.getElementById('lastStandText').textContent = t('ls_text');
+    document.getElementById('lastStandTakeBtn').textContent = t('ls_take');
+    document.getElementById('lastStandRefuseBtn').textContent = t('ls_refuse');
+    document.getElementById('chessNewBtn').textContent = t('chess_new');
+    document.getElementById('chessCloseBtn').textContent = t('chess_close');
     document.querySelector('.fakeAdSiren').textContent = t('ad_siren');
     document.querySelector('.fakeAdTitle').textContent = t('ad_title');
     document.querySelector('.fakeAdBody').textContent = t('ad_body');
@@ -1197,7 +1411,7 @@
   function phosphorLine() { return `rgb(${PHOSPHOR_HUES[phosphorHue]})`; }
 
   // paliers de difficulté (demandé et validé en session, priorité n°1
-  // sur les 3 jeux) : hpDivisor est LE levier réglé au simulateur de
+  // sur les 3 jeux) : hpMul/countMul sont LES leviers réglés au simulateur de
   // difficulté (sim/balance-sim.js) — voir enemyHp() plus bas et
   // BACKLOG.md pour la méthode et les résultats mesurés. Cibles visées,
   // validées par Pierre (joueur "correct", mesuré vers la vague 28) :
@@ -1206,10 +1420,17 @@
   // ne change pas d'un palier à l'autre — un seul levier, plus simple à
   // garder cohérent avec le simulateur.
   const DIFFICULTY_TIERS = [
-    { key: 'facile', label: 'Facile', hpDivisor: 6.4 },
-    { key: 'normal', label: 'Normal', hpDivisor: 4.5 },
-    { key: 'difficile', label: 'Difficile', hpDivisor: 3.2 },
-    { key: 'tresDifficile', label: 'Très difficile', hpDivisor: 2.9 }
+    // Deux leviers par palier, et pas seulement les PV : les PV d'un ennemi
+    // sont un petit entier (2 à 7), si bien que round(hp*1.10) et
+    // round(hp*1.15) tombent sur LE MÊME entier — le palier était quantifié,
+    // et Difficile se retrouvait à égalité avec Très difficile (27% contre
+    // 28% mesurés au simulateur). L'effectif est un grand nombre : un
+    // multiplicateur dessus se règle finement.
+    // GARDER SYNCHRONISÉ avec DIFFICULTY_TIERS dans sim/balance-sim.js.
+    { key: 'facile', label: 'Facile', hpMul: 0.8, countMul: 0.85 },
+    { key: 'normal', label: 'Normal', hpMul: 1.0, countMul: 1.0 },
+    { key: 'difficile', label: 'Difficile', hpMul: 1.08, countMul: 1.06 },
+    { key: 'tresDifficile', label: 'Très difficile', hpMul: 1.18, countMul: 1.14 }
   ];
   let difficultyIdx = 1; // Normal par défaut
   try {
@@ -1459,7 +1680,7 @@
   const bgMusic = document.getElementById('bgMusic');
   const musicVolumeInput = document.getElementById('musicVolumeInput');
   const musicVolumeVal = document.getElementById('musicVolumeVal');
-  let musicVolume = 35;
+  let musicVolume = 20; // démarre à 20% (demandé en session, 2026-09-12)
   try {
     const v = parseInt(localStorage.getItem('bo_musicVolume'), 10);
     if (!isNaN(v) && v >= 0 && v <= 100) musicVolume = v;
@@ -1733,6 +1954,20 @@
   const PATROL_STEP_BACK = 16;       // recul radial pendant une rotation rapide
   const PATROL_OMEGA_THRESHOLD = 0.6; // |omega| au-delà duquel la caméra est "en train de tourner"
   const TURRET_HEAL = 4;        // hp/s while player repairs a turret
+  // DEMANDÉ EN SESSION (2026-09-14) : "le seigneur doit pouvoir monter sur
+  // les tourelles pour attaquer si elle le bloque". Constat avant travaux :
+  // une tourelle ne bloquait rien du tout — ce n'est qu'un angle sur le mur,
+  // le seigneur la traversait. La montée est donc créée de toutes pièces.
+  // Montée AUTOMATIQUE (choix de Pierre) : il grimpe en arrivant dessus et
+  // redescend en repartant, aucun bouton à apprendre. Même largeur d'accroche
+  // que la réparation et l'huile (0.12 rad), pour que les trois gestes se
+  // déclenchent exactement au même endroit plutôt qu'à trois seuils voisins.
+  const TURRET_MOUNT_ANGLE = 0.12;
+  const TURRET_MOUNT_LIFT = 15;  // surélévation visuelle, aussi l'origine des tirs
+  // Pierre a tranché (2026-09-14) : pas de portée à instaurer, la tourelle
+  // "donne juste des dégâts, type berserk". C'est donc ça, et seulement ça,
+  // qui justifie d'y monter — un poste de frappe, pas un poste de tir long.
+  const TURRET_ATK_MUL = 2;
   const REPAIR_TICK = 0.5;      // s between hammer hits on the castle
   const CASTLE_HEAL_STEP = 8;   // height gained per hammer hit
   const N_SEG = 12; // demandé en session : divise par deux le nombre de facettes du donjon (24→12) — un polygone plus visiblement anguleux
@@ -1866,8 +2101,12 @@
   // tactique réel se joue à tenir Sortie ou pas pendant qu'on est faible,
   // pas dans un menu séparé. Ne soigne QUE le seigneur (pas la princesse,
   // qui n'est pas là) — à la différence du câlin.
-  const FOUNTAIN_HEAL_HP_FRAC = 0.35;    // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
-  const FOUNTAIN_HEAL_TIME = 4;          // secondes pour se soigner entièrement depuis 0 — un peu plus lent que le câlin (3s), plus exposé/loin du mur
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "augmenter les pouvoirs de
+  // la fontaine") : seuil de déclenchement relevé (0.35 -> 0.5, priorité
+  // à la fontaine dès la moitié des PV plutôt qu'à 35%) et soin accéléré
+  // (4s -> 2.5s pour un plein soin depuis 0, plus rapide que le câlin).
+  const FOUNTAIN_HEAL_HP_FRAC = 0.5;     // sous ce seuil de PV, la fontaine passe devant tout le reste en sortie
+  const FOUNTAIN_HEAL_TIME = 2.5;        // secondes pour se soigner entièrement depuis 0
   // symétrique côté ennemis (signalé en session, 2026-09-09 : "les ennemis
   // aussi peuvent boire à la fontaine... d'où l'intérêt d'activer fort la
   // zone de l'église") — confirmé ACTIF (détour délibéré, pas juste
@@ -1890,18 +2129,32 @@
   // changed to "very resistant" instead: still takes a while (~5x the
   // hits of a normal target) from the platform, but staying up top and
   // shooting is no longer a hard dead end if you don't want to sortie.
+  // DEMANDÉ EN SESSION (2026-09-14) : "les engins de siège doivent s'étaler
+  // en distance par rapport à la tour". Avant, il n'existait que DEUX
+  // distances dans tout le jeu : collé au mur, ou pile à SIEGE_RANGED_R —
+  // tous les trébuchets de la partie se posaient sur le même cercle
+  // invisible, au pixel près, ce qui les faisait lire comme une masse
+  // uniforme. `buildR` donne sa distance à chaque type (null = là où le
+  // groupe s'est formé, c'est-à-dire au pied du mur), et SIEGE_BUILD_JITTER
+  // fait que deux engins du même type ne partagent jamais leur rayon.
   const SIEGE_TIERS = [
-    { name: 'bouclier', hp: 6, passive: true, rangedResist: 0.2 },
-    { name: 'arbalète', hp: 8, dmg: 5, cooldown: 1.6 },
-    { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2, ranged: true },
-    { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true },
+    // le bouclier est un abri : sa place est devant, au contact
+    { name: 'bouclier', hp: 6, passive: true, rangedResist: 0.2, buildR: null },
+    { name: 'arbalète', hp: 8, dmg: 5, cooldown: 1.6, buildR: 150 },
+    { name: 'trébuchet', hp: 14, dmg: 10, cooldown: 2.2, ranged: true, buildR: 300 },
+    // la tour de siège doit toucher le mur pour servir à quelque chose :
+    // elle reste au contact, c'est sa définition même
+    { name: 'tour de siège', hp: 20, dmg: 2, cooldown: 1.6, isTower: true, buildR: null },
     // bélier (consigne du 2026-09-08, stats confirmées par Pierre : "très
     // tanky, très lent, gros dégâts au contact") — seul tier `crawl` : se
     // fabrique loin comme le trébuchet, mais au lieu de tirer à distance il
     // avance en rampant vers le mur (BELIER_CRAWL_SPEED) et ne frappe
     // qu'une fois arrivé au contact, en mêlée, très fort. hp très élevé —
     // il doit survivre toute la traversée sous le feu des tourelles.
-    { name: 'bélier', hp: 55, dmg: 22, cooldown: 3.4, crawl: true }
+    // 380 et non 360 : à 360 sa bande (325-395) recouvrait celle du
+    // trébuchet (265-335), si bien qu'un trébuchet pouvait se poser plus
+    // loin qu'un bélier — l'étalement ne se lisait plus
+    { name: 'bélier', hp: 55, dmg: 22, cooldown: 3.4, crawl: true, buildR: 380 }
   ];
   const SIEGE_GROUP_RADIUS = 68;  // how close stalled enemies must be to combine — raised (était 45) : les tiers 2/3 (trébuchet, tour) demandent 4-5 attaquants au même endroit, trop rare pour jamais apparaître avec un rayon aussi serré
   const SIEGE_CHECK_INTERVAL = 1.2;
@@ -1911,8 +2164,9 @@
   // nettement au-delà d'ATTACK_RANGE=260 pour que ni les tourelles ni le
   // seigneur sur les remparts ne puissent les toucher sans sortir), mais
   // encore bien en-deçà de SPAWN_R (>=480) pour rester visibles à l'écran.
-  const SIEGE_RANGED_R = 300;
-  const BELIER_CRAWL_SPEED = 4; // unités/s — ~57s pour traverser de SIEGE_RANGED_R au mur, "très lentement"
+  const SIEGE_RANGED_R = 300; // conservé comme repère ; la vraie distance vient de tier.buildR
+  const SIEGE_BUILD_JITTER = 35; // +/- unités, pour qu'aucun engin ne partage le rayon d'un autre
+  const BELIER_CRAWL_SPEED = 4; // unités/s — ~76s pour traverser depuis sa bande (380) jusqu'au mur, "très lentement"
   const TOWER_GROW_RATE = 0.28;   // height gained per second, capped at TOWER_MAX_H
   const TOWER_MAX_H = 4;
   const TOWER_DANGER_H = 3;       // tall enough to start hitting the platform directly
@@ -1931,9 +2185,14 @@
   // huile bouillante: hold-to-act like Réparer/Sortie, but needs a turret
   // to pour from — the lord walks over and, once there, it periodically
   // scalds every attacker stalled at the wall near that turret's angle
-  const OIL_TICK = 1.6;
-  const OIL_DMG = 3;
-  const OIL_ANGULAR_WIDTH = 0.5; // how wide a stretch of wall one turret's oil covers
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "elle doit vraiment être
+  // efficace quand elle tombe") : dégâts et fréquence doublés/accélérés
+  // (3 tous les 1,6s ≈ 1,9 dps -> 6 tous les 1,2s = 5 dps), portée
+  // angulaire élargie (0.5 -> 0.65 rad) pour toucher plus d'ennemis
+  // massés au mur par déversement.
+  const OIL_TICK = 1.2;
+  const OIL_DMG = 6;
+  const OIL_ANGULAR_WIDTH = 0.65; // how wide a stretch of wall one turret's oil covers
   const GROUND_EASE_RATE = 4;     // how fast the lord transitions platform <-> ground
 
   const FIGHT_BANNER_DUR = 1.1;   // "FIGHT!" banner total lifetime, in seconds
@@ -2026,10 +2285,22 @@
   // à fond" sacralise tout le cœur du village, pas seulement l'église
   // elle-même. A forcé un repositionnement de HOUSES[7] (v0.79), qui
   // serait sinon tombée dans cette zone élargie — voir HOUSES plus haut.
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : le 1er palier doit être un
+  // CERCLE — pas une ellipse — et dépasser clairement l'église dans
+  // toutes les directions) : l'ancien rx=70/rz=45 ne dépassait qu'à peine
+  // la nef (32×60) côté longueur (70 vs 60) et à peine plus côté largeur
+  // (45 vs 32) — à peine visible. rx=rz=75 donne un vrai cercle avec une
+  // marge nette (15 unités côté longueur, 43 côté largeur) au-delà de la
+  // nef. Conséquence mécanique de ce changement : un cercle de rayon 75
+  // dépasse le rz=65 de l'ancien palier 2 — passer palier 1 -> 2 aurait
+  // RÉTRÉCI la zone en largeur, un vrai recul de protection à l'achat.
+  // Paliers 2 et 3 légèrement relevés en rz (65->80, 85->95) pour rester
+  // strictement croissants sur les deux axes à chaque palier — rx et cost
+  // inchangés, aucun autre équilibrage touché.
   const EGLISE_ZONE_TIERS = [
-    { cost: 25, rx: 70, rz: 45 },
-    { cost: 55, rx: 100, rz: 65 },
-    { cost: 100, rx: 135, rz: 85 },
+    { cost: 25, rx: 75, rz: 75 },
+    { cost: 55, rx: 100, rz: 80 },
+    { cost: 100, rx: 135, rz: 95 },
     { cost: 180, rx: 175, rz: 110 },
     { cost: 320, rx: 312, rz: 196 }
   ];
@@ -2245,9 +2516,42 @@
     }
     return min - r - STREAM_HALF_WIDTH;
   }
+  // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : une
+  // maison avec une roue posée quasiment dessus) : ne vérifiait que la
+  // MAISON du moulin (m.houseX/houseZ) — pas sa ROUE, qui mord dans l'eau
+  // à ~29 unités de là (voir moulinGeometry : houseX/Z à STREAM_HALF_WIDTH
+  // +26 du ruisseau, wheelX/Z à STREAM_HALF_WIDTH -3, donc sur le même
+  // rayon mais bien plus proche du ruisseau) — assez loin de la maison
+  // pour qu'une maison candidate passe le test de clearance de la maison
+  // tout en tombant en plein sur la roue. 14 ≈ MOULIN_WHEEL_R (déclarée
+  // plus bas dans le fichier, pas encore lisible ici à l'appel de
+  // buildWorld() — même contrainte d'ordre que le reste de ce bloc, voir
+  // le commentaire au-dessus de STREAM_CROSS_R).
   function moulinClearanceAt(x, z, r) {
     const m = moulinGeometry();
-    return circleClearance(x, z, r, m.houseX, m.houseZ, 26); // 26 ≈ diagonale de la maison du moulin (20×16)
+    return Math.min(
+      circleClearance(x, z, r, m.houseX, m.houseZ, 26), // 26 ≈ diagonale de la maison du moulin (20×16)
+      circleClearance(x, z, r, m.wheelX, m.wheelZ, 14)   // 14 = MOULIN_WHEEL_R
+    );
+  }
+  // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : une
+  // maison posée en plein sur le pont) : rien ne vérifiait la place prise
+  // par le PONT DE PIERRE (drawStoneBridge, à l'endroit où le ruisseau
+  // croise le réseau routier, d=0 sur le ruisseau) — streamClearanceAt
+  // protège bien l'EAU (largeur STREAM_HALF_WIDTH=11), mais le pont
+  // dépasse largement de l'eau (24 unités le long de la route, 16 de
+  // large) sans aucun garde-fou. rectClearance fait déjà exactement ce
+  // calcul (rectangle ORIENTÉ) pour l'église — même principe ici : le
+  // pont est orienté selon l'angle de la route qu'il enjambe (g.angle),
+  // etendu de BRIDGE_SPAN_HALF le long de cet angle et BRIDGE_WIDTH_HALF
+  // perpendiculairement (voir drawStoneBridge/toWorld — rx,rz porte
+  // spanHalf, tx,tz porte widthHalf, exactement les axes locaux que
+  // rectClearance attend pour halfW/halfH à ce yaw). 24/16 = BRIDGE_
+  // SPAN_HALF/BRIDGE_WIDTH_HALF (déclarées plus bas, pas encore lisibles
+  // ici — même contrainte d'ordre que MOULIN_WHEEL_R juste au-dessus).
+  function bridgeClearanceAt(x, z, r) {
+    const g = streamGeometry();
+    return rectClearance(x, z, r, g.cx, g.cz, 24, 16, g.angle);
   }
 
   // rejet-échantillonnage générique : essaie jusqu'à `tries` candidats,
@@ -2315,9 +2619,9 @@
       const cx = c.r * Math.cos(c.angle), cz = c.r * Math.sin(c.angle);
       const ex = cx + 120, ez = cz + 30, gx = cx - 110, gz = cz - 30; // église/grange, même écart fixe qu'avant
       let m = Math.min(
-        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40),
-        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8),
-        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8)
+        roadClearanceAt(cx, cz, 40), moulinClearanceAt(cx, cz, 40), streamClearanceAt(cx, cz, 40), bridgeClearanceAt(cx, cz, 40),
+        roadClearanceAt(ex, ez, 8), moulinClearanceAt(ex, ez, 8), streamClearanceAt(ex, ez, 8), bridgeClearanceAt(ex, ez, 8),
+        roadClearanceAt(gx, gz, 8), moulinClearanceAt(gx, gz, 8), streamClearanceAt(gx, gz, 8), bridgeClearanceAt(gx, gz, 8)
       );
       // le COULOIR donjon->église doit rester dégagé sur toute sa
       // longueur, pas juste à ses deux bouts — sinon la place (qui se
@@ -2345,24 +2649,69 @@
     // encore à ce stade), balayage de R pour maximiser la marge
     const eglx = vcx + 120, eglz = vcz + 30, grx = vcx - 110, grz = vcz - 30;
     const plazaAngle = Math.atan2(eglz, eglx);
-    // plage large + beaucoup d'essais (recherche 1D le long d'un seul
-    // rayon, donc peu coûteuse) : un audit sur 30 graines a montré qu'une
-    // plage trop étroite (120-380, 50 essais) pouvait ne jamais croiser
-    // un point dégagé si le ruisseau/une route coupe justement CE rayon
-    // précis — corrigé en élargissant la recherche plutôt qu'en
-    // acceptant un score négatif (dans le mur/le ruisseau).
-    const plazaMaxR = Math.min(460, VILLAGE_CENTER_R - 10);
-    const plazaCandidate = (rng) => 90 + rng() * Math.max(30, plazaMaxR - 90);
+    // BUG TROUVÉ EN SESSION (2026-09-10, capture à l'appui de Pierre : un
+    // vrai fouillis de traits croisés à la base du donjon) : rien ici ne
+    // vérifiait que la place (rayon PLAZA_RADIUS=80) reste hors du mur du
+    // donjon (BASE_R=74) — avec la recherche élargie du correctif
+    // précédent, PLAZA_R pouvait tomber aussi bas que ~90, laissant le
+    // bord de la place tourné vers une route à seulement `PLAZA_R - 80`
+    // du centre — parfois NÉGATIF, littéralement DANS la tour. C'est la
+    // bretelle (roadNearEdgePoint -> plazaEdgePoint) essayant de rejoindre
+    // ce bord-là qui créait le fouillis, pas un bug de la bretelle
+    // elle-même. Corrigé en pénalisant explicitement tout candidat dont le
+    // bord proche empiéterait sur le mur (et en relevant le plancher de
+    // recherche d'autant, pour ne plus perdre d'essais sur des candidats
+    // condamnés d'avance).
+    const plazaMinR = BASE_R + PLAZA_RADIUS + 30;
+    const plazaMaxR = Math.max(plazaMinR + 40, Math.min(460, VILLAGE_CENTER_R - 10));
+    const plazaCandidate = (rng) => plazaMinR + rng() * (plazaMaxR - plazaMinR);
     const scorePlaza = (r) => {
       const px = r * Math.cos(plazaAngle), pz = r * Math.sin(plazaAngle);
       return Math.min(
-        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80),
+        roadClearanceAt(px, pz, 80), moulinClearanceAt(px, pz, 80), streamClearanceAt(px, pz, 80), bridgeClearanceAt(px, pz, 80),
         rectClearance(px, pz, 80, eglx, eglz, 32, 60, EGLISE_YAW),
-        circleClearance(px, pz, 80, grx, grz, 32)
+        circleClearance(px, pz, 80, grx, grz, 32),
+        (r - PLAZA_RADIUS) - BASE_R - 20 // bord proche de la place vs mur du donjon
       );
     };
     PLAZA_R = findPlacement(rng, plazaCandidate, scorePlaza, 25, 220);
     const plx = PLAZA_R * Math.cos(plazaAngle), plz = PLAZA_R * Math.sin(plazaAngle);
+
+    // BUG TROUVÉ EN SESSION (2026-09-12, capture à l'appui de Pierre : deux
+    // maisons du même hameau posées quasiment l'une sur l'autre) :
+    // findPlacement() essaie `tries` candidats et garde le MEILLEUR — mais
+    // "meilleur" n'est pas "libre" : si les `tries` premiers essais tombent
+    // tous en collision (arrive facilement pour les dernières maisons d'un
+    // hameau, l'espace autour de la route s'étant déjà rempli des
+    // précédentes), la fonction renvoie quand même ce meilleur candidat,
+    // même avec un score négatif (= une vraie collision). C'est exactement
+    // ce que montrait la capture. Corrigé en deux temps : (1) tries 50 ->
+    // 300, pour qu'un vrai candidat libre soit trouvé dans l'immense
+    // majorité des cas — voir resolveHouseOverlap ci-dessous pour la
+    // garantie qui couvre les rares cas restants.
+    // filet de sécurité déterministe : si la position retenue chevauche
+    // quand même une maison déjà posée (les 300 essais ont tous échoué),
+    // on la repousse le long de l'axe centre-à-centre jusqu'à ce que les
+    // deux cercles (rayon 23 chacun) ne se touchent plus — élimine
+    // l'overlap avec certitude, plutôt que de compter sur la chance du
+    // tirage suivant.
+    function resolveHouseOverlap(x, z, houses) {
+      const HOUSE_R = 23;
+      for (let iter = 0; iter < 6; iter++) {
+        let worst = null, worstOverlap = 0;
+        for (const h of houses) {
+          const overlap = HOUSE_R * 2 - Math.hypot(x - h.x, z - h.z);
+          if (overlap > worstOverlap) { worstOverlap = overlap; worst = h; }
+        }
+        if (!worst) break;
+        let dx = x - worst.x, dz = z - worst.z;
+        let len = Math.hypot(dx, dz);
+        if (len < 1e-6) { const a = Math.random() * Math.PI * 2; dx = Math.cos(a); dz = Math.sin(a); len = 1; }
+        x = worst.x + (dx / len) * (HOUSE_R * 2 + 0.5);
+        z = worst.z + (dz / len) * (HOUSE_R * 2 + 0.5);
+      }
+      return { x, z };
+    }
 
     // maisons : deux hameaux de 4, un par route, "sur le passage" (marge
     // minimale voulue face à la route, pas juste maximisée comme le
@@ -2378,16 +2727,16 @@
           const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
           if (roadClearanceAt(x, z, 23) < 6) return -1000; // dans la route : rejeté net
           let m = Math.min(
-            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+            moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23), bridgeClearanceAt(x, z, 23),
             circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
             Math.hypot(x, z) - BASE_R - 40
           );
           for (const h of houses) m = Math.min(m, circleClearance(x, z, 23, h.x, h.z, 23));
           return m;
         };
-        const c = findPlacement(rng, candidate, score, 25, 50);
-        const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
-        houses.push({ x, z, angle: c.angle, r: c.r, yaw: rng() * Math.PI * 2, hiddenCount: 0 });
+        const c = findPlacement(rng, candidate, score, 25, 300);
+        let { x, z } = resolveHouseOverlap(c.r * Math.cos(c.angle), c.r * Math.sin(c.angle), houses);
+        houses.push({ x, z, angle: Math.atan2(z, x), r: Math.hypot(x, z), yaw: rng() * Math.PI * 2, hiddenCount: 0 });
       }
     }
     HOUSES = houses;
@@ -2402,6 +2751,7 @@
         roadClearanceAt(x, z, 30), roadClearanceAt(x2, z2, 24),
         moulinClearanceAt(x, z, 30), moulinClearanceAt(x2, z2, 24),
         streamClearanceAt(x, z, 30), streamClearanceAt(x2, z2, 24),
+        bridgeClearanceAt(x, z, 30), bridgeClearanceAt(x2, z2, 24),
         circleClearance(x, z, 30, vcx, vcz, 60), circleClearance(x, z, 30, plx, plz, PLAZA_RADIUS)
       );
       for (const h of houses) m = Math.min(m, circleClearance(x, z, 30, h.x, h.z, 23));
@@ -2419,7 +2769,7 @@
     const scoreWitch = (c) => {
       const x = c.r * Math.cos(c.angle), z = c.r * Math.sin(c.angle);
       let m = Math.min(
-        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23),
+        roadClearanceAt(x, z, 23), moulinClearanceAt(x, z, 23), streamClearanceAt(x, z, 23), bridgeClearanceAt(x, z, 23),
         circleClearance(x, z, 23, vcx, vcz, 60), circleClearance(x, z, 23, plx, plz, PLAZA_RADIUS),
         circleClearance(x, z, 23, fax, faz, 30), circleClearance(x, z, 23, fax + 75, faz - 45, 24)
       );
@@ -2833,6 +3183,15 @@
   const MOULIN_WHEEL_R = 14;
   const MOULIN_WHEEL_SEGS = 12;
   const MOULIN_SPIN_RATE = 1.1; // rad/s — positif = undershot correct, voir drawMoulinWheel
+  // DEMANDÉ EN SESSION (2026-09-12) : "la roue elle-même change" à chaque
+  // amélioration — feedback visuel direct plutôt qu'un simple chiffre de
+  // revenu. Purement cosmétique : moulinClearanceAt (génération du monde,
+  // ligne ~2306) utilise un 14 en dur, pas cette constante, donc grossir la
+  // roue ici n'affecte aucune collision. Niveau 0 (pas encore acheté) tourne
+  // lentement pour se lire comme "à l'arrêt/pas rentable" ; niveau 6 (max)
+  // tourne ~2x plus vite et fait ~1.6x le rayon de base.
+  function moulinWheelRadius(level) { return MOULIN_WHEEL_R * (1 + Math.max(0, level) * 0.1); }
+  function moulinWheelSpinRate(level) { return level <= 0 ? MOULIN_SPIN_RATE * 0.3 : MOULIN_SPIN_RATE * (1 + level * 0.16); }
   // épaisseur de la roue (demandé en session, 2026-09-09 : "elle doit
   // avoir une épaisseur pour pouvoir fonctionner", elle était plate/2D
   // avant) — le long de l'essieu, perpendiculaire au plan de la roue
@@ -2934,7 +3293,7 @@
   // particule ondule maintenant latéralement au fil du temps (latPhase/
   // latSpeed, calculé au dessin — voir drawStreamFlow) plutôt que de
   // garder un décalage latéral figé.
-  const STREAM_FLOW_COUNT = 733;
+  const STREAM_FLOW_COUNT = 367; // divisé par 2, demandé en session (2026-09-12) — était 733
   const STREAM_FLOW_SPEED = 55; // unités/seconde le long de d
   const STREAM_FLOW_WOBBLE = 3.5; // amplitude de l'ondulation latérale
   // portée réelle utilisée (voir ensureStreamFlowSeeds) — plus une const
@@ -3078,6 +3437,8 @@
     castleH: CASTLE_MAX_H, // starts fully built — the lord has no reason to be rebuilding on wave 1
     fightBanner: 0,
     gold: 0,
+    lastStandUsed: false, // la seconde chance ne sert qu'une fois par partie
+
     totalGoldEarned: 0, // cumul jamais dépensé/décrémenté — juste pour le récap de fin de partie, voir showGameOver()
     moatLevel: 0,
     gardenLevel: 0,
@@ -3163,6 +3524,8 @@
       sortieTimer: SORTIE_TICK,
       repairTimer: REPAIR_TICK,
       oilTimer: OIL_TICK,
+      onTurret: null,   // tourelle sur laquelle il se tient, sinon null
+
       oilDripTimer: 0, // separate, faster cadence — just the falling-drops visual, not the damage tick
       repairMaxedPlayed: false,
       // sortied out with nothing to fight: wanders the grounds instead of
@@ -3184,9 +3547,22 @@
     return state.castleH + PLATFORM_H;
   }
 
+  // Est-il sur une tourelle ? Recalculé chaque frame plutôt que mémorisé :
+  // une tourelle peut être détruite sous ses pieds, et il descend de toute
+  // façon dès qu'il sort (groundPos), sans qu'aucun code n'ait à y penser.
+  function updateTurretMount() {
+    const p = state.player;
+    if (p.groundPos > 0.15) { p.onTurret = null; return; } // en sortie, il est en bas
+    let found = null;
+    for (const t of state.towers) {
+      if (Math.abs(angDiff(p.angle, t.angle)) < TURRET_MOUNT_ANGLE) { found = t; break; }
+    }
+    p.onTurret = found;
+  }
   function playerWorld() {
     const p = state.player;
-    const y = platformTopY() * (1 - p.groundPos); // sortied out: down at ground level
+    let y = platformTopY() * (1 - p.groundPos); // sortied out: down at ground level
+    if (p.onTurret) y += TURRET_MOUNT_LIFT;     // perché sur une tourelle
     return worldPos(p.r, p.angle, y);
   }
 
@@ -3204,14 +3580,26 @@
   // against; failing that, whoever's nearest the wall (or, failing that,
   // approaching), so holding Sortie always has something to do instead of
   // just idling outside the door
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "une fois qu'il a tué
+  // [sa cible], il faut qu'il attaque le plus proche ou le plus
+  // puissant") : la priorité aux engins de siège était ABSOLUE — un
+  // engin à l'opposé du donjon passait toujours devant un ennemi juste à
+  // côté du seigneur, qui se retrouvait donc à traverser tout le champ de
+  // bataille (en ignorant des ennemis adjacents) après chaque mise à
+  // mort. Corrigé : l'engin de siège garde un avantage (moitié de sa
+  // distance angulaire réelle, SIEGE_PRIORITY_BONUS) au lieu d'un
+  // passe-droit total — il gagne toujours quand il est raisonnablement
+  // proche, mais un ennemi vraiment adjacent l'emporte désormais sur un
+  // engin à l'autre bout du mur.
+  const SIEGE_PRIORITY_BONUS = 0.5;
   function nearestSortieTarget(fromAngle) {
     // fontaine-soin : affaibli en sortie, se soigner passe avant tout le
     // reste — continuer à se battre à faible PV loin du mur est le
     // meilleur moyen de mourir pour de bon (voir FOUNTAIN_HEAL_HP_FRAC)
     if (state.player.hp < state.player.maxHp * FOUNTAIN_HEAL_HP_FRAC) return FOUNTAIN_EXTRA;
     const siege = nearestSiegeEngine(fromAngle);
-    if (siege) return siege;
     let best = null, bestD = Infinity;
+    if (siege) { best = siege; bestD = Math.abs(angDiff(fromAngle, siege.angle)) * SIEGE_PRIORITY_BONUS; }
     for (const e of state.enemies) {
       if (e.state !== 'attackBase' && e.state !== 'approach') continue;
       const d = Math.abs(angDiff(fromAngle, e.angle));
@@ -3295,7 +3683,7 @@
   // diviseur vient du palier de difficulté choisi (DIFFICULTY_TIERS,
   // plus haut) — chacun calibré séparément au simulateur pour tenir sa
   // propre cible (voir BACKLOG.md).
-  function enemyHp(wave) { return 2 + Math.floor(wave / DIFFICULTY_TIERS[difficultyIdx].hpDivisor); }
+  function enemyHp(wave) { return Math.max(1, Math.round(waveDef(wave).hp * DIFFICULTY_TIERS[difficultyIdx].hpMul)); }
 
   function spawnEnemy() {
     if (!state.villagePanic) villageTriggerPanic(); // tout premier ennemi qui apparaît — "à la première attaque"
@@ -3314,7 +3702,7 @@
     state.enemies.push({
       angle,
       r: tightSpawnR(angle),
-      speed: 24 + state.wave * 1.5, // wave-paced approach speed once actually on screen — see OFFSCREEN_APPROACH_MUL for the unseen leg
+      speed: waveDef(state.wave).sp, // vitesse posée par la table (WAVES) — voir OFFSCREEN_APPROACH_MUL pour le trajet hors champ
       hp: enemyHp(state.wave),
       maxHp: enemyHp(state.wave),
       wt: Math.random() * 10,      // phase accumulator, drives the lateral wander
@@ -3341,7 +3729,7 @@
   function flushHouseEnemy(house) {
     state.enemies.push({
       angle: house.angle, r: house.r,
-      speed: 24 + state.wave * 1.5,
+      speed: waveDef(state.wave).sp,
       hp: enemyHp(state.wave), maxHp: enemyHp(state.wave),
       wt: Math.random() * 10, wanderSeed: Math.random() * 10,
       hopping: false, hopT: 0, fleeing: false,
@@ -3361,7 +3749,7 @@
     if (!state.villagePanic) villageTriggerPanic();
     state.enemies.push({
       angle, r,
-      speed: 24 + state.wave * 1.5,
+      speed: waveDef(state.wave).sp,
       hp: enemyHp(state.wave), maxHp: enemyHp(state.wave),
       wt: Math.random() * 10, wanderSeed: Math.random() * 10,
       hopping: false, hopT: 0, fleeing: false,
@@ -3398,9 +3786,51 @@
   // "recalibrer" avant le pic suivant (cf. AI Director de Left 4 Dead,
   // analyses Kingdom Rush — voir BACKLOG.md, section difficulté). Une
   // vague sur cinq est une vague de répit à effectif réduit.
+  // ARC DE 20 VAGUES (DEMANDÉ EN SESSION, 2026-09-14) : "un seul niveau
+  // avec 20 vagues, comme ça on pourra équilibrer beaucoup plus
+  // précisément la mécanique de jeu". Les formules (3+2w pour l'effectif,
+  // 2+floor(w/div) pour les PV, 1.1-0.05w pour la cadence) laissent place
+  // à une table explicite : chaque vague a son intention, et se règle
+  // seule sans déformer toutes les autres.
+  //
+  // Les paliers de répit (5, 10, 15) sont maintenant POSÉS, au lieu de
+  // tomber sur les multiples de 5 par effet de bord d'un modulo.
+  //
+  // Calibrée au simulateur (sim/balance-sim.js, 400 parties par palier) :
+  // le poids d'une vague (effectif x PV) suit la courbe déjà éprouvée du
+  // jeu, compressée d'environ 1,35 en index — la vague 20 pèse ce que
+  // pesait la vague 27, pas davantage. Résultat mesuré pour un joueur
+  // "correct" au bout des 20 vagues : 87% en Facile, 59% en Normal, 27%
+  // en Difficile, 18% en Très difficile.
+  // GARDER SYNCHRONISÉ avec K.WAVES dans sim/balance-sim.js.
+  const WAVE_COUNT = 20;
+  const WAVES = [
+    // effectif, PV, vitesse, cadence, échelles, débarquement
+    { n: 6,  hp: 2, sp: 26, iv: 1.05, lad: 0, boat: false }, // 1  éclaireurs
+    { n: 9,  hp: 2, sp: 28, iv: 1.00, lad: 0, boat: false }, // 2
+    { n: 11, hp: 2, sp: 30, iv: 0.95, lad: 0, boat: false }, // 3
+    { n: 14, hp: 3, sp: 31, iv: 0.90, lad: 1, boat: false }, // 4  première échelle
+    { n: 12, hp: 3, sp: 33, iv: 0.88, lad: 1, boat: false }, // 5  RÉPIT
+    { n: 19, hp: 3, sp: 35, iv: 0.82, lad: 1, boat: true  }, // 6  premier débarquement
+    { n: 22, hp: 4, sp: 36, iv: 0.76, lad: 1, boat: false }, // 7
+    { n: 25, hp: 4, sp: 38, iv: 0.70, lad: 1, boat: false }, // 8
+    { n: 27, hp: 4, sp: 40, iv: 0.64, lad: 1, boat: true  }, // 9
+    { n: 21, hp: 5, sp: 41, iv: 0.60, lad: 1, boat: false }, // 10 RÉPIT
+    { n: 33, hp: 5, sp: 43, iv: 0.54, lad: 1, boat: true  }, // 11
+    { n: 35, hp: 5, sp: 45, iv: 0.48, lad: 2, boat: false }, // 12
+    { n: 38, hp: 5, sp: 46, iv: 0.44, lad: 2, boat: true  }, // 13
+    { n: 41, hp: 6, sp: 48, iv: 0.40, lad: 2, boat: false }, // 14
+    { n: 30, hp: 6, sp: 49, iv: 0.40, lad: 2, boat: true  }, // 15 RÉPIT
+    { n: 46, hp: 6, sp: 51, iv: 0.38, lad: 2, boat: false }, // 16
+    { n: 46, hp: 6, sp: 53, iv: 0.37, lad: 3, boat: true  }, // 17
+    { n: 48, hp: 7, sp: 55, iv: 0.36, lad: 3, boat: true  }, // 18
+    { n: 46, hp: 7, sp: 57, iv: 0.35, lad: 3, boat: false }, // 19
+    { n: 49, hp: 7, sp: 58, iv: 0.35, lad: 3, boat: true  }  // 20 ASSAUT FINAL
+  ];
+  // au-delà de 20 le niveau est gagné ; le clamp protège les appels tardifs
+  function waveDef(w) { return WAVES[Math.min(Math.max(1, w), WAVE_COUNT) - 1]; }
   function waveSpawnCount(wave) {
-    const base = 3 + wave * 2;
-    return Math.max(1, Math.round(wave % 5 === 0 ? base * 0.7 : base));
+    return Math.max(1, Math.round(waveDef(wave).n * DIFFICULTY_TIERS[difficultyIdx].countMul));
   }
 
   function startWave() {
@@ -3412,7 +3842,7 @@
     // it's fading — instead of enemies spawning the instant the wave starts
     state.fightBanner = FIGHT_BANNER_DUR;
     state.spawnTimer = FIGHT_BANNER_SPAWN_DELAY;
-    state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
+    state.spawnInterval = waveDef(state.wave).iv;
 
     // last wave got slowed by the moat: a couple of this wave's spawns
     // will stop and lay a crossing instead of just wading through
@@ -3421,11 +3851,17 @@
     }
     state.moatSlowedThisWave = false;
 
-    // from wave 4 on, one attacker each wave brings a ladder — a guaranteed
-    // way onto the platform, bypassing the wall (and its jumpChance dice
-    // roll) entirely, unlike a regular attacker who only rarely scales it
-    // once the donjon is nearly ruined
-    if (state.wave >= 4) state.laddersToSpawn = 1;
+    // les échelles sont désormais dosées vague par vague dans WAVES (lad) :
+    // une échelle est un accès GARANTI à la plateforme, contrairement au
+    // saut qui dépend d'un jet de dés et de la ruine du donjon. En monter
+    // le nombre est le levier de tension le plus fort de la table — un
+    // premier jet à 5 par vague en fin d'arc effondrait le taux de
+    // réussite à 0%.
+    state.laddersToSpawn = waveDef(state.wave).lad;
+
+    // débarquement : posé par la table plutôt que sur un minuteur libre,
+    // pour que l'arc soit vraiment maîtrisé de bout en bout
+    if (waveDef(state.wave).boat) spawnBoat();
   }
 
   // manual early call: stacks a fresh wave's worth of spawns on top of
@@ -3449,7 +3885,7 @@
   // son tout début). maxBonus garde l'ancienne échelle (basée sur la
   // taille de la vague), juste réduit par la progression restante.
   function nextWaveBonus() {
-    const maxBonus = Math.max(1, Math.floor((3 + state.wave * 2) / 2));
+    const maxBonus = Math.max(1, Math.floor(waveSpawnCount(state.wave) / 2));
     if (state.waveState !== 'active') return maxBonus;
     const initial = Math.max(1, waveSpawnCount(state.wave));
     const remaining = state.toSpawn + state.enemies.length + state.siegeEngines.length;
@@ -3459,17 +3895,35 @@
   function updateNextWaveBonus() {
     document.getElementById('waveBonus').textContent = '+' + nextWaveBonus();
   }
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "si on reste appuyé
+  // dessus, ça augmente beaucoup de vagues d'un seul coup") : l'empilement
+  // (toSpawn +=) est voulu et déjà correct (voir commentaire au-dessus,
+  // "stacks... no cap — press it 15 times, 15 waves' worth queue up") —
+  // mais rien n'empêchait de VRAIMENT en déclencher 15 en une seule
+  // pression tenue si un appui prolongé finissait par redéclencher
+  // plusieurs fois (double-frappe tactile, rebond du bouton). Garde-fou
+  // minimal, sans changer le comportement d'empilement voulu : un appui
+  // ne compte que s'il est à au moins NEXT_WAVE_COOLDOWN de la dernière
+  // fois.
+  const NEXT_WAVE_COOLDOWN = 0.4;
+  let lastNextWaveCall = -Infinity;
   function callNextWaveEarly() {
     if (state.waveState === 'gameover') return;
+    if (state.time - lastNextWaveCall < NEXT_WAVE_COOLDOWN) return;
+    lastNextWaveCall = state.time;
     const bonus = nextWaveBonus();
     state.gold += bonus;
     goldNum.textContent = state.gold;
     const pw = playerWorld();
     spawnFloatingGold(pw.x, pw.y, pw.z, bonus);
+    // l'arc s'arrête à WAVE_COUNT : appeler la suivante depuis la dernière
+    // vague n'a plus de sens, le bouton devient inerte (et se grise, voir
+    // updateNextWaveBonus)
+    if (state.wave >= WAVE_COUNT) return;
     state.wave++;
     updateWaveNum();
-    state.toSpawn += 3 + state.wave * 2;
-    state.spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.05);
+    state.toSpawn += waveSpawnCount(state.wave);
+    state.spawnInterval = waveDef(state.wave).iv;
     state.waveState = 'active';
     updateNextWaveBonus();
     if (state.villagePanic) villageDispatchWave(); // même mobilisation que startWave() quand la vague est appelée en avance
@@ -3488,9 +3942,16 @@
   // distingue la branche d'impact dans la boucle de mise à jour des
   // projectiles. Vol plus lent qu'une flèche (dur=0.7s) pour lire comme
   // un caillou lobé, pas un tir tendu.
-  function fireSiegeShot(s, dmg) {
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "les tours de défense qu'on
+  // construit, elles peuvent être abîmées, voire détruites par des
+  // engins de siège") : seule la "tour de siège" (isTower) visait déjà
+  // une tourelle via nearestDefender — le trébuchet (bien plus courant)
+  // touchait TOUJOURS le mur, jamais une tourelle. siegeTower prend
+  // maintenant la même cible que choisirait nearestDefender, portée par
+  // le projectile jusqu'à l'impact.
+  function fireSiegeShot(s, dmg, target) {
     const from = { x: s.r * Math.cos(s.angle), y: 0, z: s.r * Math.sin(s.angle) };
-    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true });
+    state.projectiles.push({ from, target: { r: 0, angle: 0 }, t: 0, dmg, dur: 0.7, siegeShot: true, siegeTarget: target });
     playSiegeShot();
   }
 
@@ -3688,11 +4149,96 @@
     document.getElementById('fakeAd').hidden = false;
   }
 
+  // Victoire : même récap que la défaite, mais sans le gag de la fausse
+  // pub — celui-ci est une blague sur la défaite, il tomberait à plat sur
+  // une fin heureuse. On passe directement à l'écran, et le record
+  // enregistré est la vague atteinte comme ailleurs (ici, le maximum).
+  function showVictory() {
+    if (state.waveState === 'gameover') return;
+    state.waveState = 'gameover';
+    document.getElementById('overlayText').textContent = t('victory_text');
+    const isRecord = state.wave > bestWaveEver;
+    if (isRecord) {
+      bestWaveEver = state.wave;
+      try { localStorage.setItem('bo_bestWave', String(bestWaveEver)); } catch (e) { /* ignore */ }
+    }
+    // construit depuis WAVE_COUNT plutôt que figé dans la traduction :
+    // une chaîne en dur annoncerait toujours 20, même si l'arc changeait
+    document.getElementById('overlayWave').textContent = t('victory_waves_pre') + WAVE_COUNT + t('victory_waves_post');
+    document.getElementById('overlayGold').textContent = t('overlay_gold_earned') + state.totalGoldEarned;
+    document.getElementById('overlayRecord').textContent = t('victory_sub');
+    document.getElementById('overlay').hidden = false;
+  }
+
   // the donjon never actually loses on its own — castleH clamps at
   // CASTLE_MIN_H and just sits there forever, with nothing to stop the
   // game. This is the missing loss condition, called wherever castleH is
   // reduced (attackBase chipping, siege-engine bombardment).
+  // ---- Le dernier rempart (seconde chance, DEMANDÉ EN SESSION 2026-09-14) ----
+  // Pierre : elle doit sauver du donjon qui tombe (la défaite principale),
+  // et il veut qu'elle s'obtienne "par vidéo".
+  //
+  // Point important : AUCUNE vidéo n'est branchée aujourd'hui, et le bouton
+  // ne prétend pas le contraire — il serait malhonnête d'afficher "regarder
+  // une vidéo" sans rien montrer. Tout le travail d'intégration est isolé
+  // dans offerRewardedContinue() ci-dessous : le jour où la candidature
+  // AdSense H5 Games Ads aboutit, c'est la seule fonction à changer, et le
+  // reste de la mécanique n'en saura rien.
+  const LAST_STAND_DECIDE_TIME = 8;   // secondes pour choisir
+  const LAST_STAND_RESTORE = 0.35;    // fraction de CASTLE_MAX_H rendue — de quoi continuer, pas une remise à neuf
+  const LAST_STAND_PUSHBACK = 70;     // unités dont les assaillants au mur sont repoussés
+  const LAST_STAND_DMG = 4;           // dégâts de l'onde de choc
+  let lastStandTimer = 0;
+  const lastStandOverlay = document.getElementById('lastStandOverlay');
+
+  // Seul point de contact avec une régie publicitaire, aujourd'hui vide.
+  // Pour brancher AdSense H5 Games Ads plus tard : appeler adBreak({
+  // type: 'reward', beforeReward, adViewed: () => grant(true),
+  // adDismissed/adBreakDone: () => grant(false) }) à la place du grant(true)
+  // direct. Rien d'autre dans le jeu n'a à bouger.
+  function offerRewardedContinue(grant) {
+    grant(true);
+  }
+
+  function showLastStand() {
+    state.waveState = 'lastStand';   // ni 'active' ni 'gameover' : le jeu attend
+    lastStandTimer = LAST_STAND_DECIDE_TIME;
+    document.getElementById('lastStandCount').textContent = Math.ceil(lastStandTimer);
+    lastStandOverlay.hidden = false;
+  }
+  function takeLastStand() {
+    lastStandOverlay.hidden = true;
+    state.lastStandUsed = true;
+    offerRewardedContinue((granted) => {
+      if (!granted) { showGameOver(t('gameover_castle')); return; }
+      state.castleH = Math.max(state.castleH, CASTLE_MAX_H * LAST_STAND_RESTORE);
+      // l'onde de choc : tout ce qui mordait le mur est renvoyé au loin,
+      // sinon le donjon retomberait dans la seconde qui suit
+      for (const e of state.enemies) {
+        if (e.state === 'attackBase' || e.state === 'onTop') {
+          e.state = 'approach';
+          e.r += LAST_STAND_PUSHBACK;
+          e.hp -= LAST_STAND_DMG;
+          if (e.hp <= 0) killEnemy(e);
+        }
+      }
+      for (const se of state.siegeEngines) se.hp -= LAST_STAND_DMG;
+      state.siegeEngines = state.siegeEngines.filter(se => se.hp > 0);
+      state.waveState = 'active';
+      triggerShake(1);
+      beep({ freq: 120, freqEnd: 420, dur: 0.5, type: 'sawtooth', vol: 0.3 });
+    });
+  }
+  function refuseLastStand() {
+    lastStandOverlay.hidden = true;
+    showGameOver(t('gameover_castle'));
+  }
+  document.getElementById('lastStandTakeBtn').addEventListener('click', takeLastStand);
+  document.getElementById('lastStandRefuseBtn').addEventListener('click', refuseLastStand);
+
   function castleDestroyed() {
+    if (state.waveState === 'lastStand' || state.waveState === 'gameover') return;
+    if (!state.lastStandUsed) { showLastStand(); return; }
     showGameOver(t('gameover_castle'));
   }
 
@@ -3790,7 +4336,11 @@
         if (Math.hypot(ex - ox, ez - oz) < SIEGE_GROUP_RADIUS) { group.push(o); used.add(o); }
       }
       if (group.length < 2) continue;
-      const tierIdx = Math.min(group.length - 2, SIEGE_TIERS.length - 1);
+      // DEMANDÉ EN SESSION (2026-09-12) : les tiers avancés (trébuchet, tour
+      // de siège, bélier) doivent apparaître plus souvent — décalé de -1 au
+      // lieu de -2 : un groupe de 2 donne directement arbalète (plus
+      // bouclier), un groupe de 4 donne tour de siège au lieu de trébuchet.
+      const tierIdx = Math.min(group.length - 1, SIEGE_TIERS.length - 1);
       const tier = SIEGE_TIERS[tierIdx];
       const cap = siegeCrewCap(tierIdx);
       const crew = Math.min(group.length, cap);
@@ -3808,7 +4358,11 @@
       // mur (ils y ont marché comme les autres, sinon ils ne se
       // regrouperaient jamais), mais l'engin fini apparaît directement
       // positionné au loin, même angle, comme s'il venait d'y être monté
-      const r = (tier.ranged || tier.crawl) ? SIEGE_RANGED_R : Math.hypot(ax, az);
+      // distance propre au type, plus une variation par engin : la
+      // profondeur du champ de bataille devient lisible d'un coup d'œil
+      const r = tier.buildR === null
+        ? Math.hypot(ax, az)
+        : Math.max(BASE_R + 30, tier.buildR + (Math.random() - 0.5) * 2 * SIEGE_BUILD_JITTER);
       state.siegeEngines.push({
         angle, r,
         tierIdx, soldiers, hp: tier.hp, maxHp: tier.hp, atkTimer: tier.cooldown, growH: 0
@@ -3928,6 +4482,28 @@
     e.angle = Math.atan2(nz, nx);
   }
 
+  // BUG SIGNALÉ EN SESSION (2026-09-12, Pierre : "j'ai pu l'attaquer mais
+  // à travers le cours d'eau, c'est pas possible, si je dois traverser le
+  // cours d'eau, je dois passer par le pont") : avoidStream ci-dessus
+  // empêche bien le seigneur de MARCHER à travers le ruisseau, mais le
+  // test de coup au corps-à-corps en sortie (plus bas, p.behavior ===
+  // 'sortie') ne vérifiait que l'angle/le rayon — pendant que le
+  // seigneur glisse le long de la berge vers le pont (avoidStream), son
+  // angle peut momentanément s'aligner avec un ennemi collé sur L'AUTRE
+  // berge, avant même d'avoir traversé — le coup portait quand même.
+  // Vérifie maintenant explicitement que les deux points sont du même
+  // côté du ruisseau (ou tous deux dans le couloir du pont).
+  function sameStreamSide(x1, z1, x2, z2) {
+    const g = streamGeometry();
+    const d1 = (x1 - g.cx) * g.tx + (z1 - g.cz) * g.tz;
+    const d2 = (x2 - g.cx) * g.tx + (z2 - g.cz) * g.tz;
+    if (Math.abs(d1) < BRIDGE_SPAN_HALF && Math.abs(d2) < BRIDGE_SPAN_HALF) return true;
+    const p1 = streamPointAt(g, d1), p2 = streamPointAt(g, d2);
+    const perp1 = (x1 - p1.x) * g.rx + (z1 - p1.z) * g.rz;
+    const perp2 = (x2 - p2.x) * g.rx + (z2 - p2.z) * g.rz;
+    return Math.sign(perp1 || 1) === Math.sign(perp2 || 1);
+  }
+
   // approaching enemies gently push each other apart instead of stacking on
   // the same spot or walking through one another — same circle-vs-circle
   // idea as avoidBushes, eased in over a few frames (spring-like) rather
@@ -4008,8 +4584,13 @@
   // qu'un habillage visuel dessus. camPanX/camPanY/camZoom sont dans le
   // repère ÉCRAN (pas le monde) : à zoom=1 (dézoomé, par défaut), pan=0,
   // le rendu est identique à avant cette fonctionnalité.
+  // DÉSACTIVÉ EN SESSION (2026-09-12, Pierre : "on voit pas du tout [les
+  // engins de siège] et on va désactiver la possibilité de zoom") : min
+  // et max ramenés à 1 — tout le reste de la mécanique (pincement,
+  // molette, ancrage) reste en place mais ne peut plus jamais bouger
+  // camZoom au-delà de 1, verrouillé au dézoomé maximal.
   let camZoom = 1, camPanX = 0, camPanY = 0;
-  const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 4;
+  const CAM_ZOOM_MIN = 1, CAM_ZOOM_MAX = 1;
   const activePointers = new Map(); // pointerId -> {x,y}, pour détecter le pincement à deux doigts
   let pinchStartDist = 0, pinchStartZoom = 1, pinchAnchorX = 0, pinchAnchorY = 0;
   let pinchedThisGesture = false; // évite qu'un pincement termine en tap sur un bâtiment
@@ -4151,6 +4732,56 @@
     witchMsg.hidden = !witchMsgVisible;
     if (witchMsgVisible) witchMsg.textContent = t('witch_msg');
   }
+  window.__DEBUG_ROADS = function() {
+    // road vs road : les deux routes principales se croisent-elles jamais ?
+    const crossings = [];
+    const segs0 = roadSegs(0), segs1 = roadSegs(1);
+    for (const s0 of segs0) {
+      const x1 = s0.r0 * Math.cos(s0.a0), z1 = s0.r0 * Math.sin(s0.a0);
+      const x2 = s0.r1 * Math.cos(s0.a1), z2 = s0.r1 * Math.sin(s0.a1);
+      for (const s1 of segs1) {
+        const x3 = s1.r0 * Math.cos(s1.a0), z3 = s1.r0 * Math.sin(s1.a0);
+        const x4 = s1.r1 * Math.cos(s1.a1), z4 = s1.r1 * Math.sin(s1.a1);
+        if (segsIntersect(x1, z1, x2, z2, x3, z3, x4, z4)) crossings.push({ r0: s0.r0, r1: s1.r0 });
+      }
+    }
+    return {
+      seed: currentWorldSeed,
+      ROAD_ANGLES: ROAD_ANGLES.slice(),
+      PLAZA_X, PLAZA_Z, PLAZA_R,
+      roadRoadCrossings: crossings
+    };
+  };
+  window.__DEBUG_CENTER_ON = function(x, z, zoom) {
+    const rot = state.theta - Math.PI / 4;
+    const base = project(x, 0, z, rot);
+    camZoom = zoom;
+    camPanX = W / 2 - base.x * camZoom;
+    camPanY = H / 2 - base.y * camZoom;
+  };
+  window.__DEBUG_PLAZA_POS = function() { return { x: PLAZA_X, z: PLAZA_Z, r: PLAZA_R }; };
+  window.__DEBUG_SET_THETA = function(t) { state.theta = t; };
+  window.__DEBUG_BRETELLES = function() {
+    const out = [];
+    for (let idx = 0; idx < 2; idx++) {
+      const roadPt = roadNearEdgePoint(idx, roadNearestR(idx, PLAZA_X, PLAZA_Z), PLAZA_X, PLAZA_Z);
+      const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
+      const edge = plazaEdgePoint(edgeAngle);
+      out.push({
+        idx,
+        roadPt: { x: roadPt.x, z: roadPt.z, r: Math.hypot(roadPt.x, roadPt.z), a: Math.atan2(roadPt.z, roadPt.x) },
+        edge: { x: edge.x, z: edge.z, r: Math.hypot(edge.x, edge.z), a: Math.atan2(edge.z, edge.x) }
+      });
+    }
+    const doorX = R * Math.cos(DOOR_ANGLE), doorZ = R * Math.sin(DOOR_ANGLE);
+    const doorEdgeAngle = Math.atan2(doorZ - PLAZA_Z, doorX - PLAZA_X);
+    const startEdge = plazaEdgePoint(doorEdgeAngle);
+    return {
+      seed: currentWorldSeed, PLAZA_X, PLAZA_Z, PLAZA_R,
+      bretelles: out,
+      doorPath: { start: { x: startEdge.x, z: startEdge.z, r: Math.hypot(startEdge.x, startEdge.z) }, doorR: R }
+    };
+  };
   function handleCanvasTap(clientX, clientY) {
     const rot = state.theta - Math.PI / 4;
     const tapR = WORLD_TAP_RADIUS * camZoom; // le bâtiment paraît plus grand à l'écran une fois zoomé
@@ -4190,7 +4821,7 @@
       moulinBtn.disabled = true;
     } else {
       const cost = moulinCost(state.moulinLevel + 1);
-      moulinBtn.textContent = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
+      moulinBtn.innerHTML = affordText(state.moulinLevel === 0 ? t('moulin_btn_start') : t('moulin_btn_upgrade'), cost);
       moulinBtn.classList.toggle('unaffordable', state.gold < cost);
       moulinBtn.disabled = false;
     }
@@ -4224,7 +4855,7 @@
     } else {
       const cost = EGLISE_ZONE_TIERS[state.egliseZoneLevel].cost;
       const label = state.egliseZoneLevel === 0 ? t('eglise_btn_start') : t('eglise_btn_upgrade');
-      egliseBtn.textContent = affordText(label, cost);
+      egliseBtn.innerHTML = affordText(label, cost);
       egliseBtn.classList.toggle('unaffordable', state.gold < cost);
       egliseBtn.disabled = false;
     }
@@ -4252,7 +4883,9 @@
   // quasi invulnérable en permanence, gratuitement.
   const priestBtn = document.getElementById('priestBtn');
   function updatePriestBtn() {
-    if (cosyOverlay.hidden) { priestBtn.hidden = true; return; }
+    // masqué aussi pendant que le panneau d'échecs est ouvert : il passerait
+    // par-dessus (worldBtn en position fixe, z-index 26)
+    if (cosyOverlay.hidden || !chessOverlay.hidden) { priestBtn.hidden = true; return; }
     priestBtn.hidden = false;
     const rect = cosyCanvas.getBoundingClientRect();
     const pos = cosyIso(PRIEST_X, 0.9, PRIEST_Z); // un peu au-dessus de sa tête
@@ -4304,15 +4937,28 @@
   // visiblement grisé (opacité réduite, voir .unaffordable dans le CSS)
   // quand on n'a pas assez d'or — "rien ne se passe en silence"
   // s'applique aussi à "pourquoi ce bouton ne fait rien".
-  function affordText(label, cost) { return `${label} (${cost})`; }
-  const TOWER_COST = 5;
+  // renvoie du HTML (voir .btnCost plus haut) : le prix seul, sans
+  // parenthèses, sur sa propre ligne sous le libellé — set via innerHTML
+  // à chaque site d'appel (pas textContent, qui afficherait les balises
+  // telles quelles).
+  function affordText(label, cost) { return `${label}<span class="btnCost">${cost}</span>`; }
+  // DEMANDÉ EN SESSION (2026-09-12, Pierre : "augmentation du prix des
+  // tours au fur et à mesure, peut-être à chaque vague, +10% du prix") :
+  // TOWER_COST devient une fonction de state.wave (+10% par vague,
+  // arrondi) plutôt qu'une constante — refreshBuyButtons() tourne déjà à
+  // chaque frame (voir plus bas), donc l'affichage suit automatiquement.
+  const TOWER_BASE_COST = 5;
+  const TOWER_COST_GROWTH = 1.1;
+  function towerCost() { return Math.round(TOWER_BASE_COST * Math.pow(TOWER_COST_GROWTH, state.wave - 1)); }
   function updateTowerBtn() {
-    towerBtn.textContent = affordText(t('tower_btn'), TOWER_COST);
-    towerBtn.classList.toggle('unaffordable', state.gold < TOWER_COST);
+    const cost = towerCost();
+    towerBtn.innerHTML = affordText(t('tower_btn'), cost);
+    towerBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   towerBtn.addEventListener('click', () => {
-    if (state.gold < TOWER_COST || state.player.behavior !== 'combat') return;
-    state.gold -= TOWER_COST;
+    const cost = towerCost();
+    if (state.gold < cost || state.player.behavior !== 'combat') return;
+    state.gold -= cost;
     goldNum.textContent = state.gold;
     state.towers.push({ angle: state.player.angle, atkTimer: 0, hp: 6, maxHp: 6 });
     oilBtn.disabled = false; // huile bouillante needs an actual turret to pour from
@@ -4327,7 +4973,7 @@
       return;
     }
     const cost = MOAT_TIERS[state.moatLevel].cost;
-    moatBtn.textContent = affordText(t('moat_btn'), cost);
+    moatBtn.innerHTML = affordText(t('moat_btn'), cost);
     moatBtn.classList.toggle('unaffordable', state.gold < cost);
   }
   moatBtn.addEventListener('click', () => {
@@ -4344,7 +4990,7 @@
 
   function updateGardenBtn() {
     const cost = gardenCost(state.gardenLevel + 1);
-    gardenBtn.textContent = affordText(t('garden_btn'), cost);
+    gardenBtn.innerHTML = affordText(t('garden_btn'), cost);
     gardenBtn.classList.toggle('unaffordable', state.gold < cost);
   } // no cap any more, always buyable (funds permitting)
   gardenBtn.addEventListener('click', () => {
@@ -4364,7 +5010,7 @@
   function updateHorseBtn() {
     const cost = horseCost(state.horseLevel + 1);
     const label = state.horseLevel > 0 ? t('horse_btn') + ' ' + state.horseLevel : t('horse_btn');
-    horseBtn.textContent = affordText(label, cost);
+    horseBtn.innerHTML = affordText(label, cost);
     horseBtn.classList.toggle('active', state.horseLevel > 0);
     horseBtn.classList.toggle('unaffordable', state.gold < cost);
   }
@@ -4500,18 +5146,37 @@
   // (routes, ruisseau, villageois...), un rechargement complet est plus
   // sûr qu'un réinit partiel qui oublierait forcément quelque chose.
   document.getElementById('seedValue').textContent = currentWorldSeed;
-  document.getElementById('seedNewBtn').addEventListener('click', () => {
-    if (!confirm(t('seed_confirm_new'))) return;
-    const s = randomSeedString();
+  // confirmation intégrée à la page (remplace confirm() natif — voir le
+  // commentaire HTML sur #seedConfirmRow) : seedPendingAction mémorise ce
+  // qu'il faut faire si le joueur confirme, seedConfirmYesBtn l'exécute.
+  const seedConfirmRow = document.getElementById('seedConfirmRow');
+  const seedConfirmMsg = document.getElementById('seedConfirmMsg');
+  let seedPendingAction = null;
+  function askSeedConfirm(msg, action) {
+    seedPendingAction = action;
+    seedConfirmMsg.textContent = msg;
+    seedConfirmRow.hidden = false;
+  }
+  function applySeedAndReload(s) {
     try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
     location.reload();
+  }
+  document.getElementById('seedNewBtn').addEventListener('click', () => {
+    askSeedConfirm(t('seed_confirm_new'), () => applySeedAndReload(randomSeedString()));
   });
   document.getElementById('seedLoadBtn').addEventListener('click', () => {
     const s = document.getElementById('seedInput').value.trim();
     if (!s) return;
-    if (!confirm(t('seed_confirm_load'))) return;
-    try { localStorage.setItem('bo_worldSeed', s); } catch (e) { /* ignore */ }
-    location.reload();
+    askSeedConfirm(t('seed_confirm_load'), () => applySeedAndReload(s));
+  });
+  document.getElementById('seedConfirmYesBtn').addEventListener('click', () => {
+    seedConfirmRow.hidden = true;
+    if (seedPendingAction) seedPendingAction();
+    seedPendingAction = null;
+  });
+  document.getElementById('seedConfirmCancelBtn').addEventListener('click', () => {
+    seedConfirmRow.hidden = true;
+    seedPendingAction = null;
   });
 
   document.getElementById('menuBtn').addEventListener('click', () => { menu.hidden = false; });
@@ -4592,7 +5257,7 @@
         const z0 = CHESS_CZ - CHESS_HALF_D + (cz / 8) * CHESS_HALF_D * 2;
         const z1 = CHESS_CZ - CHESS_HALF_D + ((cz + 1) / 8) * CHESS_HALF_D * 2;
         const p = [cosyIso(x0, CHESS_Y, z0), cosyIso(x1, CHESS_Y, z0), cosyIso(x1, CHESS_Y, z1), cosyIso(x0, CHESS_Y, z1)];
-        cosyQuad(p, (cx + cz) % 2 === 0 ? '#3f2b1a' : '#d9c69c');
+        cosyQuad(p, (cx + cz) % 2 === 0 ? '#6b4a2c' : '#c9ab7d');
         // pièces suggérées : rangées de départ occupées, milieu vide —
         // "des cases pleines... des cases vides", pas une vraie partie
         // simulée coup par coup
@@ -4610,6 +5275,48 @@
   // le chat : erre sur le sol de la pièce, s'arrête de temps en temps et
   // ronronne (demandé en session) — même vocabulaire d'IA simple que la
   // patrouille de créneaux du seigneur (cible aléatoire, ease, pause)
+  // DEMANDÉ EN SESSION (2026-09-12) : les paysans réfugiés étaient trop
+  // petits pour se lire comme des personnes (rayon 8 contre 17 pour le
+  // seigneur) et figés en cercle autour du feu — "ils doivent avoir la
+  // même taille... éventuellement légèrement plus petit" et "se déplacer
+  // librement". Repris avec le même idiome que cosyCat (pause/cible
+  // aléatoire) mais un par paysan caché, dans une zone resserrée près du
+  // feu plutôt que toute la pièce (ils restent "au coin du feu", juste
+  // plus vivants) ; le tableau est redimensionné à la volée pour suivre
+  // state.villagersHiddenCastle qui varie au fil de la partie.
+  const COSY_VILLAGER_R = 13;
+  const cosyVillagers = [];
+  function cosyPickVillagerTarget(v) {
+    v.tx = 4.7 + Math.random() * 2.3;
+    v.tz = 3.7 + Math.random() * 2.5;
+  }
+  function ensureCosyVillagerCount(n) {
+    while (cosyVillagers.length < n) {
+      const v = { x: 4.7 + Math.random() * 2.3, z: 3.7 + Math.random() * 2.5, tx: 0, tz: 0, pauseTimer: Math.random() * 2 };
+      cosyPickVillagerTarget(v);
+      cosyVillagers.push(v);
+    }
+    if (cosyVillagers.length > n) cosyVillagers.length = n;
+  }
+  function updateCosyVillagers(dt) {
+    for (const v of cosyVillagers) {
+      if (v.pauseTimer > 0) {
+        v.pauseTimer -= dt;
+        if (v.pauseTimer <= 0) cosyPickVillagerTarget(v);
+        continue;
+      }
+      const dx = v.tx - v.x, dz = v.tz - v.z, d = Math.hypot(dx, dz);
+      if (d < 0.08) { v.pauseTimer = 1.5 + Math.random() * 2.5; continue; }
+      const sp = 0.5;
+      v.x += (dx / d) * sp * dt;
+      v.z += (dz / d) * sp * dt;
+    }
+  }
+  // DEMANDÉ EN SESSION (2026-09-13) : registre contemplatif — on doit pouvoir
+  // toucher la scène sans enjeu. Attiser le feu le fait gonfler un instant,
+  // caresser le chat le fait ronronner et s'installer. Rien à gagner, rien
+  // à perdre : c'est le point.
+  let cosyFireBoost = 0;
   const cosyCat = { x: 3.2, z: 3.4, tx: 3.2, tz: 3.4, pauseTimer: 1.5, purrCooldown: 3 };
   function cosyPickCatTarget() {
     cosyCat.tx = 0.9 + Math.random() * 5.2;
@@ -4698,34 +5405,35 @@
     }
     cosyCtx.shadowBlur = 0;
 
-    function barrel(bx, bz) {
-      const base = cosyIso(bx, 0, bz), topC = cosyIso(bx, 0.9, bz);
-      const rw = 0.55 * COSY_SCALE * 0.55, rh = 0.22 * COSY_SCALE * 0.55;
-      const grad = cosyCtx.createLinearGradient(base.x - rw, 0, base.x + rw, 0);
-      grad.addColorStop(0, '#241608'); grad.addColorStop(0.5, '#8a6538'); grad.addColorStop(1, '#2e1c0d');
-      cosyCtx.fillStyle = grad;
-      cosyCtx.beginPath();
-      cosyCtx.moveTo(base.x - rw, topC.y);
-      cosyCtx.quadraticCurveTo(base.x - rw * 1.12, (topC.y + base.y) / 2, base.x - rw, base.y);
-      cosyCtx.lineTo(base.x + rw, base.y);
-      cosyCtx.quadraticCurveTo(base.x + rw * 1.12, (topC.y + base.y) / 2, base.x + rw, topC.y);
-      cosyCtx.closePath(); cosyCtx.fill();
-      cosyCtx.beginPath(); cosyCtx.ellipse(topC.x, topC.y, rw, rh, 0, 0, Math.PI * 2); cosyCtx.fillStyle = '#a3814f'; cosyCtx.fill();
-    }
-    barrel(5.6, 1.4); barrel(6.3, 2.1); barrel(1.2, 5.6);
+    // DEMANDÉ EN SESSION (2026-09-12) : "il y a 2-3 piliers chelou qui
+    // bougent pas, on supprime" — les tonneaux statiques (barrel()) sont
+    // retirés ; l'escalier juste au-dessus est conservé tel quel.
 
     const fireCenter = cosyIso(6.7, 0.5, 4.6);
-    cosyQuad([cosyIso(6.4, 0, 4.6), cosyIso(7, 0, 4.6), cosyIso(7, 2.6, 4.6), cosyIso(6.4, 2.6, 4.6)], '#160c04');
-    const flicker = 0.85 + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
-    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 120 * flicker);
+    cosyQuad([cosyIso(6.2, 0, 4.6), cosyIso(7.2, 0, 4.6), cosyIso(7.2, 3, 4.6), cosyIso(6.2, 3, 4.6)], '#160c04');
+    const flicker = 0.85 + cosyFireBoost + 0.15 * Math.sin(t * 9) + 0.08 * Math.sin(t * 23 + 1.7);
+    // "beaucoup plus gros, beaucoup plus sympathique" — halo et flammes
+    // agrandis (halo ~1.6x, cœur ~1.8x), et le cœur unique remplacé par un
+    // petit foyer de 3 flammes décalées (tailles/phases différentes) pour
+    // lire comme un vrai feu qui vit plutôt qu'un simple rond qui palpite.
+    const fg = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 2, fireCenter.x, fireCenter.y, 190 * flicker);
     fg.addColorStop(0, `rgba(255,160,60,${0.95 * flicker})`);
     fg.addColorStop(0.5, `rgba(255,120,40,${0.35 * flicker})`);
     fg.addColorStop(1, 'rgba(255,120,40,0)');
     cosyCtx.fillStyle = fg; cosyCtx.fillRect(0, 0, COSY_W, COSY_H);
-    const flame = cosyCtx.createRadialGradient(fireCenter.x, fireCenter.y, 1, fireCenter.x, fireCenter.y, 11 * flicker);
-    flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
-    cosyCtx.fillStyle = flame;
-    cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x, fireCenter.y, 11 * flicker, 0, Math.PI * 2); cosyCtx.fill();
+    const flames = [
+      { dx: 0, dy: 0, r: 20, phase: 0 },
+      { dx: -9, dy: -3, r: 13, phase: 2.1 },
+      { dx: 8, dy: -2, r: 14, phase: 4.4 }
+    ];
+    for (const fl of flames) {
+      const fk = 0.8 + 0.2 * Math.sin(t * 7 + fl.phase);
+      const rad = fl.r * flicker * fk;
+      const flame = cosyCtx.createRadialGradient(fireCenter.x + fl.dx, fireCenter.y + fl.dy, 1, fireCenter.x + fl.dx, fireCenter.y + fl.dy, rad);
+      flame.addColorStop(0, '#fff2c9'); flame.addColorStop(1, '#ff9a3d');
+      cosyCtx.fillStyle = flame;
+      cosyCtx.beginPath(); cosyCtx.arc(fireCenter.x + fl.dx, fireCenter.y + fl.dy, rad, 0, Math.PI * 2); cosyCtx.fill();
+    }
 
     drawChessBoard();
     cosyPerson(5.4, 4.6, 17, '#7fa0c9', '#28405e'); // le seigneur
@@ -4740,14 +5448,16 @@
 
     // les paysans réfugiés dans le château (state.villagersHiddenCastle) —
     // demandé en session : "on verra exactement le même nombre de paysans
-    // à côté du feu" — même recette cosyPerson, plus petits, en cercle
-    // autour du foyer ; plafonné pour ne pas déborder de la pièce si le
-    // nombre devient grand (le compte réel reste correct, juste pas tous
-    // dessinés un par un au-delà de ce plafond)
+    // à côté du feu" — même recette cosyPerson, en liberté près du foyer
+    // (voir cosyVillagers/updateCosyVillagers) plutôt que figés en cercle ;
+    // plafonné pour ne pas déborder de la pièce si le nombre devient grand
+    // (le compte réel reste correct, juste pas tous dessinés un par un
+    // au-delà de ce plafond)
     const shownVillagers = Math.min(state.villagersHiddenCastle, 10);
+    ensureCosyVillagerCount(shownVillagers);
     for (let i = 0; i < shownVillagers; i++) {
-      const ang = (i / Math.max(1, shownVillagers)) * Math.PI * 2;
-      cosyPerson(6.5 + Math.cos(ang) * 0.55, 5.1 + Math.sin(ang) * 0.4, 8, '#d9c48a', '#8a6a42');
+      const v = cosyVillagers[i];
+      cosyPerson(v.x, v.z, COSY_VILLAGER_R, '#d9c48a', '#8a6a42');
     }
 
     drawCosyCat(t);
@@ -4758,20 +5468,770 @@
     const dt = cosyLastT ? Math.min(0.1, (now - cosyLastT) / 1000) : 0;
     cosyLastT = now;
     cosyClock += dt;
+    cosyFireBoost = Math.max(0, cosyFireBoost - dt * 0.45);
     updateCosyCat(dt);
+    updateCosyVillagers(dt);
     renderCosyScene(cosyClock);
+    updateChessBtn();  // même raison : ancré au décor, suit le canvas
     updatePriestBtn(); // repositionné chaque frame (taille CSS du canvas responsive, peut changer au resize)
     cosyRAF = requestAnimationFrame(cosyFrame);
   }
+
+  // DEMANDÉ EN SESSION (2026-09-12) : "la musique doit changer complètement
+  // avec un fondu enchaîné sur une musique très très douce... éventuellement
+  // un petit bruit de feu". Pas de second fichier audio dans le projet —
+  // l'ambiance cosy est donc synthétisée avec le même Web Audio que
+  // playPurr/beep (nappe de 3 voix sinus en accord bas + respiration lente
+  // + crépitement de feu = bursts de bruit filtré à intervalle aléatoire),
+  // pendant que bgMusic descend en fondu plutôt que de couper net.
+  let bgMusicFadeRAF = null;
+  function fadeBgMusicTo(target, durationMs) {
+    if (bgMusicFadeRAF) cancelAnimationFrame(bgMusicFadeRAF);
+    const start = bgMusic.volume, t0 = performance.now();
+    function step(now) {
+      const p = Math.min(1, (now - t0) / durationMs);
+      bgMusic.volume = start + (target - start) * p;
+      bgMusicFadeRAF = p < 1 ? requestAnimationFrame(step) : null;
+    }
+    bgMusicFadeRAF = requestAnimationFrame(step);
+  }
+  let cosyAmbient = null;
+  function startCosyAmbient() {
+    if (!actx || cosyAmbient) return;
+    const sv = musicVolume / 100;
+    const t0 = actx.currentTime;
+    const master = actx.createGain();
+    master.gain.setValueAtTime(0.0001, t0);
+    master.gain.exponentialRampToValueAtTime(Math.max(0.0001, 0.16 * sv), t0 + 1.4);
+    master.connect(actx.destination);
+    // nappe douce : trois voix sinus, accord mineur bas (A2, C3, E3)
+    const oscs = [110, 130.81, 164.81].map(f => {
+      const osc = actx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, t0);
+      const voiceGain = actx.createGain();
+      voiceGain.gain.value = 0.33;
+      osc.connect(voiceGain).connect(master);
+      osc.start(t0);
+      return osc;
+    });
+    const lfo = actx.createOscillator(); // respiration lente du volume global
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(0.15, t0);
+    const lfoGain = actx.createGain();
+    lfoGain.gain.value = 0.05 * sv;
+    lfo.connect(lfoGain).connect(master.gain);
+    lfo.start(t0);
+    cosyAmbient = { master, oscs, lfo, crackleTimer: null };
+    (function crackle() {
+      if (!cosyAmbient) return;
+      const t1 = actx.currentTime, dur = 0.06 + Math.random() * 0.05;
+      const bufSize = Math.max(1, Math.floor(actx.sampleRate * dur));
+      const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+      const src = actx.createBufferSource();
+      src.buffer = buf;
+      const filt = actx.createBiquadFilter();
+      filt.type = 'bandpass';
+      filt.frequency.value = 1800 + Math.random() * 1400;
+      filt.Q.value = 1.2;
+      const g = actx.createGain();
+      g.gain.value = (0.4 + Math.random() * 0.4) * sv;
+      src.connect(filt).connect(g).connect(master);
+      src.start(t1);
+      cosyAmbient.crackleTimer = setTimeout(crackle, 900 + Math.random() * 2200);
+    })();
+  }
+  function stopCosyAmbient() {
+    if (!cosyAmbient || !actx) { cosyAmbient = null; return; }
+    const { master, oscs, lfo, crackleTimer } = cosyAmbient;
+    clearTimeout(crackleTimer);
+    const t0 = actx.currentTime;
+    master.gain.cancelScheduledValues(t0);
+    master.gain.setValueAtTime(master.gain.value, t0);
+    master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.8);
+    setTimeout(() => { oscs.forEach(o => o.stop()); lfo.stop(); }, 900);
+    cosyAmbient = null;
+  }
+
+  // ---- mini-jeu d'échecs de la vue cosy (DEMANDÉ EN SESSION, 2026-09-13) ----
+  // L'échiquier posé sur la table près du feu était purement décoratif
+  // (drawChessBoard : 8x8 de cases, pièces = simples points figés). Il
+  // devient ici une vraie partie, jouée contre la princesse — ou contre le
+  // prêtre si elle n'est plus là. Le plateau reste dessiné en isométrique
+  // dans la pièce, mais on joue dans un panneau à part : à 0,84 unité de
+  // large sur la table, une case ferait ~6 px, injouable au doigt.
+  //
+  // La partie est conservée pour toute la session : on peut poser trois
+  // coups, retourner au mur, revenir plus tard — c'est ce qui la rend
+  // reposante, la bataille dehors n'attend pas mais l'échiquier, si.
+  //
+  // Le générateur de coups a été validé par des tests perft (position
+  // initiale, Kiwipete, finales, promotions : 22 valeurs de référence
+  // exactes jusqu'à la profondeur 5), roques/prise en passant/clouages
+  // compris.
+  const Chess = (() => {
+    const PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+    // plateau = 64 cases, index = rang*8 + colonne, rang 0 = rangée 1
+    // (camp des blancs), colonne 0 = a ; les blancs avancent en +8.
+    // Pièces : signe = camp (positif = blanc), 0 = vide.
+    const fileOf = (sq) => sq & 7;
+    const rankOf = (sq) => sq >> 3;
+    const KN_OFF = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
+    const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const ORTH = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    function newGame() {
+      const board = new Int8Array(64);
+      const back = [ROOK, KNIGHT, BISHOP, QUEEN, KING, BISHOP, KNIGHT, ROOK];
+      for (let f = 0; f < 8; f++) {
+        board[f] = back[f];
+        board[8 + f] = PAWN;
+        board[48 + f] = -PAWN;
+        board[56 + f] = -back[f];
+      }
+      return { board, turn: 1, castle: { wk: true, wq: true, bk: true, bq: true }, ep: -1, half: 0, full: 1 };
+    }
+    function cloneState(s) {
+      return { board: Int8Array.from(s.board), turn: s.turn, castle: { ...s.castle }, ep: s.ep, half: s.half, full: s.full };
+    }
+    // sert deux fois : légalité (roi resté en prise) et test d'échec
+    function isAttacked(board, sq, by) {
+      const tf = fileOf(sq), tr = rankOf(sq);
+      const pawnRank = tr - by; // rangée d'où viendrait un pion du camp `by`
+      if (pawnRank >= 0 && pawnRank < 8) {
+        for (const df of [-1, 1]) {
+          const f = tf + df;
+          if (f >= 0 && f <= 7 && board[pawnRank * 8 + f] === by * PAWN) return true;
+        }
+      }
+      for (const [df, dr] of KN_OFF) {
+        const f = tf + df, r = tr + dr;
+        if (f < 0 || f > 7 || r < 0 || r > 7) continue;
+        if (board[r * 8 + f] === by * KNIGHT) return true;
+      }
+      for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) {
+        if (!df && !dr) continue;
+        const f = tf + df, r = tr + dr;
+        if (f < 0 || f > 7 || r < 0 || r > 7) continue;
+        if (board[r * 8 + f] === by * KING) return true;
+      }
+      for (const [dirs, a, b] of [[DIAG, BISHOP, QUEEN], [ORTH, ROOK, QUEEN]]) {
+        for (const [df, dr] of dirs) {
+          let f = tf + df, r = tr + dr;
+          while (f >= 0 && f <= 7 && r >= 0 && r <= 7) {
+            const p = board[r * 8 + f];
+            if (p !== 0) { if (p === by * a || p === by * b) return true; break; }
+            f += df; r += dr;
+          }
+        }
+      }
+      return false;
+    }
+    function findKing(board, side) {
+      for (let i = 0; i < 64; i++) if (board[i] === side * KING) return i;
+      return -1;
+    }
+    // coups pseudo-légaux : l'auto-échec est filtré ensuite par legalMoves
+    function pseudoMoves(s) {
+      const { board, turn } = s;
+      const moves = [];
+      const push = (from, to, promo = 0, flag = 0) => moves.push({ from, to, promo, flag });
+      for (let from = 0; from < 64; from++) {
+        const p = board[from];
+        if (p === 0 || Math.sign(p) !== turn) continue;
+        const type = Math.abs(p), f = fileOf(from), r = rankOf(from);
+        if (type === PAWN) {
+          const dir = turn, startRank = turn === 1 ? 1 : 6, lastRank = turn === 1 ? 7 : 0;
+          const one = from + dir * 8;
+          if (one >= 0 && one < 64 && board[one] === 0) {
+            if (rankOf(one) === lastRank) for (const pr of [QUEEN, ROOK, BISHOP, KNIGHT]) push(from, one, pr);
+            else {
+              push(from, one);
+              const two = from + dir * 16;
+              if (r === startRank && board[two] === 0) push(from, two, 0, 2); // 2 = double pas
+            }
+          }
+          for (const df of [-1, 1]) {
+            const cf = f + df, cr = r + dir;
+            if (cf < 0 || cf > 7 || cr < 0 || cr > 7) continue;
+            const to = cr * 8 + cf, target = board[to];
+            if (target !== 0 && Math.sign(target) !== turn) {
+              if (cr === lastRank) for (const pr of [QUEEN, ROOK, BISHOP, KNIGHT]) push(from, to, pr);
+              else push(from, to);
+            } else if (to === s.ep && target === 0) push(from, to, 0, 3); // 3 = prise en passant
+          }
+        } else if (type === KNIGHT) {
+          for (const [df, dr] of KN_OFF) {
+            const cf = f + df, cr = r + dr;
+            if (cf < 0 || cf > 7 || cr < 0 || cr > 7) continue;
+            const to = cr * 8 + cf;
+            if (board[to] === 0 || Math.sign(board[to]) !== turn) push(from, to);
+          }
+        } else if (type === KING) {
+          for (let df = -1; df <= 1; df++) for (let dr = -1; dr <= 1; dr++) {
+            if (!df && !dr) continue;
+            const cf = f + df, cr = r + dr;
+            if (cf < 0 || cf > 7 || cr < 0 || cr > 7) continue;
+            const to = cr * 8 + cf;
+            if (board[to] === 0 || Math.sign(board[to]) !== turn) push(from, to);
+          }
+          // roques : cases vides, roi ni en échec ni traversant une case
+          // attaquée (la case d'arrivée, elle, est filtrée par legalMoves)
+          const enemy = -turn, hr = turn === 1 ? 0 : 7;
+          if (from === hr * 8 + 4 && !isAttacked(board, from, enemy)) {
+            const kSide = turn === 1 ? s.castle.wk : s.castle.bk;
+            const qSide = turn === 1 ? s.castle.wq : s.castle.bq;
+            if (kSide && board[hr * 8 + 5] === 0 && board[hr * 8 + 6] === 0
+                && board[hr * 8 + 7] === turn * ROOK && !isAttacked(board, hr * 8 + 5, enemy)) push(from, hr * 8 + 6, 0, 4);
+            if (qSide && board[hr * 8 + 3] === 0 && board[hr * 8 + 2] === 0 && board[hr * 8 + 1] === 0
+                && board[hr * 8 + 0] === turn * ROOK && !isAttacked(board, hr * 8 + 3, enemy)) push(from, hr * 8 + 2, 0, 5);
+          }
+        } else {
+          const dirs = type === BISHOP ? DIAG : type === ROOK ? ORTH : DIAG.concat(ORTH);
+          for (const [df, dr] of dirs) {
+            let cf = f + df, cr = r + dr;
+            while (cf >= 0 && cf <= 7 && cr >= 0 && cr <= 7) {
+              const to = cr * 8 + cf, t = board[to];
+              if (t === 0) push(from, to);
+              else { if (Math.sign(t) !== turn) push(from, to); break; }
+              cf += df; cr += dr;
+            }
+          }
+        }
+      }
+      return moves;
+    }
+    function applyMove(s, m) {
+      const n = cloneState(s), b = n.board;
+      const piece = b[m.from], type = Math.abs(piece), turn = s.turn, captured = b[m.to];
+      b[m.to] = m.promo ? turn * m.promo : piece;
+      b[m.from] = 0;
+      if (m.flag === 3) b[rankOf(m.from) * 8 + fileOf(m.to)] = 0;                       // pion pris en passant
+      if (m.flag === 4) { const hr = rankOf(m.from); b[hr * 8 + 5] = b[hr * 8 + 7]; b[hr * 8 + 7] = 0; }
+      if (m.flag === 5) { const hr = rankOf(m.from); b[hr * 8 + 3] = b[hr * 8 + 0]; b[hr * 8 + 0] = 0; }
+      n.ep = m.flag === 2 ? (m.from + m.to) / 2 : -1;
+      // droits de roque perdus si le roi/la tour bouge, ou si la tour est prise
+      if (type === KING) { if (turn === 1) { n.castle.wk = n.castle.wq = false; } else { n.castle.bk = n.castle.bq = false; } }
+      if (m.from === 0 || m.to === 0) n.castle.wq = false;
+      if (m.from === 7 || m.to === 7) n.castle.wk = false;
+      if (m.from === 56 || m.to === 56) n.castle.bq = false;
+      if (m.from === 63 || m.to === 63) n.castle.bk = false;
+      n.half = (type === PAWN || captured !== 0) ? 0 : s.half + 1;
+      if (turn === -1) n.full = s.full + 1;
+      n.turn = -turn;
+      return n;
+    }
+    function legalMoves(s) {
+      const out = [];
+      for (const m of pseudoMoves(s)) {
+        const n = applyMove(s, m);
+        const k = findKing(n.board, s.turn);
+        if (k === -1 || !isAttacked(n.board, k, -s.turn)) out.push(m);
+      }
+      return out;
+    }
+    function inCheck(s) {
+      const k = findKing(s.board, s.turn);
+      return k !== -1 && isAttacked(s.board, k, -s.turn);
+    }
+    // 'mat' | 'pat' | 'nulle' | null (partie en cours)
+    function gameResult(s) {
+      if (legalMoves(s).length === 0) return inCheck(s) ? 'mat' : 'pat';
+      if (s.half >= 100) return 'nulle';
+      const heavy = [];
+      for (let i = 0; i < 64; i++) { const a = Math.abs(s.board[i]); if (a && a !== KING) heavy.push(a); }
+      if (heavy.length === 0) return 'nulle';
+      if (heavy.length === 1 && (heavy[0] === KNIGHT || heavy[0] === BISHOP)) return 'nulle';
+      return null;
+    }
+
+    // --- adversaire : minimax alpha-bêta + quiescence ---
+    const VAL = { [PAWN]: 100, [KNIGHT]: 320, [BISHOP]: 330, [ROOK]: 500, [QUEEN]: 900, [KING]: 20000 };
+    // tables de position vues des blancs (index 0 = a1), lues en miroir
+    // pour les noirs — poussent au centre et au développement
+    const PST = {
+      [PAWN]: [0,0,0,0,0,0,0,0, 5,10,10,-20,-20,10,10,5, 5,-5,-10,0,0,-10,-5,5, 0,0,0,20,20,0,0,0,
+               5,5,10,25,25,10,5,5, 10,10,20,30,30,20,10,10, 50,50,50,50,50,50,50,50, 0,0,0,0,0,0,0,0],
+      [KNIGHT]: [-50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,5,5,0,-20,-40, -30,5,10,15,15,10,5,-30, -30,0,15,20,20,15,0,-30,
+                 -30,5,15,20,20,15,5,-30, -30,0,10,15,15,10,0,-30, -40,-20,0,0,0,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50],
+      [BISHOP]: [-20,-10,-10,-10,-10,-10,-10,-20, -10,5,0,0,0,0,5,-10, -10,10,10,10,10,10,10,-10, -10,0,10,10,10,10,0,-10,
+                 -10,5,5,10,10,5,5,-10, -10,0,5,10,10,5,0,-10, -10,0,0,0,0,0,0,-10, -20,-10,-10,-10,-10,-10,-10,-20],
+      [ROOK]: [0,0,0,5,5,0,0,0, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5,
+               -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 5,10,10,10,10,10,10,5, 0,0,0,0,0,0,0,0],
+      [QUEEN]: [-20,-10,-10,-5,-5,-10,-10,-20, -10,0,5,0,0,0,0,-10, -10,5,5,5,5,5,0,-10, 0,0,5,5,5,5,0,-5,
+                -5,0,5,5,5,5,0,-5, -10,0,5,5,5,5,0,-10, -10,0,0,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20],
+      [KING]: [20,30,10,0,0,10,30,20, 20,20,0,0,0,0,20,20, -10,-20,-20,-20,-20,-20,-20,-10, -20,-30,-30,-40,-40,-30,-30,-20,
+               -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30]
+    };
+    function evaluate(s) {
+      let score = 0;
+      for (let i = 0; i < 64; i++) {
+        const p = s.board[i];
+        if (p === 0) continue;
+        const t = Math.abs(p), side = Math.sign(p);
+        const idx = side === 1 ? i : (7 - (i >> 3)) * 8 + (i & 7);
+        score += side * (VAL[t] + PST[t][idx]);
+      }
+      return score * s.turn;
+    }
+    // sans quiescence, le moteur laisse des pièces en prise juste au-delà
+    // de son horizon : on ne s'arrête jamais au milieu d'un échange
+    function quiesce(s, alpha, beta) {
+      const stand = evaluate(s);
+      if (stand >= beta) return beta;
+      if (stand > alpha) alpha = stand;
+      const caps = legalMoves(s).filter(m => s.board[m.to] !== 0 || m.flag === 3 || m.promo);
+      caps.sort((a, b) => (Math.abs(s.board[b.to]) || 0) - (Math.abs(s.board[a.to]) || 0));
+      for (const m of caps) {
+        const score = -quiesce(applyMove(s, m), -beta, -alpha);
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+      }
+      return alpha;
+    }
+    function search(s, depth, alpha, beta) {
+      if (depth === 0) return quiesce(s, alpha, beta);
+      const moves = legalMoves(s);
+      if (moves.length === 0) return inCheck(s) ? -100000 + (10 - depth) : 0; // mat plus proche = pire
+      moves.sort((a, b) => (Math.abs(s.board[b.to]) || 0) - (Math.abs(s.board[a.to]) || 0));
+      for (const m of moves) {
+        const score = -search(applyMove(s, m), depth - 1, -beta, -alpha);
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+      }
+      return alpha;
+    }
+    // `jitter` desserre volontairement le jeu : à 0 le moteur prend toujours
+    // le meilleur coup, plus haut il tire au sort parmi les coups à `jitter`
+    // centipions du meilleur — un adversaire de salon, pas un bourreau
+    function bestMove(s, depth, jitter) {
+      const moves = legalMoves(s);
+      if (moves.length === 0) return null;
+      moves.sort((a, b) => (Math.abs(s.board[b.to]) || 0) - (Math.abs(s.board[a.to]) || 0));
+      const scored = moves.map(m => ({ m, score: -search(applyMove(s, m), depth - 1, -Infinity, Infinity) }));
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0].score;
+      const pool = scored.filter(x => x.score >= best - jitter);
+      return pool[Math.floor(Math.random() * pool.length)].m;
+    }
+    // lecture d'une position FEN — sert aux positions de défi, pas au jeu
+    // normal ; on ignore les compteurs de coups, inutiles ici
+    function fromFEN(fen) {
+      const [pos, turn, castle = '-', ep = '-'] = fen.split(/\s+/);
+      const board = new Int8Array(64);
+      const map = { p: PAWN, n: KNIGHT, b: BISHOP, r: ROOK, q: QUEEN, k: KING };
+      let rank = 7, file = 0;
+      for (const ch of pos) {
+        if (ch === '/') { rank--; file = 0; continue; }
+        if (ch >= '1' && ch <= '8') { file += +ch; continue; }
+        const tp = map[ch.toLowerCase()];
+        board[rank * 8 + file] = ch === ch.toLowerCase() ? -tp : tp;
+        file++;
+      }
+      let epSq = -1;
+      if (ep !== '-') epSq = (+ep[1] - 1) * 8 + (ep.charCodeAt(0) - 97);
+      return { board, turn: turn === 'w' ? 1 : -1,
+               castle: { wk: castle.includes('K'), wq: castle.includes('Q'), bk: castle.includes('k'), bq: castle.includes('q') },
+               ep: epSq, half: 0, full: 1 };
+    }
+    return { newGame, legalMoves, applyMove, inCheck, gameResult, bestMove, fromFEN, fileOf, rankOf,
+             PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
+  })();
+
+  // --- panneau de jeu : plateau vu de dessus, blancs en bas ---
+  const chessOverlay = document.getElementById('chessOverlay');
+  const chessCanvas = document.getElementById('chessCanvas');
+  const chessCtx = chessCanvas.getContext('2d');
+  const chessStatusEl = document.getElementById('chessStatus');
+  const chessPromoEl = document.getElementById('chessPromo');
+  const chessBtn = document.getElementById('chessBtn');
+  const CHESS_PX = chessCanvas.width, CHESS_CELL = CHESS_PX / 8;
+  const CHESS_AI_DEPTH = 3;
+  const CHESS_AI_JITTER = 45; // centipions : laisse passer les coups presque aussi bons
+  let chessGame = null;     // conservée toute la session : la partie attend
+  let chessSel = -1;        // case sélectionnée, -1 = aucune
+  let chessTargets = [];    // coups légaux depuis chessSel
+  let chessBusy = false;    // l'adversaire réfléchit
+  let chessPromoPending = null; // coups de promotion en attente du choix
+  let chessLastMove = null; // pour surligner le dernier coup joué
+  // Défi court (DEMANDÉ EN SESSION, 2026-09-13 : Pierre voulait les trois
+  // registres — réflexion, contemplation, petit défi). Positions vérifiées
+  // par le moteur avant d'être retenues : chacune est légale (le camp qui
+  // vient de jouer n'est pas en échec) et n'admet qu'UN seul coup de mat,
+  // sinon l'énigme aurait plusieurs réponses justes.
+  const CHESS_PUZZLES = [
+    '6k1/5ppp/8/8/8/8/5PPP/R5K1 w - -',      // couloir : a1a8
+    '6rk/6pp/7N/8/8/8/8/6K1 w - -',          // étouffé : h6f7
+    '6k1/4Bppp/8/8/8/8/5PPP/3Q2K1 w - -',    // fou et dame : d1d8
+    '7k/R7/8/8/8/8/8/1R6 w - -',             // escalier : b1b8
+    '6k1/8/6K1/8/8/8/8/R7 w - -',            // roi et tour : a1a8
+    '6k1/5ppp/8/8/8/5N2/8/3Q2K1 w - -'       // dame et cavalier : d1d8
+  ];
+  let chessPuzzle = false;  // en mode défi, l'adversaire ne rejoue pas
+  let chessPuzzleIdx = -1;
+
+  // l'adversaire : la princesse tant qu'elle est en vie, sinon le prêtre
+  function chessPartnerIsPriest() { return !!state.princessDead; }
+
+  function chessSqXY(sq) {
+    return { x: Chess.fileOf(sq) * CHESS_CELL, y: (7 - Chess.rankOf(sq)) * CHESS_CELL };
+  }
+  function chessXYSq(px, py) {
+    const f = Math.floor(px / CHESS_CELL), r = 7 - Math.floor(py / CHESS_CELL);
+    if (f < 0 || f > 7 || r < 0 || r > 7) return -1;
+    return r * 8 + f;
+  }
+
+  // pièces dessinées à la main comme tout le reste du jeu (pas d'emoji :
+  // les figurines Unicode passent en emoji couleur sur iOS, ce qui jure
+  // avec le trait du reste)
+  function chessDrawPiece(type, side, cx, cy, s) {
+    const c = chessCtx, light = side === 1;
+    c.fillStyle = light ? '#f7efdb' : '#16100a';
+    c.strokeStyle = light ? '#4a3a22' : '#e0cda4';
+    c.lineWidth = Math.max(1, s * 0.05);
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    const bot = cy + s * 0.40;
+    const poly = (pts) => {
+      c.beginPath();
+      c.moveTo(cx + pts[0][0] * s, cy + pts[0][1] * s);
+      for (let i = 1; i < pts.length; i++) c.lineTo(cx + pts[i][0] * s, cy + pts[i][1] * s);
+      c.closePath();
+      c.fill(); c.stroke();
+    };
+    // socle commun, posé au même niveau pour toutes les pièces
+    c.beginPath();
+    c.ellipse(cx, bot, s * 0.28, s * 0.08, 0, 0, Math.PI * 2);
+    c.fill(); c.stroke();
+    if (type === Chess.PAWN) {
+      c.beginPath();
+      c.moveTo(cx - s * 0.19, bot);
+      c.quadraticCurveTo(cx - s * 0.11, cy + s * 0.04, cx - s * 0.085, cy - s * 0.09);
+      c.lineTo(cx + s * 0.085, cy - s * 0.09);
+      c.quadraticCurveTo(cx + s * 0.11, cy + s * 0.04, cx + s * 0.19, bot);
+      c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); c.arc(cx, cy - s * 0.20, s * 0.125, 0, Math.PI * 2); c.fill(); c.stroke();
+    } else if (type === Chess.ROOK) {
+      // fût + couronnement crénelé, même langage que les merlons du donjon
+      poly([[-0.19, 0.40], [-0.15, -0.10], [0.15, -0.10], [0.19, 0.40]]);
+      poly([[-0.25, -0.10], [-0.25, -0.31], [-0.14, -0.31], [-0.14, -0.22],
+            [-0.05, -0.22], [-0.05, -0.31], [0.05, -0.31], [0.05, -0.22],
+            [0.14, -0.22], [0.14, -0.31], [0.25, -0.31], [0.25, -0.10]]);
+    } else if (type === Chess.KNIGHT) {
+      // tête de cheval tournée vers la gauche : museau, chanfrein, deux
+      // oreilles, crinière qui redescend dans l'encolure
+      poly([[-0.20, 0.40], [-0.13, 0.10], [-0.24, -0.02], [-0.32, -0.10],
+            [-0.27, -0.20], [-0.15, -0.24], [-0.15, -0.33], [-0.05, -0.44],
+            [0.01, -0.31], [0.09, -0.41], [0.13, -0.25], [0.21, -0.05],
+            [0.19, 0.14], [0.20, 0.40]]);
+      c.fillStyle = light ? '#4a3a22' : '#e0cda4';
+      c.beginPath(); c.arc(cx - s * 0.17, cy - s * 0.20, s * 0.032, 0, Math.PI * 2); c.fill();
+      c.beginPath(); // naseau
+      c.arc(cx - s * 0.27, cy - s * 0.11, s * 0.022, 0, Math.PI * 2); c.fill();
+    } else if (type === Chess.BISHOP) {
+      c.beginPath(); // fût
+      c.moveTo(cx - s * 0.18, bot);
+      c.quadraticCurveTo(cx - s * 0.10, cy + s * 0.02, cx - s * 0.11, cy - s * 0.07);
+      c.lineTo(cx + s * 0.11, cy - s * 0.07);
+      c.quadraticCurveTo(cx + s * 0.10, cy + s * 0.02, cx + s * 0.18, bot);
+      c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); // collerette
+      c.ellipse(cx, cy - s * 0.08, s * 0.16, s * 0.045, 0, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+      c.beginPath(); // mitre
+      c.moveTo(cx, cy - s * 0.42);
+      c.quadraticCurveTo(cx + s * 0.19, cy - s * 0.24, cx + s * 0.14, cy - s * 0.11);
+      c.lineTo(cx - s * 0.14, cy - s * 0.11);
+      c.quadraticCurveTo(cx - s * 0.19, cy - s * 0.24, cx, cy - s * 0.42);
+      c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); // fente caractéristique de la mitre
+      c.moveTo(cx + s * 0.02, cy - s * 0.33);
+      c.lineTo(cx + s * 0.11, cy - s * 0.21);
+      c.stroke();
+    } else if (type === Chess.QUEEN || type === Chess.KING) {
+      c.beginPath(); // fût commun
+      c.moveTo(cx - s * 0.19, bot);
+      c.quadraticCurveTo(cx - s * 0.10, cy + s * 0.02, cx - s * 0.12, cy - s * 0.09);
+      c.lineTo(cx + s * 0.12, cy - s * 0.09);
+      c.quadraticCurveTo(cx + s * 0.10, cy + s * 0.02, cx + s * 0.19, bot);
+      c.closePath(); c.fill(); c.stroke();
+      if (type === Chess.QUEEN) {
+        poly([[-0.21, -0.09], [-0.25, -0.34], [-0.13, -0.21], [0, -0.40],
+              [0.13, -0.21], [0.25, -0.34], [0.21, -0.09]]);
+        c.fillStyle = light ? '#4a3a22' : '#e0cda4';
+        for (const dx of [-0.25, 0, 0.25]) {
+          c.beginPath(); c.arc(cx + s * dx, cy - s * (dx === 0 ? 0.40 : 0.34), s * 0.035, 0, Math.PI * 2); c.fill();
+        }
+      } else {
+        poly([[-0.20, -0.09], [-0.17, -0.26], [0.17, -0.26], [0.20, -0.09]]);
+        poly([[-0.04, -0.26], [-0.04, -0.32], [-0.12, -0.32], [-0.12, -0.39],
+              [-0.04, -0.39], [-0.04, -0.47], [0.04, -0.47], [0.04, -0.39],
+              [0.12, -0.39], [0.12, -0.32], [0.04, -0.32], [0.04, -0.26]]);
+      }
+    }
+  }
+
+  function chessRender() {
+    if (!chessGame) return;
+    const c = chessCtx;
+    c.clearRect(0, 0, CHESS_PX, CHESS_PX);
+    for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) {
+      const sq = r * 8 + f, { x, y } = chessSqXY(sq);
+      // mêmes bois que l'échiquier décoratif posé sur la table
+      // mi-tons : assez sombres pour les pièces claires, assez clairs pour
+      // les sombres — un plateau plus contrasté se lit mal dans les deux sens
+      c.fillStyle = (f + r) % 2 === 0 ? '#6b4a2c' : '#c9ab7d';
+      c.fillRect(x, y, CHESS_CELL, CHESS_CELL);
+      if (chessLastMove && (sq === chessLastMove.from || sq === chessLastMove.to)) {
+        c.fillStyle = 'rgba(255,190,90,0.30)';
+        c.fillRect(x, y, CHESS_CELL, CHESS_CELL);
+      }
+      if (sq === chessSel) {
+        c.fillStyle = 'rgba(120,220,150,0.38)';
+        c.fillRect(x, y, CHESS_CELL, CHESS_CELL);
+      }
+    }
+    // destinations possibles : pastille sur case vide, anneau sur une prise
+    for (const m of chessTargets) {
+      const { x, y } = chessSqXY(m.to);
+      const cx = x + CHESS_CELL / 2, cy = y + CHESS_CELL / 2;
+      c.fillStyle = 'rgba(120,220,150,0.55)';
+      c.strokeStyle = 'rgba(120,220,150,0.75)';
+      c.lineWidth = CHESS_CELL * 0.07;
+      c.beginPath();
+      if (chessGame.board[m.to] !== 0 || m.flag === 3) { c.arc(cx, cy, CHESS_CELL * 0.40, 0, Math.PI * 2); c.stroke(); }
+      else { c.arc(cx, cy, CHESS_CELL * 0.13, 0, Math.PI * 2); c.fill(); }
+    }
+    // roi en échec : liseré rouge, pour qu'on ne le rate pas
+    if (Chess.inCheck(chessGame)) {
+      for (let i = 0; i < 64; i++) {
+        if (chessGame.board[i] === chessGame.turn * Chess.KING) {
+          const { x, y } = chessSqXY(i);
+          c.strokeStyle = 'rgba(220,70,60,0.9)';
+          c.lineWidth = CHESS_CELL * 0.09;
+          c.strokeRect(x + CHESS_CELL * 0.05, y + CHESS_CELL * 0.05, CHESS_CELL * 0.9, CHESS_CELL * 0.9);
+        }
+      }
+    }
+    for (let i = 0; i < 64; i++) {
+      const p = chessGame.board[i];
+      if (p === 0) continue;
+      const { x, y } = chessSqXY(i);
+      chessDrawPiece(Math.abs(p), Math.sign(p), x + CHESS_CELL / 2, y + CHESS_CELL / 2, CHESS_CELL * 0.86);
+    }
+  }
+
+  function chessSetStatus(msg) { chessStatusEl.textContent = msg; }
+
+  function chessRefreshStatus() {
+    if (chessPuzzle) {
+      chessSetStatus(Chess.gameResult(chessGame) === 'mat' ? t('chess_puzzle_solved') : t('chess_puzzle_prompt'));
+      return;
+    }
+    const res = Chess.gameResult(chessGame);
+    if (res === 'mat') chessSetStatus(chessGame.turn === 1 ? t('chess_mate_lose') : t('chess_mate_win'));
+    else if (res === 'pat') chessSetStatus(t('chess_stale'));
+    else if (res === 'nulle') chessSetStatus(t('chess_draw'));
+    else if (chessBusy) chessSetStatus(chessPartnerIsPriest() ? t('chess_thinking_m') : t('chess_thinking_f'));
+    else chessSetStatus(Chess.inCheck(chessGame) ? t('chess_check') : t('chess_your_turn'));
+  }
+
+  function chessPlay(m) {
+    chessGame = Chess.applyMove(chessGame, m);
+    chessLastMove = m;
+    chessSel = -1;
+    chessTargets = [];
+    chessRender();
+    chessRefreshStatus();
+  }
+
+  // l'adversaire joue après un temps de latence : sans lui le coup apparaît
+  // instantanément, ce qui casse net le rythme posé de la scène
+  function chessOpponentTurn() {
+    if (Chess.gameResult(chessGame)) return;
+    chessBusy = true;
+    chessRefreshStatus();
+    setTimeout(() => {
+      if (!chessGame || chessGame.turn !== -1) { chessBusy = false; return; }
+      const m = Chess.bestMove(chessGame, CHESS_AI_DEPTH, CHESS_AI_JITTER);
+      chessBusy = false;
+      if (!m) { chessRefreshStatus(); return; }
+      const capture = chessGame.board[m.to] !== 0;
+      chessPlay(m);
+      beep(capture ? { freq: 150, freqEnd: 90, dur: 0.12, type: 'triangle', vol: 0.18 }
+                   : { freq: 320, freqEnd: 250, dur: 0.07, type: 'sine', vol: 0.12 });
+    }, 420 + Math.random() * 520);
+  }
+
+  function chessShowPromo(moves) {
+    chessPromoPending = moves;
+    chessPromoEl.innerHTML = '';
+    const names = { [Chess.QUEEN]: t('chess_queen'), [Chess.ROOK]: t('chess_rook'),
+                    [Chess.BISHOP]: t('chess_bishop'), [Chess.KNIGHT]: t('chess_knight') };
+    for (const pr of [Chess.QUEEN, Chess.ROOK, Chess.BISHOP, Chess.KNIGHT]) {
+      const mv = moves.find(m => m.promo === pr);
+      if (!mv) continue;
+      const b = document.createElement('button');
+      b.textContent = names[pr];
+      b.addEventListener('click', () => {
+        chessPromoEl.hidden = true;
+        chessPromoPending = null;
+        chessPlay(mv);
+        beep({ freq: 520, freqEnd: 700, dur: 0.16, type: 'sine', vol: 0.16 });
+        if (chessPuzzle) chessPuzzleResolve(); else chessOpponentTurn();
+      });
+      chessPromoEl.appendChild(b);
+    }
+    chessPromoEl.hidden = false;
+    chessSetStatus(t('chess_promo'));
+  }
+
+  chessCanvas.addEventListener('pointerdown', (e) => {
+    if (!chessGame || chessBusy || chessPromoPending) return;
+    if (Chess.gameResult(chessGame) || chessGame.turn !== 1) return;
+    const rect = chessCanvas.getBoundingClientRect();
+    const sq = chessXYSq((e.clientX - rect.left) * (CHESS_PX / rect.width),
+                         (e.clientY - rect.top) * (CHESS_PX / rect.height));
+    if (sq < 0) return;
+    const hit = chessTargets.filter(m => m.to === sq);
+    if (hit.length > 0) {
+      if (hit.length > 1 && hit[0].promo) { chessShowPromo(hit); return; } // promotion : on demande la pièce
+      const capture = chessGame.board[sq] !== 0 || hit[0].flag === 3;
+      chessPlay(hit[0]);
+      beep(capture ? { freq: 170, freqEnd: 100, dur: 0.12, type: 'triangle', vol: 0.2 }
+                   : { freq: 380, freqEnd: 300, dur: 0.07, type: 'sine', vol: 0.14 });
+      if (chessPuzzle) chessPuzzleResolve(); else chessOpponentTurn();
+      return;
+    }
+    const p = chessGame.board[sq];
+    if (p > 0) { // une de ses propres pièces : (re)sélection
+      chessSel = sq;
+      chessTargets = Chess.legalMoves(chessGame).filter(m => m.from === sq);
+    } else {
+      chessSel = -1;
+      chessTargets = [];
+    }
+    chessRender();
+  });
+
+  function chessLoadPuzzle(idx) {
+    chessPuzzle = true;
+    chessPuzzleIdx = idx;
+    chessGame = Chess.fromFEN(CHESS_PUZZLES[idx]);
+    chessLastMove = null;
+    chessSel = -1;
+    chessTargets = [];
+    chessBusy = false;
+    chessPromoPending = null;
+    chessPromoEl.hidden = true;
+    chessRender();
+    chessRefreshStatus();
+  }
+  function chessPuzzleResolve() {
+    if (Chess.gameResult(chessGame) === 'mat') {
+      beep({ freq: 620, freqEnd: 880, dur: 0.22, type: 'sine', vol: 0.18 });
+      return; // chessRefreshStatus a déjà affiché la réussite
+    }
+    // raté : on laisse voir le coup joué une seconde, puis on remet la
+    // position — un défi qu'on ne peut pas retenter n'en est pas un
+    chessSetStatus(t('chess_puzzle_missed'));
+    const idx = chessPuzzleIdx;
+    setTimeout(() => { if (chessPuzzle && chessPuzzleIdx === idx) chessLoadPuzzle(idx); }, 1200);
+  }
+  document.getElementById('chessPuzzleBtn').addEventListener('click', () => {
+    // tire une autre position que celle affichée, pour ne pas rejouer la même
+    let idx = Math.floor(Math.random() * CHESS_PUZZLES.length);
+    if (CHESS_PUZZLES.length > 1 && idx === chessPuzzleIdx) idx = (idx + 1) % CHESS_PUZZLES.length;
+    chessLoadPuzzle(idx);
+  });
+
+  function chessOpen() {
+    if (!chessGame) { chessGame = Chess.newGame(); chessLastMove = null; }
+    chessSel = -1;
+    chessTargets = [];
+    chessPromoPending = null;
+    chessPromoEl.hidden = true;
+    chessOverlay.hidden = false;
+    document.body.classList.add('chessOpen');
+    chessBtn.hidden = true;
+    priestBtn.hidden = true;
+    chessRender();
+    chessRefreshStatus();
+    // reprise d'une partie laissée en plan : c'est au tour des noirs
+    if (chessGame.turn === -1 && !Chess.gameResult(chessGame)) chessOpponentTurn();
+  }
+  chessBtn.addEventListener('click', chessOpen);
+  document.getElementById('chessNewBtn').addEventListener('click', () => {
+    chessPuzzle = false;
+    chessPuzzleIdx = -1;
+    chessGame = Chess.newGame();
+    chessLastMove = null;
+    chessSel = -1;
+    chessTargets = [];
+    chessBusy = false;
+    chessPromoPending = null;
+    chessPromoEl.hidden = true;
+    chessRender();
+    chessRefreshStatus();
+  });
+  document.getElementById('chessCloseBtn').addEventListener('click', () => {
+    chessOverlay.hidden = true;
+    document.body.classList.remove('chessOpen');
+  });
+
+  // bouton flottant ancré à l'échiquier posé sur la table, même recette que
+  // le prêtre (repère du canvas cosy, repositionné à chaque frame)
+  function updateChessBtn() {
+    if (cosyOverlay.hidden || !chessOverlay.hidden) { chessBtn.hidden = true; return; }
+    chessBtn.hidden = false;
+    const rect = cosyCanvas.getBoundingClientRect();
+    const pos = cosyIso(CHESS_CX, 0.55, CHESS_CZ);
+    chessBtn.style.left = (rect.left + pos.x * (rect.width / COSY_W)) + 'px';
+    chessBtn.style.top = (rect.top + pos.y * (rect.height / COSY_H)) + 'px';
+    chessBtn.textContent = t('chess_btn');
+  }
+
+  // On teste le toucher en coordonnées écran plutôt qu'en coordonnées de la
+  // pièce : projeter les deux cibles avec cosyIso et comparer les distances
+  // évite d'avoir à inverser la projection isométrique pour deux points.
+  cosyCanvas.addEventListener('pointerdown', (e) => {
+    if (!chessOverlay.hidden) return;
+    const rect = cosyCanvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (COSY_W / rect.width);
+    const py = (e.clientY - rect.top) * (COSY_H / rect.height);
+    const cat = cosyIso(cosyCat.x, 0.13, cosyCat.z);
+    if (Math.hypot(px - cat.x, py - cat.y) < 80) {
+      playPurr();
+      cosyCat.pauseTimer = Math.max(cosyCat.pauseTimer, 3.5); // il s'installe
+      cosyCat.purrCooldown = 5 + Math.random() * 4;           // pas deux ronrons coup sur coup
+      return;
+    }
+    const fire = cosyIso(6.7, 0.5, 4.6);
+    if (Math.hypot(px - fire.x, py - fire.y) < 150) {
+      cosyFireBoost = Math.min(0.6, cosyFireBoost + 0.45);
+      beep({ freq: 90, freqEnd: 260, dur: 0.38, type: 'sawtooth', vol: 0.1 });
+    }
+  });
+
   document.getElementById('cosyBtn').addEventListener('click', () => {
     cosyOverlay.hidden = false;
     ensureAudio();
+    fadeBgMusicTo(0, 1200);
+    startCosyAmbient();
     if (cosyRAF === null) { cosyLastT = 0; cosyRAF = requestAnimationFrame(cosyFrame); }
   });
   document.getElementById('cosyClose').addEventListener('click', () => {
     cosyOverlay.hidden = true;
     if (cosyRAF !== null) { cancelAnimationFrame(cosyRAF); cosyRAF = null; }
     priestBtn.hidden = true;
+    chessBtn.hidden = true;
+    chessOverlay.hidden = true;
+    document.body.classList.remove('chessOpen');
+    stopCosyAmbient();
+    fadeBgMusicTo(musicVolume / 100, 1200);
   });
   document.getElementById('closeMenu').addEventListener('click', () => { menu.hidden = true; });
   const faqOverlay = document.getElementById('faqOverlay');
@@ -4849,6 +6309,17 @@
   function update(dt) {
     const p = state.player;
 
+    // Décision du dernier rempart : le monde est mis en pause le temps de
+    // choisir. Sans ça le donjon continuerait d'être frappé pendant qu'on
+    // lit l'écran, et la seconde chance serait déjà consommée en
+    // apparaissant. Seuls le décompte et l'horloge tournent.
+    if (state.waveState === 'lastStand') {
+      lastStandTimer -= dt;
+      document.getElementById('lastStandCount').textContent = Math.max(0, Math.ceil(lastStandTimer));
+      if (lastStandTimer <= 0) refuseLastStand(); // ne rien choisir, c'est renoncer
+      return;
+    }
+
     state.time += dt; // horloge simple, réutilisée par l'animation de l'eau (voir drawWaterGlints)
 
     if (state.prayerBuffTimer > 0) state.prayerBuffTimer = Math.max(0, state.prayerBuffTimer - dt);
@@ -4901,6 +6372,7 @@
     const threat = nearestEnemyTo(guardPos, ATTACK_RANGE);
     const damagedTurret = threat ? null : nearestDamagedTurret(p.angle);
     const sortieTarget = state.sortieHeld ? nearestSortieTarget(p.angle) : null;
+    updateTurretMount();
     const oilTower = state.oilHeld ? nearestTower(p.angle) : null;
 
     // calin only ever triggers if she's already down there — holding the
@@ -5081,7 +6553,8 @@
       p.repairTimer = REPAIR_TICK;
       p.repairMaxedPlayed = false;
       if (sortieTarget && Math.abs(angDiff(p.angle, targetAngle)) < 0.15 &&
-          Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85) {
+          Math.abs(p.r - targetR) < 10 && p.groundPos > 0.85 &&
+          sameStreamSide(p.r * Math.cos(p.angle), p.r * Math.sin(p.angle), targetR * Math.cos(targetAngle), targetR * Math.sin(targetAngle))) {
         p.sortieTimer -= dt;
         if (p.sortieTimer <= 0) {
           playHammer();
@@ -5321,6 +6794,10 @@
       // can't just sit there forever with no consequence — it still has to
       // be broken (ranged, slowly, or sortied against, faster) before the
       // wave is truly over.
+      // l'arc se referme ici : la vague 20 nettoyée, le niveau est gagné.
+      // C'est tout l'intérêt d'un niveau unique — il y a une fin, donc une
+      // victoire à raconter, et pas seulement un record à battre.
+      if (state.wave >= WAVE_COUNT) { showVictory(); return; }
       state.wave++;
       updateWaveNum();
       // a breather between waves: half of whatever's missing comes back,
@@ -5346,11 +6823,10 @@
     // débarquement par bateau : évènement indépendant des vagues normales
     // ("de temps en temps", pas mélangé — confirmé par Pierre), sur son
     // propre minuteur plutôt que lié à state.wave/startWave
-    state.boatTimer -= dt;
-    if (state.boatTimer <= 0) {
-      spawnBoat();
-      state.boatTimer = BOAT_EVENT_MIN_INTERVAL + Math.random() * (BOAT_EVENT_MAX_INTERVAL - BOAT_EVENT_MIN_INTERVAL);
-    }
+    // les débarquements sont maintenant déclenchés par la table des vagues
+    // (WAVES, champ boat) dans startWave(), et non plus par un minuteur
+    // libre — sur un arc de 20 vagues, un évènement au hasard pouvait
+    // tomber deux fois dans la même vague ou pas du tout de la partie
     updateBoats(dt);
 
     // enemies
@@ -5540,8 +7016,14 @@
         if (e.timer <= 0) {
           const lx = e.r * Math.cos(e.angle), lz = e.r * Math.sin(e.angle);
           const def = nearestDefender(lx, lz);
-          if (def.type === 'player') {
+          // perché sur une tourelle, il est hors d'atteinte de ceux qui
+          // viennent de monter sur la plateforme : ils s'en prennent à la
+          // tourelle sous ses pieds à la place. La pression ne disparaît
+          // donc pas, elle change de cible.
+          if (def.type === 'player' && !p.onTurret) {
             hurtPlayer(1); // centralisé — voir le bonus de défense de la prière
+          } else if (def.type === 'player') {
+            p.onTurret.hp -= 2;
           } else {
             def.ref.hp -= 2;
           }
@@ -5581,14 +7063,21 @@
         if (tier.isTower) {
           const lx = s.r * Math.cos(s.angle), lz = s.r * Math.sin(s.angle);
           const def = nearestDefender(lx, lz);
+          // la tour de siège, elle, surplombe la plateforme : être sur une
+          // tourelle ne met pas à l'abri d'elle (Pierre : à l'abri du corps
+          // à corps, "mais les engins de siège à distance si")
           if (def.type === 'player') hurtPlayer(1);
           else def.ref.hp -= tier.dmg;
         } else if (tier.ranged) {
           // trébuchet : tire un projectile visible depuis là où il est
           // construit plutôt d'infliger les dégâts instantanément — même
           // dégâts/cadence qu'avant, juste un temps de vol en plus (~0.7s,
-          // négligeable vu le cooldown de plusieurs secondes)
-          fireSiegeShot(s, tier.dmg);
+          // négligeable vu le cooldown de plusieurs secondes). Vise
+          // maintenant la tourelle la plus proche de lui s'il y en a une
+          // (comme la tour de siège plus haut), sinon le mur comme avant.
+          const lx = s.r * Math.cos(s.angle), lz = s.r * Math.sin(s.angle);
+          const def = nearestDefender(lx, lz);
+          fireSiegeShot(s, tier.dmg, def.type === 'tower' ? def.ref : null);
         } else {
           state.castleH = Math.max(CASTLE_MIN_H, state.castleH - tier.dmg);
           triggerShake(Math.min(14, tier.dmg * 0.5)); // arbalète : léger ; bélier (22 dmg) : net
@@ -5606,7 +7095,7 @@
     if (p.behavior === 'combat') {
       p.atkTimer -= dt;
       if (p.atkTimer <= 0) {
-        const from = worldPos(p.r, p.angle, platformTopY());
+        const from = playerWorld(); // suit la surélévation quand il est sur une tourelle
         const target = princessDecoyTarget || nearestVisibleTarget();
         if (target) {
           // facing it dead-on hits much harder; drifting off to the side
@@ -5616,6 +7105,7 @@
           // tir du seigneur depuis les remparts, "dans l'axe" — PAS la
           // charge en sortie, précisée à part) — voir PLAYER_RAMPART_ATK_MUL
           let dmg = facingMultiplier(target.angle) * PLAYER_RAMPART_ATK_MUL;
+          if (p.onTurret) dmg *= TURRET_ATK_MUL; // le surplomb frappe plus fort
           if (state.princessDead) dmg *= PRINCESS_DEATH_ATK_MUL;
           else if (state.princess.pos < 0.08) dmg *= PRINCESS_ATK_BONUS;
           fire(from, target, dmg);
@@ -5642,13 +7132,19 @@
       if (pr.t >= 1 && !pr.done) {
         pr.done = true;
         if (pr.siegeShot) {
-          // caillou de trébuchet : cible fixe (le donjon), pas une entité
-          // avec .hp — même dégâts que l'ancien contact instantané, juste
-          // appliqués à l'impact plutôt qu'au moment du tir
-          state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
-          triggerShake(Math.min(14, pr.dmg * 0.5));
-          triggerDamageIndicator(pr.from.x, pr.from.z);
-          if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+          // caillou de trébuchet : cible le mur par défaut (comme avant),
+          // ou la tourelle visée au tir (pr.siegeTarget) si elle existe
+          // encore à l'impact — a pu être détruite/réparée hors de danger
+          // entre le tir et l'impact (0,7s de vol), d'où le hp>0.
+          if (pr.siegeTarget && pr.siegeTarget.hp > 0) {
+            pr.siegeTarget.hp -= pr.dmg;
+            triggerDamageIndicator(pr.from.x, pr.from.z);
+          } else {
+            state.castleH = Math.max(CASTLE_MIN_H, state.castleH - pr.dmg);
+            triggerShake(Math.min(14, pr.dmg * 0.5));
+            triggerDamageIndicator(pr.from.x, pr.from.z);
+            if (state.castleH <= CASTLE_MIN_H) castleDestroyed();
+          }
         } else if (!pr.target.dead) {
           const isSiege = pr.target.tierIdx !== undefined;
           const tier = isSiege ? SIEGE_TIERS[pr.target.tierIdx] : null;
@@ -6271,6 +7767,11 @@
   // triangle at each end
   function drawHouse(h, rot) {
     const s = HOUSE_SIZE, wallH = s * 0.9, roofH = s * 0.7;
+    // DEMANDÉ EN SESSION (2026-09-12) : "rendre la maison distincte" pendant
+    // qu'elle abrite des ennemis — les pips rouges (drawHiddenPips) seuls
+    // étaient jugés pas assez visibles. Murs teintés vers l'ambre/doré
+    // (lueur intérieure) tant que hiddenCount>0, en plus des pips.
+    const occupied = h.hiddenCount > 0;
     const yaw = h.yaw || 0;
     const corners = [[-s, -s], [s, -s], [s, s], [-s, s]].map(([dx, dz]) => rotYaw(dx, dz, yaw)); // local (dx, dz), tournées
     const base = corners.map(([dx, dz]) => project(h.x + dx, 0, h.z + dz, rot));
@@ -6285,8 +7786,9 @@
     walls.sort((a, b) => a.depth - b.depth);
     for (const w of walls) {
       const g = Math.round(120 + w.light * 30);
-      ctx.fillStyle = `rgb(${g},${g - 25},${g - 55})`;
+      ctx.fillStyle = occupied ? `rgb(${Math.min(255, g + 55)},${Math.round(g * 0.65)},${Math.max(0, g - 90)})` : `rgb(${g},${g - 25},${g - 55})`;
       buildQuad(w.pts);
+      if (occupied) { ctx.strokeStyle = 'rgba(255,190,90,0.85)'; ctx.lineWidth = Math.max(1, 1.5 * scale); ctx.stroke(); }
     }
     // roof: a ridge along one axis, two sloped quads meeting at the top
     const [ridgeAx, ridgeAz] = rotYaw(-s, 0, yaw), [ridgeBx, ridgeBz] = rotYaw(s, 0, yaw);
@@ -6833,7 +8335,9 @@
   // trigonométrique dans le plan (tx,tz, haut)), d'où MOULIN_SPIN_RATE>0.
   function drawMoulinWheel(m, rot) {
     const { g, wheelX, wheelZ } = m;
-    const centerY = MOULIN_WHEEL_R; // le bas de la roue touche juste l'eau (y=0)
+    const wheelR = moulinWheelRadius(state.moulinLevel);
+    const spinRate = moulinWheelSpinRate(state.moulinLevel);
+    const centerY = wheelR; // le bas de la roue touche juste l'eau (y=0)
     // épaisseur : deux jantes (proche/loin), décalées le long de l'essieu
     // (rx,rz — perpendiculaire au plan de la roue, qui est lui-même dans
     // le plan courant/vertical, voir plus haut) plutôt qu'un disque plat.
@@ -6844,9 +8348,9 @@
     const farX = wheelX + g.rx * halfT, farZ = wheelZ + g.rz * halfT;
     const rimNear = [], rimFar = [];
     for (let i = 0; i < MOULIN_WHEEL_SEGS; i++) {
-      const theta = state.time * MOULIN_SPIN_RATE + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
-      const along = Math.cos(theta) * MOULIN_WHEEL_R; // le long du courant (tx,tz)
-      const up = Math.sin(theta) * MOULIN_WHEEL_R;    // vertical
+      const theta = state.time * spinRate + (i / MOULIN_WHEEL_SEGS) * Math.PI * 2;
+      const along = Math.cos(theta) * wheelR; // le long du courant (tx,tz)
+      const up = Math.sin(theta) * wheelR;    // vertical
       rimNear.push(project(nearX + g.tx * along, centerY + up, nearZ + g.tz * along, rot));
       rimFar.push(project(farX + g.tx * along, centerY + up, farZ + g.tz * along, rot));
     }
@@ -7032,9 +8536,11 @@
     else drawBallSprite('enemy', rad, '#8a3b2e', '#2a1a15', pos);
     const wait = enemyWaitInfo(e);
     if (wait) drawWaitGauge(pos, rad, 1 - wait.timer / wait.max, wait.color);
+    // DEMANDÉ EN SESSION (2026-09-12, Pierre : "une barre qui elle-même
+    // rétrécit, y a pas une barre dans une barre") : plus de fond noir
+    // pleine largeur derrière la barre rouge — juste la barre rouge,
+    // dont la largeur EST la vie restante.
     if (e.hp < e.maxHp) {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(pos.x - rad, pos.y - rad - 6, rad * 2, 3);
       ctx.fillStyle = '#c95a3f';
       ctx.fillRect(pos.x - rad, pos.y - rad - 6, rad * 2 * (e.hp / e.maxHp), 3);
     }
@@ -7282,16 +8788,26 @@
   // interpolation linéaire entre r0 et r1 reste dans [min(r0,r1),
   // max(r0,r1)]), donc le chemin contourne le donjon au lieu de couper
   // au plus court à travers lui — un vrai chemin, pas une corde.
-  function bowedPathPoints(x0, z0, x1, z1, steps = 8) {
+  // bulge (EN TEST, 2026-09-10 — pas encore validé par Pierre) : quand
+  // l'écart angulaire est grand (le cas normal des bretelles depuis la
+  // refonte procédurale — village volontairement dans la poche libre
+  // ENTRE les deux routes, donc presque toujours à 70-160° de chacune),
+  // une simple interpolation de rayon reste proche du donjon tout du
+  // long ET balaie un grand arc — se lit comme "un chemin qui fait le
+  // tour de la tour" plutôt qu'un vrai chemin de campagne. Un léger
+  // bombement vers l'EXTÉRIEUR (jamais vers le donjon, toujours max(r0,
+  // r1) au minimum) fait contourner large plutôt que raser le mur.
+  function bowedPathPoints(x0, z0, x1, z1, steps = 8, bulge = 0) {
     const a0 = Math.atan2(z0, x0), r0 = Math.hypot(x0, z0);
     const a1raw = Math.atan2(z1, x1), r1 = Math.hypot(x1, z1);
     let da = a1raw - a0;
     while (da > Math.PI) da -= Math.PI * 2;
     while (da < -Math.PI) da += Math.PI * 2;
+    const b = bulge > 0 ? Math.min(bulge, Math.abs(da) * 90) : 0;
     const pts = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      const a = a0 + da * t, r = r0 + (r1 - r0) * t;
+      const a = a0 + da * t, r = r0 + (r1 - r0) * t + b * Math.sin(Math.PI * t);
       pts.push({ x: r * Math.cos(a), z: r * Math.sin(a) });
     }
     return pts;
@@ -7304,8 +8820,8 @@
   // porte, largeur DOOR_HALF_WIDTH) — seule la ROUTE qui y mène se
   // courbe, pas l'alignement final exigé en session ("les deux côtés du
   // chemin doivent toucher les deux bords de la porte").
-  function drawBowedSplitRoadPath(x0, z0, x1, z1, halfWidth, rot, wantFar) {
-    const pts = bowedPathPoints(x0, z0, x1, z1);
+  function drawBowedSplitRoadPath(x0, z0, x1, z1, halfWidth, rot, wantFar, bulge = 0) {
+    const pts = bowedPathPoints(x0, z0, x1, z1, 8, bulge);
     for (let i = 0; i < pts.length - 1; i++) {
       drawSplitRoadPath(pts[i].x, pts[i].z, pts[i + 1].x, pts[i + 1].z, halfWidth, rot, wantFar, 2);
     }
@@ -7322,6 +8838,35 @@
   // seules intersections du réseau sont ces deux jonctions bretelle/
   // route — les routes elles-mêmes ne se croisent jamais entre elles,
   // et le troisième chemin place->porte n'en touche aucune).
+  // BUG TROUVÉ EN SESSION (2026-09-10, capture à l'appui de Pierre) : cette
+  // fonction prenait `r` = PLAZA_R telle quelle — "le point de la route à
+  // la MÊME DISTANCE du donjon que la place". Rien ne garantit que la
+  // route passe par un angle compatible à CE rayon précis — avec les
+  // routes maintenant procédurales (angles/coudes variables par graine),
+  // ce point pouvait tomber presque à l'opposé de la place, forçant la
+  // bretelle à balayer un grand arc autour du donjon pour les relier (le
+  // "fouillis" signalé). roadNearestR() cherche maintenant le vrai point
+  // le plus proche de la place sur TOUTE la route, pas seulement à un
+  // rayon imposé — la bretelle en résultant est toujours la plus courte
+  // possible, jamais un détour arbitraire.
+  function roadNearestR(idx, targetX, targetZ) {
+    let bestR = BASE_R, bestD = Infinity;
+    for (let r = BASE_R; r <= roadMaxR(); r += 8) {
+      const a = roadAngleAt(idx, r);
+      const dx = r * Math.cos(a) - targetX, dz = r * Math.sin(a) - targetZ;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; bestR = r; }
+    }
+    // affinage local autour du meilleur rayon trouvé (le balayage grossier
+    // ci-dessus peut manquer le vrai minimum de quelques unités)
+    for (let r = Math.max(BASE_R, bestR - 8); r <= bestR + 8; r += 1) {
+      const a = roadAngleAt(idx, r);
+      const dx = r * Math.cos(a) - targetX, dz = r * Math.sin(a) - targetZ;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; bestR = r; }
+    }
+    return bestR;
+  }
   function roadNearEdgePoint(idx, r, towardX, towardZ) {
     const a = roadAngleAt(idx, r);
     const cx = r * Math.cos(a), cz = r * Math.sin(a);
@@ -7334,10 +8879,22 @@
     return { x: cx + px * side * ROAD_WIDTH, z: cz + pz * side * ROAD_WIDTH };
   }
   function drawPlazaAndPaths(rot, wantFar) {
+    // EN TEST (2026-09-10, pas encore validé) : une seule bretelle, celle
+    // du côté le plus court — dessiner les deux force systématiquement au
+    // moins un grand écart angulaire (la place est délibérément dans la
+    // poche LOIN des deux routes, donc quasi toujours à 70-160° de
+    // chacune), ce qui se lisait comme un tracé qui fait le tour de la
+    // tour plutôt qu'un vrai chemin de campagne.
+    let best = null, bestLen = Infinity;
     for (let idx = 0; idx < 2; idx++) {
-      const roadPt = roadNearEdgePoint(idx, PLAZA_R, PLAZA_X, PLAZA_Z);
+      const roadPt = roadNearEdgePoint(idx, roadNearestR(idx, PLAZA_X, PLAZA_Z), PLAZA_X, PLAZA_Z);
       const edgeAngle = Math.atan2(roadPt.z - PLAZA_Z, roadPt.x - PLAZA_X);
       const edge = plazaEdgePoint(edgeAngle);
+      const len = Math.hypot(roadPt.x - edge.x, roadPt.z - edge.z);
+      if (len < bestLen) { bestLen = len; best = { roadPt, edge }; }
+    }
+    {
+      const { roadPt, edge } = best;
       if (phosphorStyle === 'couleur') {
         if (pointFar((roadPt.x + edge.x) / 2, (roadPt.z + edge.z) / 2, rot) === wantFar) {
           drawSimpleRoadPath(roadPt.x, roadPt.z, edge.x, edge.z, ROAD_WIDTH, rot);
@@ -7404,10 +8961,9 @@
     ctx.stroke();
 
     if (b.hp < b.maxHp) {
+      // même traitement que drawEnemy : une seule barre qui rétrécit
       const mid = project((innerR + outerR) / 2 * Math.cos(b.angle), 10, (innerR + outerR) / 2 * Math.sin(b.angle), rot);
       const bw = 22;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(mid.x - bw / 2, mid.y - 10, bw, 3);
       ctx.fillStyle = '#c9a24a';
       ctx.fillRect(mid.x - bw / 2, mid.y - 10, bw * (b.hp / b.maxHp), 3);
     }
@@ -7453,8 +9009,7 @@
       ctx.arc(pos.x, pos.y, rad + 4, 0, Math.PI * 2);
       ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(pos.x - rad, pos.y - rad - 8, rad * 2, 3);
+    // même traitement que drawEnemy : une seule barre qui rétrécit
     ctx.fillStyle = '#c9503f';
     ctx.fillRect(pos.x - rad, pos.y - rad - 8, rad * 2 * Math.max(0, s.hp / s.maxHp), 3);
 

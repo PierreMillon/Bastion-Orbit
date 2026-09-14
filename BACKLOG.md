@@ -3806,3 +3806,262 @@ Retirés à la demande de Pierre : le portfolio
 (pierremillon.github.io/pierremillon) est désormais l'endroit unique
 pour naviguer d'un projet à l'autre, chaque jeu n'a plus à porter ses
 propres liens vers ses voisins.
+
+
+## Monter sur les tourelles : texte introuvable (2026-09-14)
+
+Pierre : "j'avais parlé au moment de pouvoir monter sur les tourelles, il
+y a tout un texte là-dessus, il est où là".
+
+Recherché sans rien trouver : BACKLOG.md entier (toutes les formulations —
+monter, grimper, escalader, se poster, occuper), les commentaires de
+index.html, et l'historique git complet (`git log --all -S`) sur toutes
+les branches. **Ce texte n'existe nulle part dans le dépôt.** Il n'a donc
+jamais été écrit, ou il l'a été dans une conversation dont le résumé l'a
+mangé — même accident que "Deux routes serpentantes" plus haut dans ce
+fichier, qui avait dû être reconstituée sur demande.
+
+Ce qui existe et s'en approche, pour ne pas confondre :
+- **Échelles** (v0.35) : un ennemi plante une échelle et les autres
+  montent sur la plateforme du donjon sans démolir le mur. C'est bien de
+  la montée, mais par les ennemis et sur le donjon, pas sur les tourelles.
+- **Tour de siège** (`isTower`) : engin ennemi qui grandit
+  (`TOWER_GROW_RATE`) et, passé `TOWER_DANGER_H`, frappe la plateforme
+  directement.
+- **Huile** : le seigneur marche jusqu'à la tourelle la plus proche pour
+  verser — il va *à* la tourelle, il ne monte pas *dessus*.
+
+À faire redicter par Pierre. Ne pas inventer une mécanique à sa place.
+
+**Redicté le 2026-09-14** : « Le seigneur doit pouvoir monter sur les
+tourelles pour attaquer si elle le bloque. »
+
+Lecture : aujourd'hui le seigneur se déplace le long du mur ; quand une
+tourelle se trouve sur son chemin, il ne doit pas rester coincé — il
+monte dessus et peut attaquer depuis là-haut. La tourelle cesse d'être
+un obstacle pour devenir un poste. Reste à préciser avec lui ce que la
+hauteur change vraiment (portée, angle, vulnérabilité).
+
+## Trois orientations proposées le 2026-09-14 — analyse avant décision
+
+### 1. Passer à un moteur de rendu 3D
+
+Motivation de Pierre : "mieux contrôler toutes les images et les
+générations procédurales de la carte".
+
+Distinction importante à ne pas perdre : **la génération procédurale ne
+dépend pas du moteur de rendu**. `buildWorld()`, les graines, le
+rejet-échantillonnage, le placement des maisons — tout cela est du calcul
+de positions, totalement indépendant de la façon dont on dessine ensuite.
+Passer en 3D n'améliorerait donc *rien* de ce côté. Ce que la 3D
+améliorerait vraiment : la profondeur (plus d'artefacts de tri par
+peintre), la lumière et les ombres (il y a justement une section
+"Système d'éclairage à concevoir" en attente dans ce fichier), et la
+liberté de caméra.
+
+Coût réel : le rendu est écrit à la main en canvas 2D de bout en bout
+(`project()`, `cosyIso()`, tri en profondeur, chaque bâtiment en
+quadrilatères facettés). Une bascule en 3D réécrit ~100% du rendu. La
+logique de jeu (modèle polaire, vagues, IA, collisions) survivrait.
+Risque principal : perdre l'identité visuelle actuelle (le fil de fer /
+phosphore est activé par défaut) et des mois de réglages.
+
+Chemin recommandé si on y va : **prototyper à côté**, dans un fichier
+séparé, en pilotant le même modèle de monde, puis comparer — pas
+réécrire à l'aveugle.
+
+### 2. Un seul niveau, 20 vagues
+
+Motivation : "on pourra équilibrer beaucoup plus précisément la mécanique
+de jeu".
+
+C'est la proposition la plus solide des trois, et de loin la moins
+risquée. Aujourd'hui les vagues sont infinies et pilotées par des
+formules ; la progression multi-niveaux est encore une idée en attente
+(section "Chemin vers un autre château"). Un arc fixe de 20 vagues donne :
+une courbe de difficulté *dessinée* plutôt que calculée, une vraie
+condition de victoire (donc une fin, donc une envie de rejouer et de
+partager son score), et un espace de réglage fini où chaque changement
+est mesurable.
+
+À faire en premier : tout le reste (équilibrage, mécanique de seconde
+chance, et même le jugement sur la 3D) devient plus facile à évaluer une
+fois l'arc fermé.
+
+### 3. Vidéos récompensées adossées à l'aléatoire
+
+Motivation de Pierre : "tu peux être très bon mais des fois tu perds
+quand même et t'as envie de regarder une vidéo pour contrôler le hasard".
+
+Le constat est juste : une défaite due au hasard donne envie d'une
+seconde chance, et c'est exactement le moment où une vidéo récompensée
+fonctionne.
+
+Le piège à éviter : si la vidéo *contrôle* le hasard, le hasard cesse
+d'être honnête et le joueur finit par sentir que ses défaites sont
+fabriquées pour vendre des vidéos. La version saine donne toujours
+quelque chose que le joueur **pourrait aussi obtenir en jouant** —
+seconde chance, relance d'une vague ratée — jamais un avantage
+inaccessible autrement.
+
+Réserve technique à dire franchement : sur une page statique GitHub
+Pages, la vidéo récompensée réelle n'a presque pas d'inventaire (les
+régies de rewarded video visent les applis natives). Concevoir la
+mécanique de seconde chance comme une *mécanique de jeu* d'abord, gagnée
+en jouant ; brancher une vidéo dessus reste possible plus tard, mais ce
+n'est pas là que ce projet rapportera de l'argent.
+
+
+## v1.02 — arc de 20 vagues (2026-09-14)
+
+Décision prise : un seul niveau, 20 vagues, une victoire au bout.
+
+**Ce qui remplace quoi.** Les trois formules (`3+2w` pour l'effectif,
+`2+floor(w/div)` pour les PV, `1.1-0.05w` pour la cadence) laissent place
+à une table `WAVES` de 20 lignes, dupliquée à l'identique dans
+`sim/balance-sim.js`. Vitesse, échelles et débarquements y sont aussi,
+si bien que l'arc entier se lit et se règle d'un coup d'œil.
+
+**Ce que le simulateur a appris.**
+
+1. Un premier jet compressait 28 vagues en 20 beaucoup trop fort : poids
+   de 620 en vague 20 (contre 258 aujourd'hui) et jusqu'à 5 échelles par
+   vague (contre 1). Le joueur « correct » tombait à **0%** de réussite.
+   Le calibrage retenu vise un poids de vague qui suit la courbe déjà
+   éprouvée, compressée d'environ 1,35 en index : la vague 20 pèse ce que
+   pesait la vague 27.
+2. Les échelles sont le levier de tension le plus fort de la table — un
+   accès *garanti* à la plateforme, là où le saut dépend d'un jet de dés.
+   Elles montent de 0 à 3 sur tout l'arc, pas davantage.
+3. **Les paliers de difficulté étaient quantifiés.** Les PV d'un ennemi
+   sont un petit entier (2 à 7) : `round(hp*1.10)` et `round(hp*1.15)`
+   tombent sur le même entier. Difficile et Très difficile mesuraient 27%
+   et 28% — littéralement le même jeu. Chaque palier agit désormais sur
+   les PV *et* sur l'effectif, qui est un grand nombre et se règle donc
+   finement. Écarts obtenus : 89 / 58 / 32 / 18.
+4. **Le `--check` par défaut mentait.** À 80 parties, le bruit atteint
+   ±6 points pour des cibles larges de 20 : un palier a mesuré 0%, 18%,
+   26% puis 19% sur des réglages successivement plus *faciles*. Défaut
+   porté à 250 parties.
+
+**Vérifié dans le navigateur**, pas seulement au simulateur : la vague
+plafonne bien à 20 même en martelant le bouton 40 fois, et l'écran de
+victoire s'affiche par le vrai chemin de code (testé sur une copie à arc
+réduit, sans ajouter de trappe de test au jeu) — sans le gag de fausse
+pub, qui est une blague sur la défaite. Le récap est construit depuis
+`WAVE_COUNT` et non écrit en dur : une chaîne figée annonçait « 20 »
+même sur un arc d'une vague.
+
+
+## v1.03 — le seigneur monte sur les tourelles (2026-09-14)
+
+Mécanique redictée par Pierre après que le texte d'origine se soit perdu.
+Montée **automatique** (son choix) : il grimpe en arrivant sur la
+tourelle, redescend en repartant, aucun bouton. Seuil d'accroche à 0,12
+rad — le même que la réparation et l'huile, pour que les trois gestes se
+déclenchent exactement au même endroit.
+
+Les quatre effets demandés, trois livrés :
+- **frappe plus fort** : x1,5 sur le tir depuis la tourelle ;
+- **à l'abri du corps à corps** : les assaillants montés sur la
+  plateforme ne l'atteignent plus et s'en prennent à la tourelle sous ses
+  pieds — la pression ne disparaît pas, elle change de cible. La tour de
+  siège, elle, le touche encore : elle surplombe la plateforme ;
+- **huile de là-haut** : la position d'huile coïncidait déjà avec l'angle
+  de la tourelle, il y est désormais visiblement perché.
+
+**Quatrième effet non livré, et pourquoi.** « Il tire plus loin » n'a
+aucun sens en l'état : la portée du seigneur n'est aujourd'hui limitée
+que par le bord de l'écran. `ATTACK_RANGE` (260) n'est utilisé nulle part
+pour ses tirs — uniquement pour la logique de garde de la princesse — et
+ce, malgré deux commentaires affirmant le contraire, dont celui qui
+justifie de bâtir les trébuchets à 300 « hors de portée du seigneur sur
+les remparts ». Ils sont donc parfaitement touchables depuis le mur.
+
+Donner un bonus de portée suppose d'abord d'**instaurer** une portée, ce
+qui est un vrai changement de forme du jeu (le mur ne répondrait plus aux
+engins lointains sans monter sur une tourelle). À décider avec Pierre, et
+d'autant plus que c'est le même sujet que son idée d'étaler les engins de
+siège en distance. À noter aussi : le simulateur ne modélise pas du tout
+la portée, il ne pourra pas trancher à notre place.
+
+
+## v1.04 — étalement des engins de siège en distance (2026-09-14)
+
+Demande de Pierre : « les engins de siège doivent s'étaler en distance
+par rapport à la tour ».
+
+**Le constat.** Il n'existait que DEUX distances dans tout le jeu : le
+rayon du groupe (au pied du mur) ou `SIEGE_RANGED_R` = 300, pile. Tous
+les trébuchets de toutes les parties se posaient sur le même cercle
+invisible, au pixel près — d'où la sensation de masse uniforme.
+
+**La règle retenue.** Chaque type porte sa distance (`buildR`), plus une
+variation par engin (`SIEGE_BUILD_JITTER` = 35) :
+bouclier au contact (c'est un abri, sa place est devant), arbalète 150,
+trébuchet 300, tour de siège au contact (elle doit toucher le mur, c'est
+sa définition), bélier 380 puis il rampe.
+
+**Défaut attrapé par le test.** À 380 le bélier a été posé après coup :
+à 360, sa bande (325-395) recouvrait celle du trébuchet (265-335), si
+bien qu'un trébuchet pouvait se poser plus loin qu'un bélier et que
+l'étalement cessait de se lire. Les bandes sont désormais disjointes :
+115-185, 265-335, 345-415. Un contrôle lit le tableau directement dans
+`index.html` et vérifie la disjonction — il ne travaille pas sur une
+copie recopiée à la main.
+
+**Portée : décision de Pierre.** Pas de portée à instaurer pour le
+seigneur. La tourelle ne lui donne pas de l'allonge mais des dégâts,
+« type berserk » : x2 tant qu'il y est perché. C'est donc ça, et
+seulement ça, qui justifie d'y monter.
+
+Réserve à garder en tête : le simulateur ne modélise ni la position du
+seigneur ni la montée sur tourelle, il ne peut donc pas mesurer l'effet
+du x2. Le `--check` reste au vert, mais il ne dit rien sur ce point précis.
+
+
+## v1.05 — Le dernier rempart (seconde chance, 2026-09-14)
+
+Pierre a choisi : elle sauve du **donjon qui tombe** (la défaite
+principale), et il voulait qu'elle s'obtienne « par vidéo ».
+
+**Correction d'une erreur que j'avais commise.** J'avais affirmé qu'une
+page auto-hébergée n'avait « quasiment pas d'inventaire » pour la vidéo
+récompensée. C'est faux, et il ne fallait pas le dire de mémoire.
+Google propose **H5 Games Ads** via AdSense, qui fonctionne sur son
+propre site (API `adBreak()`/`adConfig()`), sur candidature et sans
+garantie d'acceptation. La vidéo récompensée tournait en 2026 autour de
+15-28 $ d'eCPM aux États-Unis, 8-15 $ en Europe, 1-3 $ en tier-3.
+D'autres réseaux visent le HTML5 auto-hébergé : AdinPlay, CPMStar,
+AppLixir.
+Sources : support.google.com/adsense/answer/9959170,
+developers.google.com/ad-placement/docs/signup,
+app.cinevva.com/guides/web-game-monetization,
+doondook.studio/best-ad-networks-monetize-html5-games/
+
+**Ce qui est livré.** La mécanique complète, sans fausse vidéo : afficher
+un bouton « regarder une vidéo » qui ne montre rien serait malhonnête.
+Tout le contact avec une régie tient dans `offerRewardedContinue()`, une
+seule fonction : le jour où la candidature aboutit, c'est la seule chose
+à changer, le reste du jeu n'en saura rien.
+
+Détails : le monde est mis en **pause** pendant la décision (sinon le
+donjon continuerait d'être frappé pendant qu'on lit l'écran, et la
+seconde chance serait consommée en apparaissant) ; huit secondes pour
+choisir, ne rien choisir vaut renoncement ; à l'acceptation, la hauteur
+remonte à 35% et tout ce qui était au pied du mur est repoussé et
+touché — sans ce recul, le donjon retomberait dans la seconde.
+
+**Le simulateur a été mis à jour, et une cible relevée délibérément.**
+Sans modéliser le dernier rempart, l'outil aurait sous-estimé en silence
+toutes les chances réelles. Modélisé, il donne 90 / 62 / 35 / 23 (contre
+89 / 58 / 32 / 18 avant). La seule cible qui sortait était le plafond de
+la vague 18 (89% pour 88% admis) : relevé à 92%, parce qu'il avait été
+posé quand la seconde chance n'existait pas. L'intention de la cible est
+inchangée — l'usure doit se jouer sur les deux dernières vagues, et c'est
+bien le cas (89% en vague 18 contre 62% au bout).
+
+**Au passage, un mécanisme découvert en testant** : le donjon se répare
+tout seul très vite (de 20 à 208 en neuf secondes dans une partie sans
+joueur). Mon premier test partait d'un donjon presque à terre et ne
+déclenchait donc jamais rien — la prémisse était fausse, pas le code.
